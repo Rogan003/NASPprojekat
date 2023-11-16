@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"NASPprojekat/BloomFilter"
+	//"NASPprojekat/SkipList"
 )
 
 var elem1 = []byte("Stringic")
