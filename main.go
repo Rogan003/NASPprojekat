@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"NASPprojekat/BloomFilter"
 	//"NASPprojekat/SkipList"
+	//"NASPprojekat/CountMinSketch"
+	//"NASPprojekat/HyperLogLog"
+	//"NASPprojekat/BTree"
 )
 
 var elem1 = []byte("Stringic")
