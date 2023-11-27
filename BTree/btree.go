@@ -71,11 +71,15 @@ func (btree *BTree) Add(elem int) {
 		}
 		node.keys = append(node.keys[:index+1], node.keys[index:]...)
 		node.keys[index] = elem
+
+		if len(node.keys) == btree.maxKids - 1 {
+			
+		}
 	}
 }
 
 // Funkcija za brisanje elementa iz B stabla
-func  (btree *BTree) Delete(elem int) {
+func (btree *BTree) Delete(elem int) {
 	node, index, isThere := btree.Find(elem)
 
 	if isThere {
@@ -83,4 +87,27 @@ func  (btree *BTree) Delete(elem int) {
 	} else {
 		return
 	}
+}
+
+// Pomocna funkcija za funkciju koja vraca listu svih elemenata u sortiranom redosledu
+// Vraca listu svih elemenata u sortiranom redosledu za odredjeni cvor
+func AllElemNode(node *BTreeNode) ([]int) {
+	if node.children == nil {
+		return node.keys
+	} else {
+		elems := make([]int, 0, len(node.children))
+		for index, key := range node.keys {
+			elems = append(elems, AllElemNode(node.children[index])...)
+			elems = append(elems, key)
+		}
+
+		elems = append(elems, AllElemNode(node.children[len(node.children) - 1])...)
+
+		return elems
+	}
+}
+
+// Funkcija koja vraca listu svih elem u sortiranom redosledu
+func (btree *BTree) AllElem() ([]int) {
+	return AllElemNode(btree.Root)
 }
