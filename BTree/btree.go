@@ -11,6 +11,7 @@ package BTree
 type BTreeNode struct {
 	keys	[]int
 	children	[]*BTreeNode
+	parent	*BTreeNode
 }
 
 type BTree struct {
@@ -21,7 +22,7 @@ type BTree struct {
 // Konstruktor za B stablo, kreira B stablo sa zadatim maximalnim brojem dece i praznim korenskim cvorem
 func (btree *BTree) Init(max int) {
 	btree.maxKids = max
-	node := BTreeNode{make([]int, 0, max - 2), nil}
+	node := BTreeNode{make([]int, 0, max - 1), nil, nil}
 	btree.Root = &node
 }
 
@@ -59,31 +60,129 @@ func (btree *BTree) Find(elem int) (*BTreeNode, int, bool) {
 	return iterNode, 0, false
 }
 
+func (btree *BTree) splitNode(node *BTreeNode) {
+	index := int(btree.maxKids / 2)
+
+	// prebaci u parent node element na indexu
+	if(btree.Root == node) {
+		// moramo novi root da imamo, ako je pun trenutni root
+		newRoot := BTreeNode{make([]int, 0, btree.maxKids - 1), nil, nil}
+		newRoot.keys[0] = node.keys[index]
+		btree.Root = &newRoot
+		node.parent = &newRoot
+	} else {
+		place := 0
+
+		for _, value := range node.parent.keys {
+			if value > node.keys[index] {
+				break
+			}
+
+			place++
+		}
+
+		if len(node.parent.keys) == place {
+			node.parent.keys = append(node.parent.keys, node.keys[index])
+		}
+		node.parent.keys = append(node.parent.keys[:place+1], node.parent.keys[place:]...)
+		node.parent.keys[place] = node.keys[index]
+	}
+
+	// nodeOne := BTreeNode{}
+	// nodeTwo := BTreeNode{}
+	// rastavi keys i napravi dva niza koja ces dodati na mesta gde treba kao decu gore
+
+	if len(node.parent.keys) == btree.maxKids {
+		btree.splitNode(node.parent)
+	}
+}
+
 // Funkcija za dodavanje elementa u B stablo
 func (btree *BTree) Add(elem int) {
-	node, index, isThere := btree.Find(elem)
+	node, indexVal, isThere := btree.Find(elem)
 
 	if isThere {
 		return
 	} else {
-		if len(node.keys) == index {
+		if len(node.keys) == indexVal {
 			node.keys = append(node.keys, elem)
 		}
-		node.keys = append(node.keys[:index+1], node.keys[index:]...)
-		node.keys[index] = elem
+		node.keys = append(node.keys[:indexVal+1], node.keys[indexVal:]...)
+		node.keys[indexVal] = elem
 
-		if len(node.keys) == btree.maxKids - 1 {
-			
+		if len(node.keys) == btree.maxKids {
+			done := false
+
+			first := false
+			last := false
+
+			for _, value := range node.parent.children {
+				if node == value {
+					first = true
+				} else if first && len(value.keys) < (btree.maxKids - 1) {
+					done = true
+					break
+				}
+
+			}
+
+			first = false
+
+			if done {
+				for index, value := range node.parent.children {
+					if last {
+						break
+					}
+	
+					if first {
+						// elem na trazenom indexu u node.parent.keys postaje prvi u value.keys
+						value.keys = append([]int{node.parent.keys[index]}, value.keys...)	
+	
+						// remove taj elem
+						node.parent.keys = append(node.keys[:index], node.keys[index+1:]...)
+	
+						if len(value.keys) < (btree.maxKids - 1) {
+							last = true
+						} else {
+							// poslednji elem insert u node.parent.keys
+							if len(node.parent.keys) == index {
+								node.parent.keys = append(node.parent.keys, value.keys[len(value.keys) - 1])
+							}
+							node.parent.keys = append(node.parent.keys[:index+1], node.parent.keys[index:]...)
+							node.parent.keys[index] = value.keys[len(value.keys) - 1]
+							
+							// remove poslednji elem
+							value.keys = value.keys[:len(value.keys) - 1]
+						}
+					}
+	
+					if value == node {
+						// poslednji elem insert u node.parent.keys
+						if len(node.parent.keys) == index {
+							node.parent.keys = append(node.parent.keys, value.keys[len(value.keys) - 1])
+						}
+						node.parent.keys = append(node.parent.keys[:index+1], node.parent.keys[index:]...)
+						node.parent.keys[index] = value.keys[len(value.keys) - 1]
+						
+						// remove poslednji elem
+						value.keys = value.keys[:len(value.keys) - 1]
+	
+						first = true
+					}
+				}
+			} else {
+				btree.splitNode(node)
+			}
 		}
 	}
 }
 
 // Funkcija za brisanje elementa iz B stabla
 func (btree *BTree) Delete(elem int) {
-	node, index, isThere := btree.Find(elem)
+	node, indexVal, isThere := btree.Find(elem)
 
 	if isThere {
-		node.keys = append(node.keys[:index], node.keys[index+1:]...)
+		node.keys = append(node.keys[:indexVal], node.keys[indexVal+1:]...)
 	} else {
 		return
 	}
@@ -91,17 +190,17 @@ func (btree *BTree) Delete(elem int) {
 
 // Pomocna funkcija za funkciju koja vraca listu svih elemenata u sortiranom redosledu
 // Vraca listu svih elemenata u sortiranom redosledu za odredjeni cvor
-func AllElemNode(node *BTreeNode) ([]int) {
+func allElemNode(node *BTreeNode) ([]int) {
 	if node.children == nil {
 		return node.keys
 	} else {
 		elems := make([]int, 0, len(node.children))
 		for index, key := range node.keys {
-			elems = append(elems, AllElemNode(node.children[index])...)
+			elems = append(elems, allElemNode(node.children[index])...)
 			elems = append(elems, key)
 		}
 
-		elems = append(elems, AllElemNode(node.children[len(node.children) - 1])...)
+		elems = append(elems, allElemNode(node.children[len(node.children) - 1])...)
 
 		return elems
 	}
@@ -109,5 +208,5 @@ func AllElemNode(node *BTreeNode) ([]int) {
 
 // Funkcija koja vraca listu svih elem u sortiranom redosledu
 func (btree *BTree) AllElem() ([]int) {
-	return AllElemNode(btree.Root)
+	return allElemNode(btree.Root)
 }
