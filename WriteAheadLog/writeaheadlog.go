@@ -161,19 +161,21 @@ func DeleteWAL() {
 // slicno kao sto si radila scanWAL prodji kroz fajlove i nadji lastindex
 func (wal *WAL) OpenWAL() error {
 	//implementirati
-
 	return nil
 }
 
 // dodaje novi entri u aktivni segment, ako je pun segment, pravi novi i cuva stari
-func (wal *WAL) AddEntry(entry *Entry) {
+func (wal *WAL) AddEntry(entry *Entry) error {
 	//dodaje entri u poslednji segment
 	//ako je pun aktivni segment
 	if wal.lastSegment.size >= wal.segmentSize {
 		//pise entirje iz segmenta u njegov fajl
 		for _, e := range wal.lastSegment.entries {
 			entryBytes := e.ToByte()
-			WriteInFile(entryBytes, wal.path+wal.lastSegment.fileName)
+			err := WriteInFile(entryBytes, wal.path+wal.lastSegment.fileName)
+			if err != nil {
+				return err
+			}
 		}
 		//pravi novi aktivni segment i na njega dodaje entry
 		wal.lastIndex++
@@ -183,24 +185,31 @@ func (wal *WAL) AddEntry(entry *Entry) {
 	} else {
 		wal.lastSegment.AppendEntry(entry)
 	}
+	return nil
 
 }
-
-// konstruktori
-func NewWAL(path string, duration time.Duration, lowWaterMark int) (*WAL, error) {
-	return &WAL{
-		path:         path,
-		lastSegment:  Segment{},
-		duration:     duration,
-		lowWaterMark: lowWaterMark,
-		lastIndex:    0,
-	}, nil
-}
-func NewSegment(fileName string, index int64, size int64, entries []*Entry) *Segment {
-	return &Segment{
-		fileName: fileName,
-		index:    index,
-		size:     size,
-		entries:  entries,
+func (wal *WAL) AddTransaction(Tombstone bool, transaction Transaction) error { // pravi entry od transakcije i cuva ga
+	entry := NewEntry(Tombstone, transaction)
+	err := wal.AddEntry(entry)
+	if err != nil {
+		return err
 	}
+	return nil
+}
+func Put(wal *WAL, mem *Memtable.Memtable, key string, value []byte) bool { //dodaje transakciju dodavanja u wal pa dodaje u memtable
+	transaction := NewTransaction(key, value)
+	err := wal.AddTransaction(false, *transaction)
+	if err != nil {
+		return false
+	}
+	mem.Add(key, value)
+	return true
+}
+func Delete(wal *WAL, mem *Memtable.Memtable, key string) { //dodaje transakciju brisanja u wal pa brise iz memtable
+	transaction := NewTransaction(key, []byte{})
+	err := wal.AddTransaction(true, *transaction)
+	if err != nil {
+		return
+	}
+	mem.Delete(key)
 }
