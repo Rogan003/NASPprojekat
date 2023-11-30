@@ -7,6 +7,7 @@ import (
 	//"NASPprojekat/CountMinSketch"
 	//"NASPprojekat/HyperLogLog"
 	//"NASPprojekat/BTree"
+	//"NASPprojekat/MerkleTree"
 )
 
 var elem1 = []byte("Stringic")
