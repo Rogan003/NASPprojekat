@@ -81,3 +81,36 @@ func (wal *WAL) LastIndex() int64 {
 func (wal *WAL) SegmentSize() int64 {
 	return wal.segmentSize
 }
+
+// konstruktori
+func NewWAL(path string, duration time.Duration, lowWaterMark int) (*WAL, error) {
+	return &WAL{
+		path:         path,
+		lastSegment:  Segment{},
+		duration:     duration,
+		lowWaterMark: lowWaterMark,
+		lastIndex:    0,
+	}, nil
+}
+func NewSegment(fileName string, index int64, size int64, entries []*Entry) *Segment {
+	return &Segment{
+		fileName: fileName,
+		index:    index,
+		size:     size,
+		entries:  entries,
+	}
+}
+func NewEntry(Tombstone bool, Transaction Transaction) *Entry {
+	return &Entry{
+		Crc:         CRC32(Transaction.Value),
+		Timestamp:   uint64(time.Now().Unix()),
+		Tombstone:   Tombstone,
+		Transaction: Transaction,
+	}
+}
+func NewTransaction(key string, value []byte) *Transaction {
+	return &Transaction{
+		Key:   key,
+		Value: value,
+	}
+}
