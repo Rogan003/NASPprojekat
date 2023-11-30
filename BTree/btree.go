@@ -1,5 +1,9 @@
 package BTree
 
+import (
+	"math"
+)
+
 /*	
 	STRUKTURA B STABLO
 
@@ -88,9 +92,16 @@ func (btree *BTree) splitNode(node *BTreeNode) {
 		node.parent.keys[place] = node.keys[index]
 	}
 
-	// nodeOne := BTreeNode{}
-	// nodeTwo := BTreeNode{}
 	// rastavi keys i napravi dva niza koja ces dodati na mesta gde treba kao decu gore
+	nodeOne := BTreeNode{node.keys[:index], node.children[:index], node.parent}
+	nodeTwo := BTreeNode{node.keys[index + 1:], node.children[index + 1:], node.parent}
+
+	node.parent.children[index] = &nodeOne
+	if len(node.parent.children) == index {
+		node.parent.children = append(node.parent.children, node.children[index])
+	}
+	node.parent.children = append(node.parent.children[:index+1], node.parent.children[index:]...)
+	node.parent.children[index] = &nodeTwo
 
 	if len(node.parent.keys) == btree.maxKids {
 		btree.splitNode(node.parent)
@@ -182,7 +193,50 @@ func (btree *BTree) Delete(elem int) {
 	node, indexVal, isThere := btree.Find(elem)
 
 	if isThere {
-		node.keys = append(node.keys[:indexVal], node.keys[indexVal+1:]...)
+		min := int(math.Ceil(float64(btree.maxKids / 2)))
+
+		if node.children != nil {
+			tempNode := node
+
+			tempNode = tempNode.children[indexVal]
+			for tempNode.children != nil {
+				tempNode = tempNode.children[len(tempNode.children) - 1]
+			}
+
+			node.keys[indexVal] = tempNode.keys[len(tempNode.keys) - 1]
+
+			node = tempNode
+
+			node.keys = node.keys[:len(node.keys) - 1]
+		} else {
+			node.keys = append(node.keys[:indexVal], node.keys[indexVal+1:]...)
+		}
+
+		if len(node.keys) < min {
+			left := true
+			done := false
+	
+			for _, value := range node.parent.children { // napisati index, za sada ga nema da ne stoji greska
+				if len(value.keys) > min {
+					if left {
+
+					} else {
+						
+					}
+
+					done = true
+					break
+				}
+
+				if value == node {
+					left = false
+				}
+			}
+			
+			if !done {
+
+			}
+		}
 	} else {
 		return
 	}
