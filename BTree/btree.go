@@ -21,11 +21,13 @@ type BTreeNode struct {
 type BTree struct {
 	Root	*BTreeNode
 	maxKids	int
+	minKids int
 }
 
 // Konstruktor za B stablo, kreira B stablo sa zadatim maximalnim brojem dece i praznim korenskim cvorem
 func (btree *BTree) Init(max int) {
 	btree.maxKids = max
+	btree.minKids = int(math.Ceil(float64(btree.maxKids / 2)))
 	node := BTreeNode{make([]int, 0, max - 1), nil, nil}
 	btree.Root = &node
 }
@@ -64,6 +66,7 @@ func (btree *BTree) Find(elem int) (*BTreeNode, int, bool) {
 	return iterNode, 0, false
 }
 
+// Pomocna funkcija za razdvajanje cvora
 func (btree *BTree) splitNode(node *BTreeNode) {
 	index := int(btree.maxKids / 2)
 
@@ -188,14 +191,220 @@ func (btree *BTree) Add(elem int) {
 	}
 }
 
+// Pomocna funkcija za spajanje cvora 
+func (btree *BTree) adjustNodeDeletion(node *BTreeNode) {
+	left := true
+	done := true
+
+	leftIndex := -1
+	rightIndex := -1
+	indexVal := 0
+
+	// ako je moguce, pronaci cemo levog ili desnog brata od koga mozemo pozajmiti jedan element
+	for index, value := range node.parent.children {
+		if len(value.keys) > btree.minKids {
+			if left {
+				leftIndex = index
+			} else {
+				rightIndex = index
+				break
+			}
+		}
+
+		if value == node {
+			indexVal = index
+			left = false
+		}
+	}
+
+	// u zavisnosti od toga da li smo pronasli i koji je blizi nasem cvoru, pravimo rotacije i postavljamo flegove
+	if leftIndex == -1 && rightIndex == -1 {
+		done = false
+	} else if leftIndex == -1 {
+		// desno
+		tempKey := node.parent.keys[rightIndex - 1]
+		node.parent.keys[rightIndex - 1] = node.parent.children[rightIndex].keys[0]
+		node.parent.children[rightIndex].keys = node.parent.children[rightIndex].keys[1:]
+
+		var newChild *BTreeNode = nil
+		if node.parent.children[rightIndex].children != nil {
+			newChild = node.parent.children[rightIndex].children[0]
+			node.parent.children[rightIndex].children = node.parent.children[rightIndex].children[1:]
+		}
+
+		rightIndex--
+
+		for true {
+			node.parent.children[rightIndex].keys = append(node.parent.children[rightIndex].keys, tempKey)
+			if newChild != nil {
+				node.parent.children[rightIndex].children = append(node.parent.children[rightIndex].children, newChild)
+			}
+
+			if node.parent.children[rightIndex] == node {
+				break
+			} else {
+				tempKey = node.parent.keys[rightIndex - 1]
+				node.parent.keys[rightIndex - 1] = node.parent.children[rightIndex].keys[0]
+				node.parent.children[rightIndex].keys = node.parent.children[rightIndex].keys[1:]
+
+				if newChild != nil {
+					newChild = node.parent.children[rightIndex].children[0]
+					node.parent.children[rightIndex].children = node.parent.children[rightIndex].children[1:]
+				}
+
+				rightIndex--
+			}
+		}
+	} else if rightIndex == -1 {
+		// levo
+		tempKey := node.parent.keys[leftIndex]
+		node.parent.keys[leftIndex] = node.parent.children[leftIndex].keys[len(node.parent.children[leftIndex].keys) - 1]
+		node.parent.children[leftIndex].keys = node.parent.children[leftIndex].keys[:len(node.parent.children[leftIndex].keys) - 1]
+		
+		var newChild *BTreeNode = nil
+		if node.parent.children[leftIndex].children != nil {
+			newChild = node.parent.children[leftIndex].children[len(node.parent.children[leftIndex].children) - 1]
+			node.parent.children[leftIndex].children = node.parent.children[leftIndex].children[:len(node.parent.children[leftIndex].children) - 1]
+		}
+
+		leftIndex++
+
+		for true {
+			node.parent.children[leftIndex].keys = append([]int{tempKey}, node.parent.children[leftIndex].keys...)
+			if newChild != nil {
+				node.parent.children[leftIndex].children = append([]*BTreeNode{newChild}, node.parent.children[leftIndex].children...)
+			}
+
+			if node.parent.children[leftIndex] == node {
+				break
+			} else {
+				tempKey = node.parent.keys[leftIndex]
+				node.parent.keys[leftIndex] = node.parent.children[leftIndex].keys[len(node.parent.children[leftIndex].keys) - 1]
+				node.parent.children[leftIndex].keys = node.parent.children[leftIndex].keys[:len(node.parent.children[leftIndex].keys) - 1]
+				
+				if newChild != nil {
+					newChild = node.parent.children[leftIndex].children[len(node.parent.children[leftIndex].children) - 1]
+					node.parent.children[leftIndex].children = node.parent.children[leftIndex].children[:len(node.parent.children[leftIndex].children) - 1]
+				
+				}
+				
+				leftIndex++
+			}
+		}
+	} else if (rightIndex - indexVal) >= (indexVal - leftIndex) {
+		// levo
+		tempKey := node.parent.keys[leftIndex]
+		node.parent.keys[leftIndex] = node.parent.children[leftIndex].keys[len(node.parent.children[leftIndex].keys) - 1]
+		node.parent.children[leftIndex].keys = node.parent.children[leftIndex].keys[:len(node.parent.children[leftIndex].keys) - 1]
+		
+		var newChild *BTreeNode = nil
+		if node.parent.children[leftIndex].children != nil {
+			newChild = node.parent.children[leftIndex].children[len(node.parent.children[leftIndex].children) - 1]
+			node.parent.children[leftIndex].children = node.parent.children[leftIndex].children[:len(node.parent.children[leftIndex].children) - 1]
+		}
+
+		leftIndex++
+
+		for true {
+			node.parent.children[leftIndex].keys = append([]int{tempKey}, node.parent.children[leftIndex].keys...)
+			if newChild != nil {
+				node.parent.children[leftIndex].children = append([]*BTreeNode{newChild}, node.parent.children[leftIndex].children...)
+			}
+
+			if node.parent.children[leftIndex] == node {
+				break
+			} else {
+				tempKey = node.parent.keys[leftIndex]
+				node.parent.keys[leftIndex] = node.parent.children[leftIndex].keys[len(node.parent.children[leftIndex].keys) - 1]
+				node.parent.children[leftIndex].keys = node.parent.children[leftIndex].keys[:len(node.parent.children[leftIndex].keys) - 1]
+				
+				if newChild != nil {
+					newChild = node.parent.children[leftIndex].children[len(node.parent.children[leftIndex].children) - 1]
+					node.parent.children[leftIndex].children = node.parent.children[leftIndex].children[:len(node.parent.children[leftIndex].children) - 1]
+				
+				}
+
+				leftIndex++
+			}
+		}
+	} else {
+		// desno
+		tempKey := node.parent.keys[rightIndex - 1]
+		node.parent.keys[rightIndex - 1] = node.parent.children[rightIndex].keys[0]
+		node.parent.children[rightIndex].keys = node.parent.children[rightIndex].keys[1:]
+
+		var newChild *BTreeNode = nil
+		if node.parent.children[rightIndex].children != nil {
+			newChild = node.parent.children[rightIndex].children[0]
+			node.parent.children[rightIndex].children = node.parent.children[rightIndex].children[1:]
+		}
+
+		rightIndex--
+
+		for true {
+			node.parent.children[rightIndex].keys = append(node.parent.children[rightIndex].keys, tempKey)
+			if newChild != nil {
+				node.parent.children[rightIndex].children = append(node.parent.children[rightIndex].children, newChild)
+			}
+
+			if node.parent.children[rightIndex] == node {
+				break
+			} else {
+				tempKey = node.parent.keys[rightIndex - 1]
+				node.parent.keys[rightIndex - 1] = node.parent.children[rightIndex].keys[0]
+				node.parent.children[rightIndex].keys = node.parent.children[rightIndex].keys[1:]
+
+				if newChild != nil {
+					newChild = node.parent.children[rightIndex].children[0]
+					node.parent.children[rightIndex].children = node.parent.children[rightIndex].children[1:]
+				}
+
+				rightIndex--
+			}
+		}
+	}
+	
+	// ako nije, spajamo cvorove
+	if !done {
+		if indexVal != 0 {
+			// spustimo onaj na index - 1 node.parents.keys i append na kraj index - 1 node.parent.children, pa append sve kljuceve iz index
+			node.parent.children[indexVal - 1].keys = append(node.parent.children[indexVal - 1].keys, node.parent.keys[indexVal - 1])
+			node.parent.children[indexVal - 1].keys = append(node.parent.children[indexVal - 1].keys, node.parent.children[indexVal].keys...)
+			// spajanje dece iz cvorova koje spajamo
+			if node.parent.children[indexVal - 1].children != nil {
+				node.parent.children[indexVal - 1].children = append(node.parent.children[indexVal - 1].children, node.parent.children[indexVal].children...)
+			}
+			// izbaciti index - 1 iz node.parents.keys, kao i nepotrebno dete jedno iz children (node.parent)
+			node.parent.keys = append(node.parent.keys[:indexVal - 1], node.parent.keys[indexVal:]...)
+			node.parent.children = append(node.parent.children[:indexVal], node.parent.children[indexVal + 1:]...)
+		} else {
+			// spustimo onaj na index - 1 node.parents.keys i append na kraj index - 1 node.parent.children, pa append sve kljuceve iz index
+			node.parent.children[indexVal].keys = append(node.parent.children[indexVal].keys, node.parent.keys[indexVal])
+			node.parent.children[indexVal].keys = append(node.parent.children[indexVal].keys, node.parent.children[indexVal + 1].keys...)
+			// spajanje dece iz cvorova koje spajamo
+			if node.parent.children[indexVal].children != nil {
+				node.parent.children[indexVal].children = append(node.parent.children[indexVal].children, node.parent.children[indexVal + 1].children...)
+			}
+			// izbaciti index - 1 iz node.parents.keys, kao i nepotrebno dete jedno iz children (node.parent)
+			node.parent.keys = append(node.parent.keys[:indexVal], node.parent.keys[indexVal + 1:]...)
+			node.parent.children = append(node.parent.children[:indexVal + 1], node.parent.children[indexVal + 2:]...)
+		}
+	
+		if node.parent == btree.Root && len(node.parent.keys) == 0{
+			btree.Root = node
+		}
+		
+		if node != btree.Root && node.parent != btree.Root && len(node.parent.children) < btree.minKids {
+			btree.adjustNodeDeletion(node.parent)
+		}
+	}
+}
+
 // Funkcija za brisanje elementa iz B stabla
 func (btree *BTree) Delete(elem int) {
 	node, indexVal, isThere := btree.Find(elem)
 
 	if isThere {
-		// minimum dece
-		min := int(math.Ceil(float64(btree.maxKids / 2)))
-
 		// ako nije list ono sto brisemo, obrisi taj element, i na njegovo mesto dovedi njegovog prethodnika(koji je sigurno u listu)
 		if node.children != nil {
 			tempNode := node
@@ -215,114 +424,8 @@ func (btree *BTree) Delete(elem int) {
 		}
 
 		// ako je broj kljuceva u tom listu sada manji od minimalnog dozvoljenog, radimo odradjene operacije da to sredimo
-		if len(node.keys) < min {
-			left := true
-			done := true
-
-			leftIndex := -1
-			rightIndex := -1
-
-			// ako je moguce, pronaci cemo levog ili desnog brata od koga mozemo pozajmiti jedan element
-			for index, value := range node.parent.children {
-				if len(value.keys) > min {
-					if left {
-						leftIndex = index
-					} else {
-						rightIndex = index
-						break
-					}
-				}
-
-				if value == node {
-					left = false
-				}
-			}
-
-			// u zavisnosti od toga da li smo pronasli i koji je blizi nasem cvoru, pravimo rotacije i postavljamo flegove
-			if leftIndex == -1 && rightIndex == -1 {
-				done = false
-			} else if leftIndex == -1 {
-				// desno
-				tempKey := node.parent.keys[rightIndex - 1]
-				node.parent.keys[rightIndex - 1] = node.parent.children[rightIndex].keys[0]
-				node.parent.children[rightIndex].keys = node.parent.children[rightIndex].keys[1:]
-				rightIndex--
-
-				for true {
-					node.parent.children[rightIndex].keys = append(node.parent.children[rightIndex].keys, tempKey)
-
-					if node.parent.children[rightIndex] == node {
-						break
-					} else {
-						tempKey = node.parent.keys[rightIndex - 1]
-						node.parent.keys[rightIndex - 1] = node.parent.children[rightIndex].keys[0]
-						node.parent.children[rightIndex].keys = node.parent.children[rightIndex].keys[1:]
-						rightIndex--
-					}
-				}
-			} else if rightIndex == -1 {
-				// levo
-				tempKey := node.parent.keys[leftIndex]
-				node.parent.keys[leftIndex] = node.parent.children[leftIndex].keys[len(node.parent.children[leftIndex].keys) - 1]
-				node.parent.children[leftIndex].keys = node.parent.children[leftIndex].keys[:len(node.parent.children[leftIndex].keys) - 1]
-				leftIndex++
-
-				for true {
-					node.parent.children[leftIndex].keys = append([]int{tempKey}, node.parent.children[leftIndex].keys...)
-
-					if node.parent.children[leftIndex] == node {
-						break
-					} else {
-						tempKey = node.parent.keys[leftIndex]
-						node.parent.keys[leftIndex] = node.parent.children[leftIndex].keys[len(node.parent.children[leftIndex].keys) - 1]
-						node.parent.children[leftIndex].keys = node.parent.children[leftIndex].keys[:len(node.parent.children[leftIndex].keys) - 1]
-						leftIndex++
-					}
-				}
-			} else if (rightIndex - indexVal) >= (indexVal - leftIndex) {
-				// levo
-				tempKey := node.parent.keys[leftIndex]
-				node.parent.keys[leftIndex] = node.parent.children[leftIndex].keys[len(node.parent.children[leftIndex].keys) - 1]
-				node.parent.children[leftIndex].keys = node.parent.children[leftIndex].keys[:len(node.parent.children[leftIndex].keys) - 1]
-				leftIndex++
-
-				for true {
-					node.parent.children[leftIndex].keys = append([]int{tempKey}, node.parent.children[leftIndex].keys...)
-
-					if node.parent.children[leftIndex] == node {
-						break
-					} else {
-						tempKey = node.parent.keys[leftIndex]
-						node.parent.keys[leftIndex] = node.parent.children[leftIndex].keys[len(node.parent.children[leftIndex].keys) - 1]
-						node.parent.children[leftIndex].keys = node.parent.children[leftIndex].keys[:len(node.parent.children[leftIndex].keys) - 1]
-						leftIndex++
-					}
-				}
-			} else {
-				// desno
-				tempKey := node.parent.keys[rightIndex - 1]
-				node.parent.keys[rightIndex - 1] = node.parent.children[rightIndex].keys[0]
-				node.parent.children[rightIndex].keys = node.parent.children[rightIndex].keys[1:]
-				rightIndex--
-
-				for true {
-					node.parent.children[rightIndex].keys = append(node.parent.children[rightIndex].keys, tempKey)
-
-					if node.parent.children[rightIndex] == node {
-						break
-					} else {
-						tempKey = node.parent.keys[rightIndex - 1]
-						node.parent.keys[rightIndex - 1] = node.parent.children[rightIndex].keys[0]
-						node.parent.children[rightIndex].keys = node.parent.children[rightIndex].keys[1:]
-						rightIndex--
-					}
-				}
-			}
-			
-			// ako nije, kombinujemo cvorove
-			if !done {
-
-			}
+		if len(node.keys) < btree.minKids {
+			btree.adjustNodeDeletion(node)
 		}
 	} else {
 		return
