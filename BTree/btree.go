@@ -1,6 +1,7 @@
 package BTree
 
 import (
+	//"fmt"
 	"math"
 )
 
@@ -69,11 +70,12 @@ func (btree *BTree) Find(elem int) (*BTreeNode, int, bool) {
 // Pomocna funkcija za razdvajanje cvora
 func (btree *BTree) splitNode(node *BTreeNode) {
 	index := int(btree.maxKids / 2)
+	parentIndex := 0
 
 	// prebaci u parent node element na indexu
 	if(btree.Root == node) {
 		// moramo novi root da imamo, ako je pun trenutni root
-		newRoot := BTreeNode{make([]int, 0, btree.maxKids - 1), nil, nil}
+		newRoot := BTreeNode{make([]int, 1, btree.maxKids - 1), make([]*BTreeNode, 1, btree.maxKids), nil}
 		newRoot.keys[0] = node.keys[index]
 		btree.Root = &newRoot
 		node.parent = &newRoot
@@ -88,23 +90,41 @@ func (btree *BTree) splitNode(node *BTreeNode) {
 			place++
 		}
 
+		parentIndex = place
 		if len(node.parent.keys) == place {
 			node.parent.keys = append(node.parent.keys, node.keys[index])
+		} else {
+			node.parent.keys = append(node.parent.keys[:place+1], node.parent.keys[place:]...)
+			node.parent.keys[place] = node.keys[index]
 		}
-		node.parent.keys = append(node.parent.keys[:place+1], node.parent.keys[place:]...)
-		node.parent.keys[place] = node.keys[index]
 	}
-
+	
 	// rastavi keys i napravi dva niza koja ces dodati na mesta gde treba kao decu gore
-	nodeOne := BTreeNode{node.keys[:index], node.children[:index], node.parent}
-	nodeTwo := BTreeNode{node.keys[index + 1:], node.children[index + 1:], node.parent}
-
-	node.parent.children[index] = &nodeOne
-	if len(node.parent.children) == index {
-		node.parent.children = append(node.parent.children, node.children[index])
+	var nodeOne, nodeTwo BTreeNode
+	one := make([]int, len(node.keys[:index]), btree.maxKids - 1)
+	two := make([]int, len(node.keys[index + 1:]), btree.maxKids - 1)
+	copy(one, node.keys[:index])
+	copy(two, node.keys[index + 1:])
+	if node.children == nil {
+		nodeOne = BTreeNode{one, nil, node.parent}
+		nodeTwo = BTreeNode{two, nil, node.parent}
+	} else {
+		oneChild := make([]*BTreeNode, len(node.children[:index + 1]), btree.maxKids)
+		twoChild := make([]*BTreeNode, len(node.children[index + 1:]), btree.maxKids)
+		copy(oneChild, node.children[:index + 1])
+		copy(twoChild, node.children[index + 1:])
+		nodeOne = BTreeNode{one, oneChild, node.parent}
+		nodeTwo = BTreeNode{two, twoChild, node.parent}
 	}
-	node.parent.children = append(node.parent.children[:index+1], node.parent.children[index:]...)
-	node.parent.children[index] = &nodeTwo
+	
+	node.parent.children[parentIndex] = &nodeOne
+	parentIndex++
+	if len(node.parent.children) == parentIndex {
+		node.parent.children = append(node.parent.children, &nodeTwo)
+	} else {
+		node.parent.children = append(node.parent.children[:parentIndex+1], node.parent.children[parentIndex:]...)
+		node.parent.children[parentIndex] = &nodeTwo
+	}
 
 	if len(node.parent.keys) == btree.maxKids {
 		btree.splitNode(node.parent)
@@ -118,70 +138,121 @@ func (btree *BTree) Add(elem int) {
 	if isThere {
 		return
 	} else {
+		// dodavanje elementa u kljuceva cvora u listu na mesto gde treba (ovo je u sustini insert)
 		if len(node.keys) == indexVal {
 			node.keys = append(node.keys, elem)
+		} else {
+			node.keys = append(node.keys[:indexVal+1], node.keys[indexVal:]...)
+			node.keys[indexVal] = elem
 		}
-		node.keys = append(node.keys[:indexVal+1], node.keys[indexVal:]...)
-		node.keys[indexVal] = elem
-
-		if len(node.keys) == btree.maxKids {
+		
+		// ako je broj kljuceva sada veci od dozvoljenog(tj veci jednak maksimalnom dozvoljenom broju dece), radimo rotacije ili split
+		if len(node.keys) >= btree.maxKids {
 			done := false
 
-			first := false
-			last := false
+			first := -1
+			last := -1
+			nodeIndex := -1
 
-			for _, value := range node.parent.children {
-				if node == value {
-					first = true
-				} else if first && len(value.keys) < (btree.maxKids - 1) {
-					done = true
-					break
+			// izvlacimo najblizu bracu sa brojem elemenata manjima od maximuma
+			if node.parent != nil {
+				for index, value := range node.parent.children {
+					if value == node {
+						nodeIndex = index
+					} else if len(value.keys) < (btree.maxKids - 1) {
+						done = true
+
+						if nodeIndex != -1 {
+							last = index
+							break
+						} else {
+							first = index
+						}
+					}
 				}
-
 			}
 
-			first = false
-
 			if done {
-				for index, value := range node.parent.children {
-					if last {
-						break
+				// odredjivanje koji je blizi, tj gde je lakse odgurati element
+				if first != -1 && last != -1 {
+					if (nodeIndex - first) < (last - nodeIndex) {
+						last = -1
+					} else {
+						first = -1
 					}
-	
-					if first {
+				}
+
+				if first == -1 {
+					// poslednji elem insert u node.parent.keys
+					if len(node.parent.keys) == nodeIndex {
+						node.parent.keys = append(node.parent.keys, node.parent.children[nodeIndex].keys[len(node.parent.children[nodeIndex].keys) - 1])
+					} else {
+						node.parent.keys = append(node.parent.keys[:nodeIndex+1], node.parent.keys[nodeIndex:]...)
+						node.parent.keys[nodeIndex] = node.parent.children[nodeIndex].keys[len(node.parent.children[nodeIndex].keys) - 1]
+					}		
+
+					// remove poslednji elem
+					node.parent.children[nodeIndex].keys = node.parent.children[nodeIndex].keys[:len(node.parent.children[nodeIndex].keys) - 1]
+					
+					nodeIndex++
+
+					for nodeIndex <= last {
 						// elem na trazenom indexu u node.parent.keys postaje prvi u value.keys
-						value.keys = append([]int{node.parent.keys[index]}, value.keys...)	
-	
+						node.parent.children[nodeIndex].keys = append([]int{node.parent.keys[nodeIndex]}, node.parent.children[nodeIndex].keys...)	
+		
 						// remove taj elem
-						node.parent.keys = append(node.keys[:index], node.keys[index+1:]...)
-	
-						if len(value.keys) < (btree.maxKids - 1) {
-							last = true
-						} else {
-							// poslednji elem insert u node.parent.keys
-							if len(node.parent.keys) == index {
-								node.parent.keys = append(node.parent.keys, value.keys[len(value.keys) - 1])
-							}
-							node.parent.keys = append(node.parent.keys[:index+1], node.parent.keys[index:]...)
-							node.parent.keys[index] = value.keys[len(value.keys) - 1]
-							
-							// remove poslednji elem
-							value.keys = value.keys[:len(value.keys) - 1]
-						}
-					}
-	
-					if value == node {
-						// poslednji elem insert u node.parent.keys
-						if len(node.parent.keys) == index {
-							node.parent.keys = append(node.parent.keys, value.keys[len(value.keys) - 1])
-						}
-						node.parent.keys = append(node.parent.keys[:index+1], node.parent.keys[index:]...)
-						node.parent.keys[index] = value.keys[len(value.keys) - 1]
+						node.parent.keys = append(node.parent.keys[:nodeIndex], node.parent.keys[nodeIndex+1:]...)
 						
-						// remove poslednji elem
-						value.keys = value.keys[:len(value.keys) - 1]
-	
-						first = true
+						if nodeIndex != last {
+							// poslednji elem insert u node.parent.keys
+							if len(node.parent.keys) == nodeIndex {
+								node.parent.keys = append(node.parent.keys, node.parent.children[nodeIndex].keys[len(node.parent.children[nodeIndex].keys) - 1])
+							} else {
+								node.parent.keys = append(node.parent.keys[:nodeIndex+1], node.parent.keys[nodeIndex:]...)
+								node.parent.keys[nodeIndex] = node.parent.children[nodeIndex].keys[len(node.parent.children[nodeIndex].keys) - 1]
+							}
+														
+							// remove poslednji elem
+							node.parent.children[nodeIndex].keys = node.parent.children[nodeIndex].keys[:len(node.parent.children[nodeIndex].keys) - 1]
+						}
+
+						nodeIndex++
+					}
+				} else {
+					// prvi elem insert u node.parent.keys
+					if len(node.parent.keys) == nodeIndex {
+						node.parent.keys = append(node.parent.keys, node.parent.children[nodeIndex].keys[0])
+					} else {
+						node.parent.keys = append(node.parent.keys[:nodeIndex+1], node.parent.keys[nodeIndex:]...)
+						node.parent.keys[nodeIndex] = node.parent.children[nodeIndex].keys[0]
+					}
+					
+					// remove prvi elem
+					node.parent.children[nodeIndex].keys = node.parent.children[nodeIndex].keys[1:]
+
+					nodeIndex--
+
+					for nodeIndex >= first {
+						// elem na trazenom indexu u node.parent.keys postaje poslednji u value.keys
+						node.parent.children[nodeIndex].keys = append(node.parent.children[nodeIndex].keys, node.parent.keys[nodeIndex])	
+						
+						// remove taj elem
+						node.parent.keys = append(node.parent.keys[:nodeIndex], node.parent.keys[nodeIndex+1:]...)
+
+						if nodeIndex != first {
+							// prvi elem insert u node.parent.keys
+							if len(node.parent.keys) == nodeIndex {
+								node.parent.keys = append(node.parent.keys, node.parent.children[nodeIndex].keys[0])
+							} else {
+								node.parent.keys = append(node.parent.keys[:nodeIndex+1], node.parent.keys[nodeIndex:]...)
+								node.parent.keys[nodeIndex] = node.parent.children[nodeIndex].keys[0]
+							}
+							
+							// remove prvi elem
+							node.parent.children[nodeIndex].keys = node.parent.children[nodeIndex].keys[1:]
+						}
+
+						nodeIndex--
 					}
 				}
 			} else {
@@ -454,3 +525,24 @@ func allElemNode(node *BTreeNode) ([]int) {
 func (btree *BTree) AllElem() ([]int) {
 	return allElemNode(btree.Root)
 }
+
+/* 	KORISNO ZA DEBUG, ISPISIVANJE PRVOG SLOJA CVOROVA
+func (btree *BTree) RootElem() {
+	for _, value := range btree.Root.keys {
+		fmt.Printf("%d ", value)
+	}
+	fmt.Printf("\n")
+}
+
+func (btree *BTree) RootChildElem() {
+	for _, node2 := range btree.Root.children {
+		for _, value := range node2.keys {
+			fmt.Printf("%d ", value)
+		}
+		fmt.Printf("\n")
+	}
+	fmt.Printf("\n")
+}
+*/
+
+// NAPOMENA: SLICING MOZE NAPRAVITI VELIKI PROBLEM SA REFERENCAMA
