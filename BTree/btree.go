@@ -68,10 +68,10 @@ func (btree *BTree) Find(elem int) (*BTreeNode, int, bool) {
 }
 
 // Pomocna funkcija za razdvajanje cvora
-func (btree *BTree) splitNode(node *BTreeNode) {
+func (btree *BTree) splitNode(node *BTreeNode) { 
 	index := int(btree.maxKids / 2)
 	parentIndex := 0
-
+	
 	// prebaci u parent node element na indexu
 	if(btree.Root == node) {
 		// moramo novi root da imamo, ako je pun trenutni root
@@ -115,6 +115,14 @@ func (btree *BTree) splitNode(node *BTreeNode) {
 		copy(twoChild, node.children[index + 1:])
 		nodeOne = BTreeNode{one, oneChild, node.parent}
 		nodeTwo = BTreeNode{two, twoChild, node.parent}
+
+		for _, value := range oneChild {
+			value.parent = &nodeOne
+		}
+
+		for _, value := range twoChild {
+			value.parent = &nodeTwo
+		}
 	}
 	
 	node.parent.children[parentIndex] = &nodeOne
@@ -145,7 +153,7 @@ func (btree *BTree) Add(elem int) {
 			node.keys = append(node.keys[:indexVal+1], node.keys[indexVal:]...)
 			node.keys[indexVal] = elem
 		}
-		
+
 		// ako je broj kljuceva sada veci od dozvoljenog(tj veci jednak maksimalnom dozvoljenom broju dece), radimo rotacije ili split
 		if len(node.keys) >= btree.maxKids {
 			done := false
@@ -526,7 +534,7 @@ func (btree *BTree) AllElem() ([]int) {
 	return allElemNode(btree.Root)
 }
 
-/* 	KORISNO ZA DEBUG, ISPISIVANJE PRVOG SLOJA CVOROVA
+/* 	KORISNO ZA DEBUG, ISPISIVANJE KLJUCEVA IZ KORENA, ISPISIVANJE KLJUCEVA DECE KORENA I ISPISIVANJE KLJUCEVA UNUKA KORENA
 func (btree *BTree) RootElem() {
 	for _, value := range btree.Root.keys {
 		fmt.Printf("%d ", value)
@@ -540,6 +548,18 @@ func (btree *BTree) RootChildElem() {
 			fmt.Printf("%d ", value)
 		}
 		fmt.Printf("\n")
+	}
+	fmt.Printf("\n")
+}
+
+func (btree *BTree) RootGrandChildElem() {
+	for _, node3 := range btree.Root.children {
+		for _,node2 := range node3.children {
+			for _, value := range node2.keys {
+				fmt.Printf("%d ", value)
+			}
+			fmt.Printf("\n")
+		}
 	}
 	fmt.Printf("\n")
 }

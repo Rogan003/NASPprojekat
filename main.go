@@ -36,10 +36,10 @@ func main() {
 	btree.Add(16)
 	btree.Add(22)
 	btree.Add(13)
-
-	// btree.RootElem()
-	// btree.RootChildElem()
-
+	btree.Add(3)
+	//btree.RootElem()
+	//btree.RootChildElem()
+	//btree.RootGrandChildElem()
 	for _, value := range btree.AllElem() {
 		fmt.Printf("%d ", value)
 	}
