@@ -13,6 +13,7 @@ import (
 var elem1 = []byte("Stringic")
 
 func main() {
+	config()
 	var bf = BloomFilter.BloomFilter{}
 	bf.Init(100,0.2)
 	fmt.Println(bf.Check_elem(elem1))
