@@ -76,8 +76,12 @@ func (mt *Memtable) Get(key string) {
 	if mt.version == "skiplist" {
 		// pronalazak u skip listi
 	} else {
-		_, _, _, elem := mt.btree.Find(key, nil, timestamp)
-		return elem
+		_, _, _, elem := mt.btree.Find(key)
+		if elem != nil && !elem.Tombstone {
+			fmt.Printf("%s %d\n", elem.Key, elem.Value)
+		} else {
+			fmt.Printf("Element sa kljucem %s ne postoji!\n", key)
+		}
 	}
 
 	mt.curCap++
@@ -95,7 +99,7 @@ func (mt *Memtable) flush() {
 		elems := mt.btree.AllElem()
 
 		for _, value := range elems {
-			fmt.Printf("%s %s %t", value.Key, value.Value, value.Tombstone)
+			fmt.Printf("%s %d %t\n", value.Key, value.Value, value.Tombstone)
 		}
 		fmt.Printf("\n")
 

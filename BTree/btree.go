@@ -161,8 +161,9 @@ func (btree *BTree) Add(elem string, val []byte, ts uint64) {
 		} else {
 			dat.Value = val
 			dat.Timestamp = ts
+			dat.Tombstone = false
 		}
-	} else {
+	} else if val != nil{
 		data := Data{ts, false, elem, val}
 		// dodavanje elementa u kljuceva cvora u listu na mesto gde treba (ovo je u sustini insert)
 		if len(node.keys) == indexVal {

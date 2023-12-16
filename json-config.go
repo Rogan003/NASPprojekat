@@ -13,7 +13,7 @@ type Config struct {
 	MemtableStructure string `json:"memtable_structure"`
 }
 
-func config() {
+func config() (Config){
 	var config Config
 	configData, err := os.ReadFile("config.json")
 	if err != nil {
@@ -26,4 +26,6 @@ func config() {
 		log.Fatal(err)
 	}
 	fmt.Println(string(marshalled))
+
+	return config
 }
