@@ -39,16 +39,13 @@ func (mt *Memtable) Init(vers string, mCap int) {
 
 // funkcija i za dodavanje i za izmenu elementa sa kljucem
 // u zavisnosti od verzije i prisutnosti elementa dodaje elem ili ga menja u odredjenoj strukturi
-func (mt *Memtable) Add(elem float64) {
+// poziva se iz WAL-a, ako je uspesno odradjeno dodavanje/izmena
+func (mt *Memtable) Add(key string, value []byte, timestamp uint64) {
 	if mt.version == "skiplist" {
-		// dodavanje u WAL u zavisnosti do toga sta je, i ako je sve okej dodajemo i ovde
-		mt.skiplist.Add(elem)
+		// mt.skiplist.Add(elem)
 	} else {
-		// dodavanje u WAL u zavisnosti do toga sta je, i ako je sve okej dodajemo i ovde
-		mt.btree.Add(int(elem))
+		mt.btree.Add(key, value, timestamp)
 	}
-
-	// ako je sve okej
 
 	mt.curCap++
 
@@ -59,13 +56,28 @@ func (mt *Memtable) Add(elem float64) {
 
 // funkcija za brisanje elementa sa kljucem iz memtable
 // brisanje je logicko
-func (mt *Memtable) Delete(elem float64) {
-	// dodavanje zapisa za brisanje u wal i ako je sve okej obrisati ga logicki
-
+// poziva se iz WAL-a ako je uspesno sve zapisano
+func (mt *Memtable) Delete(key string, timestamp uint64) {
 	if mt.version == "skiplist" {
 		// logicko brisanje iz skip liste
 	} else {
-		// logicko brisanje iz b stabla
+		mt.btree.Add(key, nil, timestamp)
+	}
+
+	mt.curCap++
+
+	if mt.curCap == mt.maxCap {
+		mt.flush()
+	}
+}
+
+// funkcija za dobavljanje i prikaz elementa sa kljucem iz memtable
+func (mt *Memtable) Get(key string) {
+	if mt.version == "skiplist" {
+		// pronalazak u skip listi
+	} else {
+		_, _, _, elem := mt.btree.Find(key, nil, timestamp)
+		return elem
 	}
 
 	mt.curCap++
@@ -83,7 +95,7 @@ func (mt *Memtable) flush() {
 		elems := mt.btree.AllElem()
 
 		for _, value := range elems {
-			fmt.Printf("%d ", value)
+			fmt.Printf("%s %s %t", value.Key, value.Value, value.Tombstone)
 		}
 		fmt.Printf("\n")
 

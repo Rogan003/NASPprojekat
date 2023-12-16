@@ -5,6 +5,14 @@ import (
 	"math"
 )
 
+// struktura podatka, mahom preuzeta sa WAL-a ono sto nam treba za memtable
+type Data struct {
+	Timestamp   uint64
+	Tombstone   bool
+	Key   string
+	Value []byte
+}
+
 /*	
 	STRUKTURA B STABLO
 
@@ -14,7 +22,7 @@ import (
 */
 
 type BTreeNode struct {
-	keys	[]int
+	keys	[]*Data
 	children	[]*BTreeNode
 	parent	*BTreeNode
 }
@@ -29,28 +37,28 @@ type BTree struct {
 func (btree *BTree) Init(max int) {
 	btree.maxKids = max
 	btree.minKids = int(math.Ceil(float64(btree.maxKids / 2)))
-	node := BTreeNode{make([]int, 0, max - 1), nil, nil}
+	node := BTreeNode{make([]*Data, 0, max - 1), nil, nil}
 	btree.Root = &node
 }
 
 // Funkcija pretrage, za zadati element prolazi kroz stablo i trazi gde on treba da bude
 // vraca cvor i ako je zadati element tu vraca true, a ako nije vraca cvor pre kog treba dodati i false
-func (btree *BTree) Find(elem int) (*BTreeNode, int, bool) {
+func (btree *BTree) Find(elem string) (*BTreeNode, int, bool, *Data) {
 	iterNode := btree.Root
 
 	for true {
 		indexFound := false
 
 		for index, key := range iterNode.keys {
-			if key == elem {
-				return iterNode, index, true
-			} else if key > elem {
+			if key.Key == elem {
+				return iterNode, index, true, key
+			} else if key.Key > elem {
 				if iterNode.children != nil {
 					iterNode = iterNode.children[index]
 					indexFound = true
 					break
 				} else {
-					return iterNode, index, false
+					return iterNode, index, false, nil
 				}
 			}
 		}
@@ -59,12 +67,12 @@ func (btree *BTree) Find(elem int) (*BTreeNode, int, bool) {
 			if iterNode.children != nil {
 				iterNode = iterNode.children[len(iterNode.children) - 1]
 			} else {
-				return iterNode, len(iterNode.keys), false
+				return iterNode, len(iterNode.keys), false, nil
 			}
 		}
 	}
 
-	return iterNode, 0, false
+	return iterNode, 0, false, nil
 }
 
 // Pomocna funkcija za razdvajanje cvora
@@ -75,7 +83,7 @@ func (btree *BTree) splitNode(node *BTreeNode) {
 	// prebaci u parent node element na indexu
 	if(btree.Root == node) {
 		// moramo novi root da imamo, ako je pun trenutni root
-		newRoot := BTreeNode{make([]int, 1, btree.maxKids - 1), make([]*BTreeNode, 1, btree.maxKids), nil}
+		newRoot := BTreeNode{make([]*Data, 1, btree.maxKids - 1), make([]*BTreeNode, 1, btree.maxKids), nil}
 		newRoot.keys[0] = node.keys[index]
 		btree.Root = &newRoot
 		node.parent = &newRoot
@@ -83,7 +91,7 @@ func (btree *BTree) splitNode(node *BTreeNode) {
 		place := 0
 
 		for _, value := range node.parent.keys {
-			if value > node.keys[index] {
+			if value.Key > node.keys[index].Key {
 				break
 			}
 
@@ -101,8 +109,8 @@ func (btree *BTree) splitNode(node *BTreeNode) {
 	
 	// rastavi keys i napravi dva niza koja ces dodati na mesta gde treba kao decu gore
 	var nodeOne, nodeTwo BTreeNode
-	one := make([]int, len(node.keys[:index]), btree.maxKids - 1)
-	two := make([]int, len(node.keys[index + 1:]), btree.maxKids - 1)
+	one := make([]*Data, len(node.keys[:index]), btree.maxKids - 1)
+	two := make([]*Data, len(node.keys[index + 1:]), btree.maxKids - 1)
 	copy(one, node.keys[:index])
 	copy(two, node.keys[index + 1:])
 	if node.children == nil {
@@ -140,18 +148,28 @@ func (btree *BTree) splitNode(node *BTreeNode) {
 }
 
 // Funkcija za dodavanje elementa u B stablo
-func (btree *BTree) Add(elem int) {
-	node, indexVal, isThere := btree.Find(elem)
+func (btree *BTree) Add(elem string, val []byte, ts uint64) {
+	node, indexVal, isThere, dat := btree.Find(elem)
 
 	if isThere {
-		return
+		if val == nil {
+			if !dat.Tombstone {
+				dat.Tombstone = true
+			} else {
+				// greska, vec obrisan element
+			}
+		} else {
+			dat.Value = val
+			dat.Timestamp = ts
+		}
 	} else {
+		data := Data{ts, false, elem, val}
 		// dodavanje elementa u kljuceva cvora u listu na mesto gde treba (ovo je u sustini insert)
 		if len(node.keys) == indexVal {
-			node.keys = append(node.keys, elem)
+			node.keys = append(node.keys, &data)
 		} else {
 			node.keys = append(node.keys[:indexVal+1], node.keys[indexVal:]...)
-			node.keys[indexVal] = elem
+			node.keys[indexVal] = &data
 		}
 
 		// ako je broj kljuceva sada veci od dozvoljenog(tj veci jednak maksimalnom dozvoljenom broju dece), radimo rotacije ili split
@@ -206,7 +224,7 @@ func (btree *BTree) Add(elem int) {
 
 					for nodeIndex <= last {
 						// elem na trazenom indexu u node.parent.keys postaje prvi u value.keys
-						node.parent.children[nodeIndex].keys = append([]int{node.parent.keys[nodeIndex]}, node.parent.children[nodeIndex].keys...)	
+						node.parent.children[nodeIndex].keys = append([]*Data{node.parent.keys[nodeIndex]}, node.parent.children[nodeIndex].keys...)	
 		
 						// remove taj elem
 						node.parent.keys = append(node.parent.keys[:nodeIndex], node.parent.keys[nodeIndex+1:]...)
@@ -270,6 +288,7 @@ func (btree *BTree) Add(elem int) {
 	}
 }
 
+/*
 // Pomocna funkcija za spajanje cvora 
 func (btree *BTree) adjustNodeDeletion(node *BTreeNode) {
 	left := true
@@ -510,14 +529,15 @@ func (btree *BTree) Delete(elem int) {
 		return
 	}
 }
+*/
 
 // Pomocna funkcija za funkciju koja vraca listu svih elemenata u sortiranom redosledu
 // Vraca listu svih elemenata u sortiranom redosledu za odredjeni cvor
-func allElemNode(node *BTreeNode) ([]int) {
+func allElemNode(node *BTreeNode) ([]*Data) {
 	if node.children == nil {
 		return node.keys
 	} else {
-		elems := make([]int, 0, len(node.children))
+		elems := make([]*Data, 0, len(node.children))
 		for index, key := range node.keys {
 			elems = append(elems, allElemNode(node.children[index])...)
 			elems = append(elems, key)
@@ -530,7 +550,7 @@ func allElemNode(node *BTreeNode) ([]int) {
 }
 
 // Funkcija koja vraca listu svih elem u sortiranom redosledu
-func (btree *BTree) AllElem() ([]int) {
+func (btree *BTree) AllElem() ([]*Data) {
 	return allElemNode(btree.Root)
 }
 

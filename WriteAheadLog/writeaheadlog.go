@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"NASPprojekat/Memtable"
 )
 
 func (entry *Entry) ToByte() []byte { //pretvara iz vrednosti u bajtove
@@ -192,24 +193,24 @@ func (wal *WAL) AddTransaction(Tombstone bool, transaction Transaction) error { 
 	entry := NewEntry(Tombstone, transaction)
 	err := wal.AddEntry(entry)
 	if err != nil {
-		return err
+		return err, nil
 	}
-	return nil
+	return nil, entry.Timestamp
 }
 func Put(wal *WAL, mem *Memtable.Memtable, key string, value []byte) bool { //dodaje transakciju dodavanja u wal pa dodaje u memtable
 	transaction := NewTransaction(key, value)
-	err := wal.AddTransaction(false, *transaction)
+	err, ts := wal.AddTransaction(false, *transaction)
 	if err != nil {
 		return false
 	}
-	mem.Add(key, value)
+	mem.Add(key, value, ts)
 	return true
 }
 func Delete(wal *WAL, mem *Memtable.Memtable, key string) { //dodaje transakciju brisanja u wal pa brise iz memtable
 	transaction := NewTransaction(key, []byte{})
-	err := wal.AddTransaction(true, *transaction)
+	err, ts := wal.AddTransaction(true, *transaction)
 	if err != nil {
 		return
 	}
-	mem.Delete(key)
+	mem.Delete(key, ts)
 }
