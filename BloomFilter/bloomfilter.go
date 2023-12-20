@@ -3,7 +3,6 @@ package BloomFilter
 import (
 	"encoding/gob"
 	"os"
-	"fmt"
 )
 
 /*
@@ -56,9 +55,8 @@ func (bf *BloomFilter) Add(elem []byte) {
 }
 
 // serializacija bloom filtera
-func (bf BloomFilter) Serialize() {
-	filePath := fmt.Sprintf("../files%cbloomfilter.gob", os.PathSeparator)
-	file, err := os.OpenFile(filePath, os.O_RDWR | os.O_CREATE, 0666)
+func (bf BloomFilter) Serialize(path string) {
+	file, err := os.OpenFile(path, os.O_RDWR | os.O_CREATE, 0666)
 	if(err != nil) {
 		panic(err)
 	}
@@ -73,9 +71,8 @@ func (bf BloomFilter) Serialize() {
 }
 
 // deserializacija bloom filtera
-func (bf *BloomFilter) Deserialize() {
-	filePath := fmt.Sprintf("../files%cbloomfilter.gob", os.PathSeparator)
-	file, err := os.OpenFile(filePath, os.O_RDWR | os.O_CREATE, 0666)
+func (bf *BloomFilter) Deserialize(path string) {
+	file, err := os.OpenFile(path, os.O_RDWR | os.O_CREATE, 0666)
 	if(err != nil) {
 		panic(err)
 	}
