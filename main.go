@@ -15,12 +15,16 @@ import (
 var elem1 = []byte("Stringic")
 
 func main() {
+
+	
 	conf := config()
 	var bf = BloomFilter.BloomFilter{}
 	bf.Init(100,0.2)
 	fmt.Println(bf.Check_elem(elem1))
 	bf.Add(elem1)
 	fmt.Println(bf.Check_elem(elem1))
+	
+
 	/*
 	var btree = BTree.BTree{}
 	btree.Init(4)
@@ -54,6 +58,7 @@ func main() {
 	fmt.Println(isThere)
 	*/
 
+	
 	mt := Memtable.Memtable{}
 	mt.Init(conf.MemtableStructure, int(conf.MemtableSize))
 
@@ -78,4 +83,5 @@ func main() {
 	mt.Add("mr21", []byte{7}, 17)
 	mt.Delete("yt4", 18)
 	mt.Delete("sv36", 19)
+	
 }
