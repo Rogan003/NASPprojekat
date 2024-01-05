@@ -100,8 +100,15 @@ func ScanWALFolder() ([]string, error) {
 			segments = append(segments, segmentPath)        //dodajemo putanju
 		}
 	}
-	sort.Strings(segments) //sortiramo leksikografski, ne znam da li ce raditi kada dodju dvocifreni brojevi
-	//jer se moze desiti da segment10.log bude ispred segment2.log, bolje je sortirati po samom broju
+
+	sort.Slice(segments, func(i, j int) bool {
+
+		numI, _ := strconv.Atoi(strings.TrimPrefix(filepath.Base(segments[i]), "segment"))
+		numJ, _ := strconv.Atoi(strings.TrimPrefix(filepath.Base(segments[j]), "segment"))
+
+		return numI < numJ
+	})
+
 	return segments, nil
 }
 
@@ -152,16 +159,75 @@ func ReadEntriesFromFile(path string) ([]Entry, error) {
 
 func DeleteSegments() {
 	//brise fajlove koji cuvaju
+
+	path := "NASPprojekat/files/WAL" 
+	files, err := ioutil.ReadDir(path) 
+	if err != nil {                    
+		return nil, err
+	}
+
+	for _,file := range files{
+
+		filePtah := filepath.Join(path,file.Name())
+		err = os.Remove(filePath)
+		if err != nil {
+			fmt.Printf("Greška prilikom brisanja fajla %s: %s\n", filePath, err)
+		} else {
+			fmt.Printf("Fajl %s uspešno obrisan.\n", filePath)
+		}
+	}
 }
+
 func DeleteWAL() {
 	//da li je isteklo vreme za brisanje wala
-	//obrisati i napraviti novi
+	// obrisati i napraviti novi
 }
 
 // fja koja iz svih fajlova segmenata saznaje koji je poslednji, po indeksu u imenu fajla, setuje lastIndex u tom wal i postavlja mu lastSegment
 // slicno kao sto si radila scanWAL prodji kroz fajlove i nadji lastindex
 func (wal *WAL) OpenWAL() error {
-	//implementirati
+
+	path := "NASPprojekat/files/WAL"
+
+	files, err := ioutil.ReadDir(path)
+	if err != nil{
+		return nil,err
+	}
+
+	var segments []string 
+
+	for _, file := range files { //_ jer nam ne treba indeks
+		if file.IsDir() { //ako je direktorijum ignorisemo
+			continue
+		}
+
+		if strings.HasSuffix(file.Name(), ".log") && strings.HasPrefix(file.Name(), "segment") {
+			segmentPath := filepath.Join(path, file.Name()) 
+			segments = append(segments, segmentPath)        
+		}
+	}
+
+	if len(segments) == 0 {
+		return errors.New("Nema segmenta u WAL direktorijumu")
+	}
+
+	sort.Slice(segments, func(i, j int) bool {
+
+		numI, _ := strconv.Atoi(strings.TrimPrefix(filepath.Base(segments[i]), "segment"))
+		numJ, _ := strconv.Atoi(strings.TrimPrefix(filepath.Base(segments[j]), "segment"))
+
+		return numI < numJ
+	})
+
+	last := segments[len(segments)-1]
+	entries,err = ReadEntriesFromFile(last)
+	if err!=nil{
+		return err
+	}
+	lastSegment = Segment(last,int64(len(segments)-1), last.Size(), entries)
+	wal.LastSegment = lastSegment
+	wal.lastIndex = int64(len(segments)-1)
+
 	return nil
 }
 

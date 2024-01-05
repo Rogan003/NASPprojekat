@@ -57,6 +57,7 @@ func (hll *HLL)Add(elem []byte){
 	//fmt.Println(value,";",index)
 }
 
+
 func (hll *HLL) Estimate() float64 {
 	sum := 0.0
 	for _, val := range hll.reg {
@@ -84,6 +85,40 @@ func (hll *HLL) emptyCount() int {
 		}
 	}
 	return sum
+}
+
+func (hll *HLL) Serialize(path string) error{
+	file, err := os.OpenFile(path, os.O_RDWR | os.O_CREATE,0666)
+	if(err!= nil){
+		return err
+	}
+	defer file.Close()
+
+	encoder := gob.NewEncoder(file)
+	err = encoder.Encode(hll)
+
+	if err!=nil{
+		return err
+	}
+	return nil
+}
+
+
+func (hll *HLL) Deserialize(path string){
+	file,err:= os.OpenFile(path, os.O_RDWR | os.O_CREATE,0666)
+	if(err != nil){
+		return err
+	}
+	defer file.Close()
+
+	decoder := gob.NewDecoder(file)
+	file.Seek(0,0)
+	for{
+		err = decoder.Decode(hll)
+		if err!= nil{
+			break
+		}
+	}
 }
 
 // func main(){
