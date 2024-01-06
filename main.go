@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	//"fmt"
 	//"NASPprojekat/BloomFilter"
 	//"NASPprojekat/SkipList"
 	//"NASPprojekat/CountMinSketch"
@@ -17,14 +17,14 @@ var elem1 = []byte("Stringic")
 
 func main() {
 
-	
+	/*
 	conf := config()
 	var bf = BloomFilter.BloomFilter{}
 	bf.Init(100,0.2)
 	fmt.Println(bf.Check_elem(elem1))
 	bf.Add(elem1)
 	fmt.Println(bf.Check_elem(elem1))
-	
+	*/
 
 	/*
 	var btree = BTree.BTree{}
@@ -63,6 +63,7 @@ func main() {
 	// mt := Memtable.Memtable{}
 	// mt.Init(conf.MemtableStructure, int(conf.MemtableSize))
 
+	/*
 	mt.Add("sv36", []byte{10}, 1)
 	mt.Add("sv48", []byte{10}, 2)
 	mt.Add("ab45", []byte{6}, 3)
@@ -84,5 +85,5 @@ func main() {
 	mt.Add("mr21", []byte{7}, 17)
 	mt.Delete("yt4", 18)
 	mt.Delete("sv36", 19)
-	
+	*/
 }
