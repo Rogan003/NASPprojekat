@@ -43,6 +43,7 @@ func (mt *Memtable) Init(vers string, mCap int) {
 func (mt *Memtable) Add(key string, value []byte, timestamp uint64) {
 	if mt.version == "skiplist" {
 		// mt.skiplist.Add(elem)
+		mt.skiplist.Add(key, value, timestamp)
 	} else {
 		mt.btree.Add(key, value, timestamp)
 	}
@@ -60,6 +61,7 @@ func (mt *Memtable) Add(key string, value []byte, timestamp uint64) {
 func (mt *Memtable) Delete(key string, timestamp uint64) {
 	if mt.version == "skiplist" {
 		// logicko brisanje iz skip liste
+		mt.skiplist.Delete(key, timestamp)
 	} else {
 		mt.btree.Add(key, nil, timestamp)
 	}
@@ -75,6 +77,13 @@ func (mt *Memtable) Delete(key string, timestamp uint64) {
 func (mt *Memtable) Get(key string) {
 	if mt.version == "skiplist" {
 		// pronalazak u skip listi
+		skipNode, found := mt.skiplist.Find(key)
+		if skipNode.Elem.Value != nil && !skipNode.Elem.Tombstone && found {
+			fmt.Printf("%s %d\n", skipNode.Elem.Key, skipNode.Elem.Value)
+		} else {
+			fmt.Printf("Element sa kljucem %s ne postoji!\n", key)
+		}
+
 	} else {
 		_, _, _, elem := mt.btree.Find(key)
 		if elem != nil && !elem.Tombstone {
@@ -95,6 +104,13 @@ func (mt *Memtable) Get(key string) {
 func (mt *Memtable) flush() {
 	if mt.version == "skiplist" {
 		// isto ovo sto i u else, samo za skiplistu dodati funkciju koja vraca sve elemente sortirane
+		elems := mt.skiplist.AllElem()
+
+		for _, value := range elems {
+			fmt.Printf("%s %d %t\n", value.Key, value.Value, value.Tombstone)
+		}
+		fmt.Printf("\n")
+
 	} else {
 		elems := mt.btree.AllElem()
 

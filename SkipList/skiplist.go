@@ -170,13 +170,14 @@ func (sl *SkipList) Add(key string, value []byte, timestamp uint64) {
 	}
 }
 
-func (sl *SkipList) Delete(key string) {
+func (sl *SkipList) Delete(key string, timestamp uint64) {
 	sn, found := sl.Find(key)
 	if found != true {
 		// ako ne postoji, nema potrebe da ga brisemo
 		return
 	} else {
 		sn.Elem.Tombstone = false
+		sn.Elem.Timestamp = timestamp
 	}
 }
 func (sl *SkipList) DeletePhysically(key string) {
