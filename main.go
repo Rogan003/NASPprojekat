@@ -2,27 +2,28 @@ package main
 
 import (
 	"fmt"
-	"NASPprojekat/BloomFilter"
+	//"NASPprojekat/BloomFilter"
 	//"NASPprojekat/SkipList"
 	//"NASPprojekat/CountMinSketch"
 	//"NASPprojekat/HyperLogLog"
 	//"NASPprojekat/BTree"
 	//"NASPprojekat/MerkleTree"
 	//"NASPprojekat/WriteAheadLog"
-	"NASPprojekat/Memtable"
+	//"NASPprojekat/Memtable"
 )
 
 var elem1 = []byte("Stringic")
 
+
 func main() {
 
 	
-	conf := config()
-	var bf = BloomFilter.BloomFilter{}
-	bf.Init(100,0.2)
-	fmt.Println(bf.Check_elem(elem1))
-	bf.Add(elem1)
-	fmt.Println(bf.Check_elem(elem1))
+	// conf := config()
+	// var bf = BloomFilter.BloomFilter{}
+	// bf.Init(100,0.2)
+	// fmt.Println(bf.Check_elem(elem1))
+	// bf.Add(elem1)
+	// fmt.Println(bf.Check_elem(elem1))
 	
 
 	/*
@@ -59,29 +60,49 @@ func main() {
 	*/
 
 	
-	mt := Memtable.Memtable{}
-	mt.Init(conf.MemtableStructure, int(conf.MemtableSize))
+	// mt := Memtable.Memtable{}
+	// mt.Init(conf.MemtableStructure, int(conf.MemtableSize))
 
-	mt.Add("sv36", []byte{10}, 1)
-	mt.Add("sv48", []byte{10}, 2)
-	mt.Add("ab45", []byte{6}, 3)
-	mt.Add("de34", []byte{5}, 4)
-	mt.Add("tr55", []byte{7}, 5)
-	mt.Get("ii1")
-	mt.Add("ii1", []byte{9}, 6)
-	mt.Get("ii1")
-	mt.Add("ii5", []byte{8}, 7)
-	mt.Add("ra4", []byte{8}, 8)
-	mt.Add("ra223", []byte{6}, 9)
-	mt.Add("ok12", []byte{7}, 10)
-	mt.Add("qw23", []byte{10}, 11)
-	mt.Add("yt4", []byte{8}, 12)
-	mt.Add("pr49", []byte{7}, 13)
-	mt.Add("de52", []byte{9}, 14)
-	mt.Add("aa21", []byte{5}, 15)
-	mt.Add("mr32", []byte{8}, 16)
-	mt.Add("mr21", []byte{7}, 17)
-	mt.Delete("yt4", 18)
-	mt.Delete("sv36", 19)
+	// mt.Add("sv36", []byte{10}, 1)
+	// mt.Add("sv48", []byte{10}, 2)
+	// mt.Add("ab45", []byte{6}, 3)
+	// mt.Add("de34", []byte{5}, 4)
+	// mt.Add("tr55", []byte{7}, 5)
+	// mt.Get("ii1")
+	// mt.Add("ii1", []byte{9}, 6)
+	// mt.Get("ii1")
+	// mt.Add("ii5", []byte{8}, 7)
+	// mt.Add("ra4", []byte{8}, 8)
+	// mt.Add("ra223", []byte{6}, 9)
+	// mt.Add("ok12", []byte{7}, 10)
+	// mt.Add("qw23", []byte{10}, 11)
+	// mt.Add("yt4", []byte{8}, 12)
+	// mt.Add("pr49", []byte{7}, 13)
+	// mt.Add("de52", []byte{9}, 14)
+	// mt.Add("aa21", []byte{5}, 15)
+	// mt.Add("mr32", []byte{8}, 16)
+	// mt.Add("mr21", []byte{7}, 17)
+	// mt.Delete("yt4", 18)
+	// mt.Delete("sv36", 19)
+
+
+	// hll :=HyperLogLog.Init(10)
+	// //fmt.Println(hll.p,",",hll.m)
+	// element1 := []byte("vanja")
+	// element2 := []byte("vanja")
+	// element3 := []byte("kostic")
+	// element4 := []byte("sv292022")
+	// element5 := []byte("asdfghjkl")
+	// hll.Add(element1)
+	// hll.Add(element3)
+	// hll.Add(element2)
+	// hll.Add(element4)
+	// hll.Add(element5)
+
+	// estimation := hll.Estimate()
+	// fmt.Printf("Procenjena kardinalnost: %f\n", estimation)
+	// hll.Serialize("NASPprojekat/files/hyperloglog.gob")
+	// hll.Deserialize("NASPprojekat/files/hyperloglog.gob")
+	
 	
 }
