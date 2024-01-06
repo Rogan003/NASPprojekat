@@ -94,7 +94,7 @@ func (sl SkipList) Find(key string) (*SkipNode, bool) {
 	return nil, false
 }
 
-func (sl *SkipList) Add(key string, value []byte, timestamp uint64) {
+func (sl *SkipList) Add(key string, value []byte, timestamp uint64) (bool) {
 	sn, found := sl.Find(key)
 	if found == true { // ako postoji vec, ne dodajemo ga
 		if sn.Elem.Tombstone == false {
@@ -102,7 +102,7 @@ func (sl *SkipList) Add(key string, value []byte, timestamp uint64) {
 		}
 		sn.Elem.Value = value
 		sn.Elem.Timestamp = timestamp
-		return
+		return false
 	} else { /*
 		- posto element ne postoji, sn pokazuje na prvi manji iza njega
 		- kreiramo novi cvor, pravimo sledece veze:
@@ -167,17 +167,19 @@ func (sl *SkipList) Add(key string, value []byte, timestamp uint64) {
 
 			levels--
 		}
+		return true
 	}
 }
 
-func (sl *SkipList) Delete(key string, timestamp uint64) {
+func (sl *SkipList) Delete(key string, timestamp uint64) (bool) {
 	sn, found := sl.Find(key)
 	if found != true {
 		// ako ne postoji, nema potrebe da ga brisemo
-		return
+		return false
 	} else {
 		sn.Elem.Tombstone = false
 		sn.Elem.Timestamp = timestamp
+		return true
 	}
 }
 func (sl *SkipList) DeletePhysically(key string) {

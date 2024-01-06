@@ -43,12 +43,19 @@ func (mt *Memtable) Init(vers string, mCap int) {
 func (mt *Memtable) Add(key string, value []byte, timestamp uint64) {
 	if mt.version == "skiplist" {
 		// mt.skiplist.Add(elem)
-		mt.skiplist.Add(key, value, timestamp)
+		ok := mt.skiplist.Add(key, value, timestamp)
+		if (ok) {
+			mt.curCap++
+		}
 	} else {
+		/* DODATI: 
+		ok := mt.btree.Add(key, value, timestamp)
+		if (ok) {
+			mt.curCap++
+		}
+		*/
 		mt.btree.Add(key, value, timestamp)
 	}
-
-	mt.curCap++
 
 	if mt.curCap == mt.maxCap {
 		mt.flush()
@@ -61,15 +68,20 @@ func (mt *Memtable) Add(key string, value []byte, timestamp uint64) {
 func (mt *Memtable) Delete(key string, timestamp uint64) {
 	if mt.version == "skiplist" {
 		// logicko brisanje iz skip liste
-		mt.skiplist.Delete(key, timestamp)
+		// ok bool -> vraca true ako je obrisan, false ako smo obrisali element koji ne postoji
+		ok := mt.skiplist.Delete(key, timestamp)
+		if (ok) {
+			mt.curCap--
+		}
 	} else {
+		// DODATI: 
+		/*
+			ok := mt.btree.Add(key, nil, timestamp)
+			if (ok) {
+				mt.curCap--
+			}
+		*/
 		mt.btree.Add(key, nil, timestamp)
-	}
-
-	mt.curCap++
-
-	if mt.curCap == mt.maxCap {
-		mt.flush()
 	}
 }
 
@@ -78,7 +90,7 @@ func (mt *Memtable) Get(key string) {
 	if mt.version == "skiplist" {
 		// pronalazak u skip listi
 		skipNode, found := mt.skiplist.Find(key)
-		if skipNode.Elem.Value != nil && !skipNode.Elem.Tombstone && found {
+		if skipNode.Elem.Value != nil && skipNode.Elem.Tombstone && found {
 			fmt.Printf("%s %d\n", skipNode.Elem.Key, skipNode.Elem.Value)
 		} else {
 			fmt.Printf("Element sa kljucem %s ne postoji!\n", key)
@@ -92,12 +104,6 @@ func (mt *Memtable) Get(key string) {
 			fmt.Printf("Element sa kljucem %s ne postoji!\n", key)
 		}
 	}
-
-	mt.curCap++
-
-	if mt.curCap == mt.maxCap {
-		mt.flush()
-	}
 }
 
 // funkcija koja radi flush na disk (sstable)
@@ -106,10 +112,14 @@ func (mt *Memtable) flush() {
 		// isto ovo sto i u else, samo za skiplistu dodati funkciju koja vraca sve elemente sortirane
 		elems := mt.skiplist.AllElem()
 
+		fmt.Println("\nFLUSHED:")
 		for _, value := range elems {
 			fmt.Printf("%s %d %t\n", value.Key, value.Value, value.Tombstone)
 		}
 		fmt.Printf("\n")
+
+		mt.skiplist = SkipList.SkipList{}
+		mt.skiplist.Init(20)
 
 	} else {
 		elems := mt.btree.AllElem()
