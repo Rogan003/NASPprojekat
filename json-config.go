@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"os"
 )
@@ -20,12 +19,14 @@ func config() (Config){
 		log.Fatal(err)
 	}
 	json.Unmarshal(configData, &config)
-	fmt.Println(config)
+	/*
+	fmt.Println(config.MemtableStructure)
 	marshalled, err := json.Marshal(config)
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println(string(marshalled))
+	*/
 
 	return config
 }
