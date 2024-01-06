@@ -1,11 +1,11 @@
 package main
 
 import (
-	//"fmt"
+	"fmt"
 	//"NASPprojekat/BloomFilter"
 	//"NASPprojekat/SkipList"
 	//"NASPprojekat/CountMinSketch"
-	//"NASPprojekat/HyperLogLog"
+	"NASPprojekat/HyperLogLog"
 	//"NASPprojekat/BTree"
 	//"NASPprojekat/MerkleTree"
 	//"NASPprojekat/WriteAheadLog"
@@ -86,4 +86,22 @@ func main() {
 	mt.Delete("yt4", 18)
 	mt.Delete("sv36", 19)
 	*/
+
+	// hll :=HyperLogLog.Init(10)
+	// //fmt.Println(hll.p,",",hll.m)
+	// element1 := []byte("vanja")
+	// element2 := []byte("vanja")
+	// element3 := []byte("kostic")
+	// element4 := []byte("sv292022")
+	// element5 := []byte("asdfghjkl")
+	// hll.Add(element1)
+	// hll.Add(element3)
+	// hll.Add(element2)
+	// hll.Add(element4)
+	// hll.Add(element5)
+
+	// estimation := hll.Estimate()
+	// fmt.Printf("Procenjena kardinalnost: %f\n", estimation)
+	// hll.Serialize("files/hyperloglog.gob")
+	// hll.Deserialize("files/hyperloglog.gob")
 }

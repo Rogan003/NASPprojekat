@@ -47,7 +47,7 @@ func Init(precision uint8) *HLL{
 	}
 }
 
-func (hll *HLL)Add(elem []byte){
+func (hll *HLL) Add(elem []byte){
 	hashValue:= defaultHashFunction(elem)
 
 	value :=trailingZeroBits(hashValue) + 1
