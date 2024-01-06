@@ -1,18 +1,26 @@
 // package main -> za provjeriti ovde
+// package SkipList -> za main.go
 package SkipList
 
 import (
-	//"fmt"
-	"math"
+	"fmt"
 	"math/rand"
 )
+
+
+type Data struct {
+	Timestamp   uint64
+	Tombstone   bool
+	Key   string
+	Value []byte
+}
 
 
 /* JEDAN CVOR, sadrzi:
    elem - vrijednost koju prosledjujemo u SkipListu
    left, right, down, up - pokazivaci na cvorove oko njega */
 type SkipNode struct {
-	Elem  float64
+	Elem  *Data
 	Left  *SkipNode
 	Right *SkipNode
 	Down  *SkipNode
@@ -36,8 +44,10 @@ type SkipList struct {
 func (sl *SkipList) Init(maxHeight int) {
 	sl.maxHeight = maxHeight
 
-	var leftNode = SkipNode{math.Inf(-1), nil, nil, nil, nil}
-	var rightNode = SkipNode{math.Inf(1), nil, nil, nil, nil}
+	data1 := Data{0, true, "", make([]byte, 0)}
+	data2 := Data{0, true, "\x7F", make([]byte, 0)}
+	var leftNode = SkipNode{&data1, nil, nil, nil, nil}
+	var rightNode = SkipNode{&data2, nil, nil, nil, nil}
 	leftNode.Right = &rightNode
 	rightNode.Left = &leftNode
 
@@ -47,7 +57,7 @@ func (sl *SkipList) Init(maxHeight int) {
 	sl.CurHeight = 1
 }
 
-func (sl SkipList) Find(elem float64) (*SkipNode, bool) {
+func (sl SkipList) Find(key string) (*SkipNode, bool) {
 	// pretragu pocinjemo od prvog desnog gornjeg cvora
 	sn := sl.StartNode
 
@@ -55,7 +65,7 @@ func (sl SkipList) Find(elem float64) (*SkipNode, bool) {
 		- ako je element desnog cvora od trenutnog cvora == elementu koji trazimo,
 		  stajemo sa pretragom, i silazimo vertikalno dole dok ne nadjemoc
 		  poslednji cvor u poslednjem nivou koji je jednak elementu kojeg trazimo */
-		if sn.Right.Elem == elem {
+		if sn.Right.Elem.Key == key {
 			sn = sn.Right
 			for sn.Down != nil {
 				sn = sn.Down
@@ -65,7 +75,7 @@ func (sl SkipList) Find(elem float64) (*SkipNode, bool) {
 
 		- ako je element desnog cvora od trenutnog cvora < elementa koji trazimo,
 		  nastavljamo desno sa pretragom */
-		if sn.Right.Elem < elem {
+		if sn.Right.Elem.Key < key {
 			sn = sn.Right
 			continue
 		} /*
@@ -73,7 +83,7 @@ func (sl SkipList) Find(elem float64) (*SkipNode, bool) {
 		- ako je element desnog cvora od trenutnog cvora > elementa koji trazimo,
 		  nastavljamo dole sa pretragom, ako je donji u tom trenutku nil,
 		  vracamo taj trenutni koji nije nil  */
-		if sn.Right.Elem > elem {
+		if sn.Right.Elem.Key > key {
 			if sn.Down == nil {
 				return sn, false
 			}
@@ -84,17 +94,23 @@ func (sl SkipList) Find(elem float64) (*SkipNode, bool) {
 	return nil, false
 }
 
-func (sl *SkipList) Add(elem float64) {
-	sn, found := sl.Find(elem)
+func (sl *SkipList) Add(key string, value []byte, timestamp uint64) {
+	sn, found := sl.Find(key)
 	if found == true { // ako postoji vec, ne dodajemo ga
+		if sn.Elem.Tombstone == false {
+			sn.Elem.Tombstone = true
+		}
+		sn.Elem.Value = value
+		sn.Elem.Timestamp = timestamp
 		return
 	} else { /*
 		- posto element ne postoji, sn pokazuje na prvi manji iza njega
-		- kreiramo novi cvor, oravimo sledece veze:
+		- kreiramo novi cvor, pravimo sledece veze:
 		  sn <-- newSkipNode --> sn.Right
 		- povezujemo u suprotnom pravcu:
 		  random <-> sn <-> newSkipNode <-> sn.Right */
-		newSkipNode := SkipNode{elem, sn, sn.Right, nil, nil}
+		data := Data{timestamp, true, key, value}
+		newSkipNode := SkipNode{&data, sn, sn.Right, nil, nil}
 		sn.Right.Left = &newSkipNode
 		sn.Right = &newSkipNode /*
 			- povezali smo sve kako treba, sada roll-ujemo da vidimo koliko
@@ -119,8 +135,10 @@ func (sl *SkipList) Add(elem float64) {
 					- pravimo novi endNode i povezujemo ga sa prethodnim endNode-om
 					- povezujemo novi startNode i endNode
 					- povecavamo trenutnu visinu za += 1 */
-					var newStartNode = SkipNode{math.Inf(-1), nil, nil, sl.StartNode, nil}
-					var newEndNode = SkipNode{math.Inf(+1), nil, nil, sl.EndNode, nil}
+					data1 := Data{0, true, "", make([]byte, 0)}
+					data2 := Data{0, true, "\x7F", make([]byte, 0)}
+					var newStartNode = SkipNode{&data1, nil, nil, sl.StartNode, nil}
+					var newEndNode = SkipNode{&data2, nil, nil, sl.EndNode, nil}
 
 					sl.StartNode.Up = &newStartNode
 					sl.StartNode = &newStartNode
@@ -142,7 +160,7 @@ func (sl *SkipList) Add(elem float64) {
 			}
 			rightNode = rightNode.Up
 
-			newestSkipNode := SkipNode{elem, leftNode, rightNode, prevNode, nil}
+			newestSkipNode := SkipNode{&data, leftNode, rightNode, prevNode, nil}
 			prevNode.Up = &newestSkipNode
 			leftNode.Right = &newestSkipNode
 			rightNode.Left = &newestSkipNode
@@ -152,8 +170,17 @@ func (sl *SkipList) Add(elem float64) {
 	}
 }
 
-func (sl *SkipList) Delete(elem float64) {
-	sn, found := sl.Find(elem)
+func (sl *SkipList) Delete(key string) {
+	sn, found := sl.Find(key)
+	if found != true {
+		// ako ne postoji, nema potrebe da ga brisemo
+		return
+	} else {
+		sn.Elem.Tombstone = false
+	}
+}
+func (sl *SkipList) DeletePhysically(key string) {
+	sn, found := sl.Find(key)
 	if found != true {
 		// ako ne postoji, nema potrebe da ga brisemo
 		return
@@ -182,35 +209,50 @@ func (sl *SkipList) Delete(elem float64) {
 	}
 }
 
+// funkcija koja vraca sve elemente sortirane
+func (sl *SkipList) AllElem() ([]*Data) {
+	elements := make([]*Data, 0)
+
+	sn, _ := sl.Find("")
+	for sn.Right != nil {
+		if (sn.Right.Elem.Key == "\x7F") {
+			break
+		}
+		sn = sn.Right
+		elements = append(elements, sn.Elem)
+	}
+
+	return elements
+}
 
 /* - sluzi samo za prikaz malo cvorova (meni odgovara 12 levela/10 u sirinu),
      moze se staviti i na vise levela, ali ovako je preglednije.
 	- samo da bi se provjerilo da li sve okej izgleda/radi.
 	- vraca niz vrijednosti */
-func (sl *SkipList) ToVisual() [12][10]float64 {
+func (sl *SkipList) ToVisual() {
 	sn := sl.StartNode
 	for sn.Down != nil {
 		sn = sn.Down
 	}
-	var n [12][10]float64
+	var n[12][10]string
 	x := 10
 	y := 0
 	for sn != nil {
-		n[x][y] = -1000
+		n[x][y] = "-1000"
 		y++
 		r := sn.Right
 		for r != nil {
-			var toAdd float64 = 0
-			if r.Elem == math.Inf(-1) {
-				toAdd = -1000
-			} else if r.Elem == math.Inf(1) {
-				toAdd = 1000
+			var toAdd string = "0"
+			if r.Elem.Key == "" {
+				toAdd = "-1000"
+			} else if r.Elem.Key == "\x7F" {
+				toAdd = "1000"
 			} else {
-				toAdd = r.Elem
+				toAdd = r.Elem.Key
 			}
 			if r.Down != nil {
 				if n[x+1][y] != toAdd {
-					n[x][y] = 0
+					n[x][y] = "0"
 					y++
 					continue
 				}
@@ -223,8 +265,24 @@ func (sl *SkipList) ToVisual() [12][10]float64 {
 		y = 0
 		sn = sn.Up
 	}
-	return n
+	
+	for i := 0; i < 12; i++ {
+		for j := 0; j < 10; j++ {
+			if ((n[i][j] == "-1000") || (n[i][j] == "1000") || (n[i][j] == "0")) {
+				fmt.Print(n[i][j], " ")
+			} else {
+				sn, found := sl.Find(n[i][j])
+				if (!found) {
+					fmt.Print("0 ")
+					continue
+				}
+				fmt.Print("(", sn.Elem.Key, ", ", sn.Elem.Tombstone, ", ", sn.Elem.Timestamp, ", ", sn.Elem.Value, ") ")
+			}
+		} 
+		fmt.Println()
+	}
 }
+
 
 func (s *SkipList) roll() int {
 	level := 0
@@ -241,105 +299,95 @@ func (s *SkipList) roll() int {
 
 /*
 func main() {
- 
-	var sl = SkipList.SkipList{}
+
+	// var sl = SkipList.SkipList{}
+
+	var sl = SkipList{}
 	sl.Init(10)
 
 	fmt.Println()
 	fmt.Println("Dodajem 1. put 5: ")
-	sl.Add(5)
-	var n = sl.ToVisual()
-	for i := 0; i < 12; i++ {
-		fmt.Println(n[i])
-	}
+	b1 := []byte{1}
+	sl.Add("5", b1, 1)
+	sl.ToVisual()
 
 	fmt.Println()
 	fmt.Println("Brisem 5: ")
-	sl.Delete(5)
-	n = sl.ToVisual()
-	for i := 0; i < 12; i++ {
-		fmt.Println(n[i])
-	}
-
+	sl.Delete("5")
+	sl.ToVisual()
+	
 	fmt.Println()
 	fmt.Println("Dodajem 2. put 5: ")
-	sl.Add(5)
-	n = sl.ToVisual()
-	for i := 0; i < 12; i++ {
-		fmt.Println(n[i])
-	}
+	b2 := []byte{2}
+	sl.Add("5", b2, 2)
+	sl.ToVisual()
 	
 	fmt.Println()
 	fmt.Println("Dodajem 1. put 6: ")
-	sl.Add(6)
-	n = sl.ToVisual()
-	for i := 0; i < 12; i++ {
-		fmt.Println(n[i])
-	}
+	b3 := []byte{2}
+	sl.Add("6", b3, 3)
+	sl.ToVisual()
 
 	fmt.Println()
 	fmt.Println("Dodajem 2. put 6: ")
-	sl.Add(6)
-	n = sl.ToVisual()
-	for i := 0; i < 12; i++ {
-		fmt.Println(n[i])
-	}
+	sl.Add("6", b3, 3)
+	sl.ToVisual()
+
+	fmt.Println()
+	fmt.Println("Dodajem 3. put 6 (izmijenjen): ")
+	b4 := []byte{5}
+	sl.Add("6", b4, 3)
+	sl.ToVisual()
 
 	fmt.Println()
 	fmt.Println("Brisem 5: ")
-	sl.Delete(5)
-	n = sl.ToVisual()
-	for i := 0; i < 12; i++ {
-		fmt.Println(n[i])
-	}
+	sl.Delete("5")
+	sl.ToVisual()
 
 	fmt.Println()
 	fmt.Println("Dodajem 1. put 3: ")
-	sl.Add(3)
-	n = sl.ToVisual()
-	for i := 0; i < 12; i++ {
-		fmt.Println(n[i])
-	}
+	b5 := []byte{3}
+	sl.Add("3", b5, 4)
+	sl.ToVisual()
 
 	fmt.Println()
 	fmt.Println("Dodajem 1. put 4: ")
-	sl.Add(4)
-	n = sl.ToVisual()
-	for i := 0; i < 12; i++ {
-		fmt.Println(n[i])
-	}
+	b6 := []byte{4}
+	sl.Add("4", b6, 5)
+	sl.ToVisual()
 
 	fmt.Println()
 	fmt.Println("Brisem 7: ")
-	sl.Delete(7)
-	n = sl.ToVisual()
-	for i := 0; i < 12; i++ {
-		fmt.Println(n[i])
-	}
+	sl.Delete("7")
+	sl.ToVisual()
 
 	fmt.Println()
-	var _, found = sl.Find(5)
-	fmt.Println("Find(5) = ", found)
+	var sn1, found = sl.Find("5")
+	fmt.Println("Find(5) = ", found, "  sn1 = (time:", sn1.Elem.Timestamp, ", tombstone:", sn1.Elem.Tombstone, ", key:", sn1.Elem.Key, ", value:", sn1.Elem.Value)
 	
 	fmt.Println()
-	var _, found2 = sl.Find(3)
-	fmt.Println("Find(3) = ", found2)
+	var sn2, found2 = sl.Find("3")
+	fmt.Println("Find(3) = ", found2, "  sn2 = (time:", sn2.Elem.Timestamp, ", tombstone:", sn2.Elem.Tombstone, ", key:", sn2.Elem.Key, ", value:", sn2.Elem.Value)
 
 	fmt.Println()
-	var _, found3 = sl.Find(7)
-	fmt.Println("Find(7) = ", found3)
+	var sn3, found3 = sl.Find("7")
+	fmt.Println("Find(7) = ", found3, "  sn3 = (time:", sn3.Elem.Timestamp, ", tombstone:", sn3.Elem.Tombstone, ", key:", sn3.Elem.Key, ", value:", sn3.Elem.Value)
 
 	fmt.Println()
 	fmt.Println("Dodajem 1. put 7: ")
-	sl.Add(7)
-	n = sl.ToVisual()
-	for i := 0; i < 12; i++ {
-		fmt.Println(n[i])
-	}
+	b7 := []byte{7}
+	sl.Add("7", b7, 6)
+	sl.ToVisual()
 
 	fmt.Println()
-	var _, found4 = sl.Find(7)
-	fmt.Println("Find(7) = ", found4)
+	var sn4, found4 = sl.Find("7")
+	fmt.Println("Find(7) = ", found4, "  sn4 = (time:", sn4.Elem.Timestamp, ", tombstone:", sn4.Elem.Tombstone, ", key:", sn4.Elem.Key, ", value:", sn4.Elem.Value)
+	fmt.Println()
+
+	elems := sl.AllElem()
+	for _, data := range elems {
+		fmt.Println("Data:", *data)
+   }
 
 	fmt.Println()
 	fmt.Println()
