@@ -159,7 +159,7 @@ func ReadEntriesFromFile(path string) ([]*Entry, error) {
 
 }
 
-func DeleteSegments() error {
+func (wal *WAL)DeleteSegments() error {
 	//brise fajlove ispod lowWaterMarka
 
 	path := "NASPprojekat/files/WAL"
@@ -171,19 +171,36 @@ func DeleteSegments() error {
 	for _, file := range files {
 
 		filePath := filepath.Join(path, file.Name())
-		err = os.Remove(filePath)
-		if err != nil {
-			fmt.Printf("Greška prilikom brisanja fajla %s: %s\n", filePath, err)
-		} else {
-			fmt.Printf("Fajl %s uspešno obrisan.\n", filePath)
+		num, _ := strconv.Atoi(strings.TrimPrefix(filepath.Base(file.Name()), "segment"))
+		
+		if num < wal.lowWaterMark{
+
+			err = os.Remove(filePath)
+			if err != nil {
+				fmt.Printf("Greška prilikom brisanja fajla %s: %s\n", filePath, err)
+			} else {
+				fmt.Printf("Fajl %s uspešno obrisan.\n", filePath)
+			}
 		}
 	}
+
 	return nil
 }
 
-func DeleteWAL() {
+func (wal *WAL)DeleteWAL() {
 	//ovde treba da se poziva prethodna funkcija periodicno (vremenski uslov)
+	interval := wal.duration * time.Second
+	ticker := time.NewTicker(interval)
+
+	for{
+		select{
+		case <- ticker.C:
+			wal.DeleteSegments()
+		}
+	}
+
 }
+
 
 // fja koja iz svih fajlova segmenata saznaje koji je poslednji, po indeksu u imenu fajla, setuje lastIndex u tom wal i postavlja mu lastSegment
 // slicno kao sto si radila scanWAL prodji kroz fajlove i nadji lastindex

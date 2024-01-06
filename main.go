@@ -5,10 +5,10 @@ import (
 	//"NASPprojekat/BloomFilter"
 	//"NASPprojekat/SkipList"
 	//"NASPprojekat/CountMinSketch"
-	"NASPprojekat/HyperLogLog"
+	//"NASPprojekat/HyperLogLog"
 	//"NASPprojekat/BTree"
 	//"NASPprojekat/MerkleTree"
-	//"NASPprojekat/WriteAheadLog"
+	"NASPprojekat/WriteAheadLog"
 	//"NASPprojekat/Memtable"
 )
 
@@ -104,4 +104,11 @@ func main() {
 	// fmt.Printf("Procenjena kardinalnost: %f\n", estimation)
 	// hll.Serialize("files/hyperloglog.gob")
 	// hll.Deserialize("files/hyperloglog.gob")
+
+	//wal := WriteAheadLog.
+	// wal,_:= WriteAheadLog.NewWAL("files/WAL",10000000000,10)
+	// fmt.Println(wal.Duration(),",",wal.Path())
+	// t := WriteAheadLog.NewTransaction("vanja","kostic")
+	// e := WriteAheadLog.NewEntry(false, t)
+
 }
