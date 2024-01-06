@@ -1,8 +1,11 @@
 package WriteAheadLog
 
 import (
+	"NASPprojekat/Memtable"
 	"bufio"
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -10,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"NASPprojekat/Memtable"
 )
 
 func (entry *Entry) ToByte() []byte { //pretvara iz vrednosti u bajtove
@@ -134,7 +136,7 @@ func WriteInFile(entry []byte, path string) error {
 //treba mi putanja do poslednjeg segmenta
 //provaliti kako dobiti poslednji segment
 
-func ReadEntriesFromFile(path string) ([]Entry, error) {
+func ReadEntriesFromFile(path string) ([]*Entry, error) {
 
 	file, err := os.Open(path)
 	if err != nil {
@@ -142,33 +144,33 @@ func ReadEntriesFromFile(path string) ([]Entry, error) {
 	}
 	defer file.Close()
 
-	var entries []Entry //kolekcija entrija koja se vraca
+	var entries []*Entry //kolekcija entrija koja se vraca
 
 	scanner := bufio.NewScanner(file) //za kretanje red po red
 
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		entry := toEntry([]byte(line))   //konvertovanje u entry
-		entries = append(entries, entry) //dodavanje u kolekciju
+		entry := toEntry([]byte(line))    //konvertovanje u entry
+		entries = append(entries, &entry) //dodavanje u kolekciju
 	}
 
 	return entries, nil
 
 }
 
-func DeleteSegments() {
-	//brise fajlove koji cuvaju
+func DeleteSegments() error {
+	//brise fajlove ispod lowWaterMarka
 
-	path := "NASPprojekat/files/WAL" 
-	files, err := ioutil.ReadDir(path) 
-	if err != nil {                    
-		return nil, err
+	path := "NASPprojekat/files/WAL"
+	files, err := ioutil.ReadDir(path)
+	if err != nil {
+		return err
 	}
 
-	for _,file := range files{
+	for _, file := range files {
 
-		filePtah := filepath.Join(path,file.Name())
+		filePath := filepath.Join(path, file.Name())
 		err = os.Remove(filePath)
 		if err != nil {
 			fmt.Printf("Greška prilikom brisanja fajla %s: %s\n", filePath, err)
@@ -176,11 +178,11 @@ func DeleteSegments() {
 			fmt.Printf("Fajl %s uspešno obrisan.\n", filePath)
 		}
 	}
+	return nil
 }
 
 func DeleteWAL() {
-	//da li je isteklo vreme za brisanje wala
-	// obrisati i napraviti novi
+	//ovde treba da se poziva prethodna funkcija periodicno (vremenski uslov)
 }
 
 // fja koja iz svih fajlova segmenata saznaje koji je poslednji, po indeksu u imenu fajla, setuje lastIndex u tom wal i postavlja mu lastSegment
@@ -190,11 +192,11 @@ func (wal *WAL) OpenWAL() error {
 	path := "NASPprojekat/files/WAL"
 
 	files, err := ioutil.ReadDir(path)
-	if err != nil{
-		return nil,err
+	if err != nil {
+		return err
 	}
 
-	var segments []string 
+	var segments []string
 
 	for _, file := range files { //_ jer nam ne treba indeks
 		if file.IsDir() { //ako je direktorijum ignorisemo
@@ -202,8 +204,8 @@ func (wal *WAL) OpenWAL() error {
 		}
 
 		if strings.HasSuffix(file.Name(), ".log") && strings.HasPrefix(file.Name(), "segment") {
-			segmentPath := filepath.Join(path, file.Name()) 
-			segments = append(segments, segmentPath)        
+			segmentPath := filepath.Join(path, file.Name())
+			segments = append(segments, segmentPath)
 		}
 	}
 
@@ -220,13 +222,13 @@ func (wal *WAL) OpenWAL() error {
 	})
 
 	last := segments[len(segments)-1]
-	entries,err = ReadEntriesFromFile(last)
-	if err!=nil{
+	entries, err := ReadEntriesFromFile(last)
+	if err != nil {
 		return err
 	}
-	lastSegment = Segment(last,int64(len(segments)-1), last.Size(), entries)
-	wal.LastSegment = lastSegment
-	wal.lastIndex = int64(len(segments)-1)
+	lastSegment := NewSegment(last, int64(len(segments)-1), int64(len(entries)), entries)
+	wal.lastSegment = *lastSegment
+	wal.lastIndex = int64(len(segments) - 1)
 
 	return nil
 }
@@ -255,11 +257,11 @@ func (wal *WAL) AddEntry(entry *Entry) error {
 	return nil
 
 }
-func (wal *WAL) AddTransaction(Tombstone bool, transaction Transaction) error { // pravi entry od transakcije i cuva ga
+func (wal *WAL) AddTransaction(Tombstone bool, transaction Transaction) (error, uint64) { // pravi entry od transakcije i cuva ga
 	entry := NewEntry(Tombstone, transaction)
 	err := wal.AddEntry(entry)
 	if err != nil {
-		return err, nil
+		return err, 0
 	}
 	return nil, entry.Timestamp
 }
