@@ -3,12 +3,23 @@ package SSTable
 import (
 	"NASPprojekat/BloomFilter"
 	"encoding/binary"
+	"log"
 	"os"
 )
 
 type SStableSummary struct {
 	FirstKey string //prvi kljuc
 	LastKey  string //poslednji kljuc
+}
+
+type SSTableIndex struct {
+	mapIndex map[string]int64
+}
+
+func NewIndex() *SSTableIndex {
+	return &SSTableIndex{
+		mapIndex: map[string]int64{},
+	}
 }
 
 // funkcija za kreaciju bloom filtera za sstable
@@ -46,6 +57,32 @@ func get(key []byte) {
 	}
 }
 
+func FileLength(file *os.File) (int64, error) {
+	info, err := file.Stat()
+	if err != nil {
+		return 0, err
+	}
+	return info.Size(), nil
+}
+
+// u Index fajlu kljuc u bajtovima + pozicija (binarna) tog podatka u DataFile
+// u fajlu sa indexima (IndexFileName) se cuva kljuc cvora iz skip liste i pozicija bajta tog cvora (podatka) sa tim kljucem u fajlu sa podacima (DataFileName)
+func AddToIndex(offset int64, key string, indexFile *os.File) int64 {
+	data := []byte{}
+	keyBytes := []byte(key)
+	offsetBytes := make([]byte, size)
+	binary.LittleEndian.PutUint64(offsetBytes, uint64(offset))
+	data = append(data, keyBytes...)
+	data = append(data, offsetBytes...)
+	//pokazuje na kojoj poziciji u fajlu IndexFile se nalaze podaci (kljuc + poz u DataFile) o cvoru
+	indexLength, _ := FileLength(indexFile)
+	_, err := indexFile.Write(data)
+	if err != nil {
+		return 0
+	}
+	return indexLength
+}
+
 // u fajlu summary (SummaryFileName) cuva kljuc cvora iz skip liste i poziciju bajta tog cvora (podatka) sa tim kljucem u fajlu sa podacima (DataFileName)
 func AddToSummary(position int64, key string, summary *os.File) {
 	data := []byte{}
@@ -68,9 +105,8 @@ func AddToSummary(position int64, key string, summary *os.File) {
 	}
 }
 
-//
-//potrebna funkcija za koverziju cvora u bajtove, za upis u fajl podataka
-//
+// potrebna funkcija za koverziju cvora u bajtove, za upis u fajl podataka
+//func NodeToBytes(node *SkipListNode) []byte {}
 
 // ucitavanje iz summary-ja u SSTableSummary
 // prvi bajtovi summary fajla:
@@ -95,4 +131,25 @@ func loadSummary(summary *os.File) *SStableSummary {
 		FirstKey: string(first),
 		LastKey:  string(last),
 	}
+}
+
+// dobija poziciju sa koje treba da procita gde se u DataFile nalazi podatak
+func readOffsetFromIndex(position int64, IndexFileName string) int64 {
+	file, err := os.OpenFile(IndexFileName, os.O_RDWR, 0777)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+	// od date pozicije citamo
+	_, err = file.Seek(position, 0)
+	if err != nil {
+		log.Fatal(err)
+	}
+	//citamo SIZE bajta koji nam govore poziciju podatka u dataFile
+	positionBytes := make([]byte, size)
+	_, err = file.Read(positionBytes)
+	if err != nil {
+		panic(err)
+	}
+	return int64(binary.LittleEndian.Uint64(positionBytes))
 }
