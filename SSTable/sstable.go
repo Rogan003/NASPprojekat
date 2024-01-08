@@ -7,6 +7,21 @@ import (
 	"os"
 )
 
+const (
+	CRC_SIZE        = 4
+	TIMESTAMP_SIZE  = 8
+	TOMBSTONE_SIZE  = 1
+	KEY_SIZE_SIZE   = 8
+	VALUE_SIZE_SIZE = 8
+
+	CRC_START        = 0
+	TIMESTAMP_START  = CRC_START + CRC_SIZE
+	TOMBSTONE_START  = TIMESTAMP_START + TIMESTAMP_SIZE
+	KEY_SIZE_START   = TOMBSTONE_START + TOMBSTONE_SIZE
+	VALUE_SIZE_START = KEY_SIZE_START + KEY_SIZE_SIZE
+	KEY_START        = VALUE_SIZE_START + VALUE_SIZE_SIZE
+)
+
 type SStableSummary struct {
 	FirstKey string //prvi kljuc
 	LastKey  string //poslednji kljuc
@@ -14,6 +29,16 @@ type SStableSummary struct {
 
 type SSTableIndex struct {
 	mapIndex map[string]int64
+}
+
+// konstruktori
+func NewSummary(nodes []*SkipListNode) *SStableSummary {
+	first := nodes[0].Key()
+	last := nodes[len(nodes)-1].Key()
+	return &SStableSummary{
+		FirstKey: first,
+		LastKey:  last,
+	}
 }
 
 func NewIndex() *SSTableIndex {
@@ -106,7 +131,7 @@ func AddToSummary(position int64, key string, summary *os.File) {
 }
 
 // potrebna funkcija za koverziju cvora u bajtove, za upis u fajl podataka
-//func NodeToBytes(node *SkipListNode) []byte {}
+// func NodeToBytes(node *SkipListNode) []byte {}
 
 // ucitavanje iz summary-ja u SSTableSummary
 // prvi bajtovi summary fajla:
@@ -145,11 +170,98 @@ func readOffsetFromIndex(position int64, IndexFileName string) int64 {
 	if err != nil {
 		log.Fatal(err)
 	}
-	//citamo SIZE bajta koji nam govore poziciju podatka u dataFile
+	// citamo SIZE bajta koji nam govore poziciju podatka u dataFile
 	positionBytes := make([]byte, size)
 	_, err = file.Read(positionBytes)
 	if err != nil {
 		panic(err)
 	}
 	return int64(binary.LittleEndian.Uint64(positionBytes))
+}
+
+func readData(position int64, DataFileName string) string {
+	file, err := os.OpenFile(DataFileName, os.O_RDWR, 0777)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+	// pomeramo se na poziciju u dataFile gde je nas podatak
+	_, err = file.Seek(position, 1)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// cita bajtove podatka DO key i value u info
+	// CRC (4B)   | Timestamp (8B) | Tombstone(1B) | Key Size (8B) | Value Size (8B)
+	info := make([]byte, KEY_START)
+	_, err = file.Read(info)
+	if err != nil {
+		panic(err)
+	}
+
+	key_size := binary.LittleEndian.Uint64(info[KEY_SIZE_START:VALUE_SIZE_START])
+	value_size := binary.LittleEndian.Uint64(info[VALUE_SIZE_START:KEY_START])
+
+	// cita bajtove podatka, odnosno key i value u data
+	//| Key | Value |
+	data := make([]byte, key_size+value_size)
+	_, err = file.Read(data)
+	if err != nil {
+		panic(err)
+	}
+	val := string(data[key_size : key_size+value_size])
+	return val
+}
+
+func MakeData(nodes []*SkipListNode, DataFileName string, IndexFileName string, SummaryFileName string, BloomFileName string) {
+	indexFile, err := os.OpenFile(IndexFileName, os.O_RDWR|os.O_APPEND, 0777)
+	if err != nil {
+		panic(err)
+	}
+	defer indexFile.Close()
+
+	summaryFile, err := os.OpenFile(SummaryFileName, os.O_RDWR|os.O_APPEND, 0777)
+	if err != nil {
+		panic(err)
+	}
+	defer summaryFile.Close()
+	// uzima najmanji i najveci kljuc iz nodes iz skiplist
+	first := make([]byte, size)
+	last := make([]byte, size)
+	binary.LittleEndian.PutUint64(first, uint64(len([]byte(nodes[0].Key()))))
+	binary.LittleEndian.PutUint64(last, uint64(len([]byte(nodes[len(nodes)-1].Key()))))
+	// upisuje ih u summary
+	summaryFile.Write(first)
+	summaryFile.Write(last)
+	summaryFile.Write([]byte(nodes[0].Key()))
+	summaryFile.Write([]byte(nodes[len(nodes)-1].Key()))
+
+	// pravi se bloom filter
+	make_filter(nodes, len(nodes), BloomFileName)
+
+	file, err := os.OpenFile(DataFileName, os.O_RDWR|os.O_APPEND, 0777)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	var n = 1
+	for _, node := range nodes {
+		position, _ := FileLength(file)
+		// cvor se upisuje u DataFile
+		_, err = file.Write(NodeToBytes(node))
+		if err != nil {
+			return
+		}
+		// upisivanje u index fajl
+		positionSum := AddToIndex(position, node.Key(), indexFile)
+		// upisuje svaki peti u summary file
+		if n%5 == 0 {
+			AddToSummary(positionSum, node.Key(), summaryFile)
+		}
+		n += 1
+	}
+	err = file.Sync()
+	if err != nil {
+		return
+	}
 }
