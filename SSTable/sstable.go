@@ -3,6 +3,8 @@ package SSTable
 import (
 	"NASPprojekat/BloomFilter"
 	"encoding/binary"
+	"fmt"
+	"io"
 	"log"
 	"os"
 )
@@ -22,6 +24,9 @@ const (
 	KEY_START        = VALUE_SIZE_START + VALUE_SIZE_SIZE
 )
 
+// potrebna funkcija za koverziju cvora u bajtove, za upis u fajl podataka
+// func NodeToBytes(node *SkipListNode) []byte {}
+
 type SStableSummary struct {
 	FirstKey string //prvi kljuc
 	LastKey  string //poslednji kljuc
@@ -32,7 +37,7 @@ type SSTableIndex struct {
 }
 
 // konstruktori
-func NewSummary(nodes []*SkipListNode) *SStableSummary {
+func NewSummary(nodes []*SkipNode) *SStableSummary {
 	first := nodes[0].Key()
 	last := nodes[len(nodes)-1].Key()
 	return &SStableSummary{
@@ -82,6 +87,56 @@ func get(key []byte) {
 	}
 }
 
+// preko kljuca trazimo podataka
+func Get(key string, SummaryFileName string, IndexFileName string, DataFileName string) string {
+
+	//iz summary citamo opseg kljuceva u sstable (prvi i poslendji)
+	sumarryFile, _ := os.OpenFile(SummaryFileName, os.O_RDWR, 0777)
+	summary := loadSummary(sumarryFile)
+	defer sumarryFile.Close()
+
+	// ako je trazeni kljuc u tom opsegu, podatak bi trebalo da se nalazi u ovom sstable
+	if summary.FirstKey <= key && key <= summary.LastKey {
+
+		var indexPosition = uint64(0)
+		for {
+
+			//citamo velicinu kljuca
+			keySizeBytes := make([]byte, KEY_SIZE_SIZE)
+			_, err := sumarryFile.Read(keySizeBytes)
+			keySize := int64(binary.LittleEndian.Uint64(keySizeBytes))
+
+			//citamo keySize bajtiva da bi dobili kljuc
+			keyValue := make([]byte, keySize)
+			_, err = sumarryFile.Read(keyValue)
+			if err != nil {
+				panic(err)
+			}
+
+			if string(keyValue) >= key {
+				findInIndex(indexPosition, key, IndexFileName)
+			} else {
+
+				positionBytes := make([]byte, KEY_SIZE_SIZE)
+				_, err = sumarryFile.Read(positionBytes)
+				position := binary.LittleEndian.Uint64(positionBytes)
+				indexPosition = position
+				continue
+			}
+			if err != nil {
+				if err == io.EOF {
+					sumarryFile.Close()
+					break
+				}
+				fmt.Println(err)
+				sumarryFile.Close()
+				return ""
+			}
+		}
+	}
+	return ""
+}
+
 func FileLength(file *os.File) (int64, error) {
 	info, err := file.Stat()
 	if err != nil {
@@ -95,7 +150,7 @@ func FileLength(file *os.File) (int64, error) {
 func AddToIndex(offset int64, key string, indexFile *os.File) int64 {
 	data := []byte{}
 	keyBytes := []byte(key)
-	offsetBytes := make([]byte, size)
+	offsetBytes := make([]byte, KEY_SIZE_SIZE)
 	binary.LittleEndian.PutUint64(offsetBytes, uint64(offset))
 	data = append(data, keyBytes...)
 	data = append(data, offsetBytes...)
@@ -112,26 +167,23 @@ func AddToIndex(offset int64, key string, indexFile *os.File) int64 {
 func AddToSummary(position int64, key string, summary *os.File) {
 	data := []byte{}
 	//vrednost kljuca u bajtovima
-	keyb := []byte(key)
-	//bajtovi u kojima se cuva vrednost kljuca
-	keybs := make([]byte, size) //size upitan
-	binary.LittleEndian.PutUint64(keybs, uint64(len(keyb)))
+	keyValBytes := []byte(key)
+	//bajtovi u kojima se cuva duzina kljuca
+	keyBytes := make([]byte, KEY_SIZE_SIZE)
+	binary.LittleEndian.PutUint64(keyBytes, uint64(len(keyValBytes)))
 
 	//pozicija u indexFile gde se cuva ovaj node
-	positionb := make([]byte, size)
-	binary.LittleEndian.PutUint64(positionb, uint64(position))
+	positionBytes := make([]byte, KEY_SIZE_SIZE)
+	binary.LittleEndian.PutUint64(positionBytes, uint64(position))
 
-	data = append(data, keybs...)
-	data = append(data, keyb...)
-	data = append(data, positionb...)
+	data = append(data, keyBytes...)
+	data = append(data, keyValBytes...)
+	data = append(data, positionBytes...)
 	_, err := summary.Write(data)
 	if err != nil {
 		return
 	}
 }
-
-// potrebna funkcija za koverziju cvora u bajtove, za upis u fajl podataka
-// func NodeToBytes(node *SkipListNode) []byte {}
 
 // ucitavanje iz summary-ja u SSTableSummary
 // prvi bajtovi summary fajla:
@@ -139,8 +191,8 @@ func AddToSummary(position int64, key string, summary *os.File) {
 // ostali bajtovi:
 // sizeb(velk) | velk(k) | sizeb(pozicija u index) - za jedan podatak
 func loadSummary(summary *os.File) *SStableSummary {
-	lenFirst := make([]byte, size) //size upitan
-	lenLast := make([]byte, size)
+	lenFirst := make([]byte, KEY_SIZE_SIZE) //size upitan
+	lenLast := make([]byte, KEY_SIZE_SIZE)
 
 	_, _ = summary.Read(lenFirst)
 	sizeFirst := int64(binary.LittleEndian.Uint64(lenFirst))
@@ -170,8 +222,9 @@ func readOffsetFromIndex(position int64, IndexFileName string) int64 {
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	// citamo SIZE bajta koji nam govore poziciju podatka u dataFile
-	positionBytes := make([]byte, size)
+	positionBytes := make([]byte, KEY_SIZE_SIZE)
 	_, err = file.Read(positionBytes)
 	if err != nil {
 		panic(err)
@@ -212,7 +265,7 @@ func readData(position int64, DataFileName string) string {
 	return val
 }
 
-func MakeData(nodes []*SkipListNode, DataFileName string, IndexFileName string, SummaryFileName string, BloomFileName string) {
+func MakeData(nodes []*SkipNode, DataFileName string, IndexFileName string, SummaryFileName string, BloomFileName string) {
 	indexFile, err := os.OpenFile(IndexFileName, os.O_RDWR|os.O_APPEND, 0777)
 	if err != nil {
 		panic(err)
@@ -225,8 +278,8 @@ func MakeData(nodes []*SkipListNode, DataFileName string, IndexFileName string, 
 	}
 	defer summaryFile.Close()
 	// uzima najmanji i najveci kljuc iz nodes iz skiplist
-	first := make([]byte, size)
-	last := make([]byte, size)
+	first := make([]byte, KEY_SIZE_SIZE)
+	last := make([]byte, KEY_SIZE_SIZE)
 	binary.LittleEndian.PutUint64(first, uint64(len([]byte(nodes[0].Key()))))
 	binary.LittleEndian.PutUint64(last, uint64(len([]byte(nodes[len(nodes)-1].Key()))))
 	// upisuje ih u summary
