@@ -67,7 +67,7 @@ func make_filter(elems [][]byte, numElems int, filePath string) {
 }
 
 // funkcija get za sstable
-func get(key []byte) {
+func Get(key []byte) {
 	where := -1
 
 	for true { // ovde zapravo treba da se ucini da se prodje kroz sve bloom filtere sstable-a
@@ -87,8 +87,8 @@ func get(key []byte) {
 	}
 }
 
-// preko kljuca trazimo podataka
-func Get(key string, SummaryFileName string, IndexFileName string, DataFileName string) string {
+// preko kljuca trazimo u summaryFile poziciju za nas klju u indexFile iz kog kasnije dobijamo poziicju naseg kljuca i vrednosti u dataFile
+func get(key string, SummaryFileName string, IndexFileName string, DataFileName string) string {
 
 	//iz summary citamo opseg kljuceva u sstable (prvi i poslendji)
 	sumarryFile, _ := os.OpenFile(SummaryFileName, os.O_RDWR, 0777)
@@ -113,28 +113,59 @@ func Get(key string, SummaryFileName string, IndexFileName string, DataFileName 
 				panic(err)
 			}
 
-			if string(keyValue) >= key {
-				findInIndex(indexPosition, key, IndexFileName)
+			if string(keyValue) > key {
+				dataPosition := findInIndex(indexPosition, key, IndexFileName)
+				notFound := -1
+				if dataPosition == uint64(notFound) {
+					panic("sstable: Nije pronadjen key u indexFile")
+				}
+				return readData(int64(dataPosition), DataFileName)
 			} else {
-
+				// citanje pozicije za taj kljuc u indexFile
 				positionBytes := make([]byte, KEY_SIZE_SIZE)
 				_, err = sumarryFile.Read(positionBytes)
 				position := binary.LittleEndian.Uint64(positionBytes)
 				indexPosition = position
-				continue
-			}
-			if err != nil {
-				if err == io.EOF {
+				if err != nil {
+					if err == io.EOF {
+						sumarryFile.Close()
+						break
+					}
+					fmt.Println(err)
 					sumarryFile.Close()
-					break
+					return ""
 				}
-				fmt.Println(err)
-				sumarryFile.Close()
-				return ""
+				continue
 			}
 		}
 	}
 	return ""
+}
+
+// vraca offset za dataFile, nakon sto nadje u indexFile
+func findInIndex(startPosition uint64, key string, IndexFileName string) uint64 {
+
+	file, err := os.OpenFile(IndexFileName, os.O_RDWR, 0777)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+	// od date pozicije citamo
+	_, err = file.Seek(int64(startPosition), 0)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for {
+		currentKey, position := readFromIndex(file)
+		if currentKey > key {
+			notFound := -1
+			return uint64(notFound)
+		}
+		if currentKey == key {
+			return uint64(position)
+		}
+	}
 }
 
 func FileLength(file *os.File) (int64, error) {
@@ -145,13 +176,40 @@ func FileLength(file *os.File) (int64, error) {
 	return info.Size(), nil
 }
 
-// u Index fajlu kljuc u bajtovima + pozicija (binarna) tog podatka u DataFile
+// cita jedan key sa svojom velicinom i positionom iz indexFile
+func readFromIndex(file *os.File) (string, int64) {
+	keyLenBytes := make([]byte, KEY_SIZE_SIZE)
+	_, err := file.Read(keyLenBytes)
+	if err != nil {
+		panic(err)
+	}
+	keySize := int64(binary.LittleEndian.Uint64(keyLenBytes))
+	keyBytes := make([]byte, keySize)
+	_, err = file.Read(keyBytes)
+	if err != nil {
+		panic(err)
+	}
+	key := string(keyBytes)
+	positonBytes := make([]byte, KEY_SIZE_SIZE)
+	_, err = file.Read(positonBytes)
+	if err != nil {
+		panic(err)
+	}
+	position := int64(binary.LittleEndian.Uint64(positonBytes))
+	return key, position
+}
+
+// u Index fajlu: velicina kljuca + kljuc u bajtovima + pozicija (binarna) tog podatka u DataFile
 // u fajlu sa indexima (IndexFileName) se cuva kljuc cvora iz skip liste i pozicija bajta tog cvora (podatka) sa tim kljucem u fajlu sa podacima (DataFileName)
 func AddToIndex(offset int64, key string, indexFile *os.File) int64 {
 	data := []byte{}
 	keyBytes := []byte(key)
+	keySizeBytes := make([]byte, KEY_SIZE_SIZE)
+	binary.LittleEndian.PutUint64(keySizeBytes, uint64(len(keyBytes)))
+	// position je uint64 a najvise zauzima 8 bajtova (KEY_SIZE_SIZE)
 	offsetBytes := make([]byte, KEY_SIZE_SIZE)
 	binary.LittleEndian.PutUint64(offsetBytes, uint64(offset))
+	data = append(data, keySizeBytes...)
 	data = append(data, keyBytes...)
 	data = append(data, offsetBytes...)
 	//pokazuje na kojoj poziciji u fajlu IndexFile se nalaze podaci (kljuc + poz u DataFile) o cvoru
@@ -163,7 +221,7 @@ func AddToIndex(offset int64, key string, indexFile *os.File) int64 {
 	return indexLength
 }
 
-// u fajlu summary (SummaryFileName) cuva kljuc cvora iz skip liste i poziciju bajta tog cvora (podatka) sa tim kljucem u fajlu sa podacima (DataFileName)
+// u fajlu summary (SummaryFileName) cuva kljuc cvora iz skip liste i poziciju bajta tog cvora (podatka) sa tim kljucem u indexFile
 func AddToSummary(position int64, key string, summary *os.File) {
 	data := []byte{}
 	//vrednost kljuca u bajtovima
@@ -210,28 +268,6 @@ func loadSummary(summary *os.File) *SStableSummary {
 	}
 }
 
-// dobija poziciju sa koje treba da procita gde se u DataFile nalazi podatak
-func readOffsetFromIndex(position int64, IndexFileName string) int64 {
-	file, err := os.OpenFile(IndexFileName, os.O_RDWR, 0777)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer file.Close()
-	// od date pozicije citamo
-	_, err = file.Seek(position, 0)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// citamo SIZE bajta koji nam govore poziciju podatka u dataFile
-	positionBytes := make([]byte, KEY_SIZE_SIZE)
-	_, err = file.Read(positionBytes)
-	if err != nil {
-		panic(err)
-	}
-	return int64(binary.LittleEndian.Uint64(positionBytes))
-}
-
 func readData(position int64, DataFileName string) string {
 	file, err := os.OpenFile(DataFileName, os.O_RDWR, 0777)
 	if err != nil {
@@ -239,7 +275,7 @@ func readData(position int64, DataFileName string) string {
 	}
 	defer file.Close()
 	// pomeramo se na poziciju u dataFile gde je nas podatak
-	_, err = file.Seek(position, 1)
+	_, err = file.Seek(position, 0)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -297,7 +333,7 @@ func MakeData(nodes []*SkipNode, DataFileName string, IndexFileName string, Summ
 	}
 	defer file.Close()
 
-	var n = 1
+	var n = 0 // krece se od 0 da bi prvi kljuc u summaryFile bio prvi i u indexFile
 	for _, node := range nodes {
 		position, _ := FileLength(file)
 		// cvor se upisuje u DataFile
