@@ -8,8 +8,9 @@ import (
 	//"NASPprojekat/HyperLogLog"
 	//"NASPprojekat/BTree"
 	//"NASPprojekat/MerkleTree"
-	"NASPprojekat/WriteAheadLog"
+	//"NASPprojekat/WriteAheadLog"
 	//"NASPprojekat/Memtable"
+	"NASPprojekat/Cache"
 )
 
 var elem1 = []byte("Stringic")
@@ -110,5 +111,20 @@ func main() {
 	// fmt.Println(wal.Duration(),",",wal.Path())
 	// t := WriteAheadLog.NewTransaction("vanja","kostic")
 	// e := WriteAheadLog.NewEntry(false, t)
+
+	cache := Cache.NewLRUCache(3)
+
+	cache.Insert("key1", "vanja")
+	cache.Insert("key2", "kostic")
+
+	fmt.Println(cache.Get("key1")) 
+	fmt.Println(cache.Get("key2")) 
+	fmt.Println(cache.Get("key3")) 
+
+	cache.Insert("key3", "sv29") 
+	cache.Insert("key4", "2022") 
+	fmt.Println(cache.Get("key3")) 
+	fmt.Println(cache.Get("key4")) 
+	fmt.Println(cache.Get("key1")) 
 
 }
