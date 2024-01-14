@@ -44,8 +44,8 @@ type SkipList struct {
 func (sl *SkipList) Init(maxHeight int) {
 	sl.maxHeight = maxHeight
 
-	data1 := Data{0, true, "", make([]byte, 0)}
-	data2 := Data{0, true, "\x7F", make([]byte, 0)}
+	data1 := Data{0, false, "", make([]byte, 0)}
+	data2 := Data{0, false, "\x7F", make([]byte, 0)}
 	var leftNode = SkipNode{&data1, nil, nil, nil, nil}
 	var rightNode = SkipNode{&data2, nil, nil, nil, nil}
 	leftNode.Right = &rightNode
@@ -97,8 +97,8 @@ func (sl SkipList) Find(key string) (*SkipNode, bool) {
 func (sl *SkipList) Add(key string, value []byte, timestamp uint64) (bool) {
 	sn, found := sl.Find(key)
 	if found == true { // ako postoji vec, ne dodajemo ga
-		if sn.Elem.Tombstone == false {
-			sn.Elem.Tombstone = true
+		if sn.Elem.Tombstone == true {
+			sn.Elem.Tombstone = false
 		}
 		sn.Elem.Value = value
 		sn.Elem.Timestamp = timestamp
@@ -109,7 +109,7 @@ func (sl *SkipList) Add(key string, value []byte, timestamp uint64) (bool) {
 		  sn <-- newSkipNode --> sn.Right
 		- povezujemo u suprotnom pravcu:
 		  random <-> sn <-> newSkipNode <-> sn.Right */
-		data := Data{timestamp, true, key, value}
+		data := Data{timestamp, false, key, value}
 		newSkipNode := SkipNode{&data, sn, sn.Right, nil, nil}
 		sn.Right.Left = &newSkipNode
 		sn.Right = &newSkipNode /*
@@ -135,8 +135,8 @@ func (sl *SkipList) Add(key string, value []byte, timestamp uint64) (bool) {
 					- pravimo novi endNode i povezujemo ga sa prethodnim endNode-om
 					- povezujemo novi startNode i endNode
 					- povecavamo trenutnu visinu za += 1 */
-					data1 := Data{0, true, "", make([]byte, 0)}
-					data2 := Data{0, true, "\x7F", make([]byte, 0)}
+					data1 := Data{0, false, "", make([]byte, 0)}
+					data2 := Data{0, false, "\x7F", make([]byte, 0)}
 					var newStartNode = SkipNode{&data1, nil, nil, sl.StartNode, nil}
 					var newEndNode = SkipNode{&data2, nil, nil, sl.EndNode, nil}
 
@@ -177,7 +177,7 @@ func (sl *SkipList) Delete(key string, timestamp uint64) (bool) {
 		// ako ne postoji, nema potrebe da ga brisemo
 		return false
 	} else {
-		sn.Elem.Tombstone = false
+		sn.Elem.Tombstone = true
 		sn.Elem.Timestamp = timestamp
 		return true
 	}
