@@ -2,11 +2,15 @@ package SSTable
 
 import (
 	"NASPprojekat/BloomFilter"
+	WAL "NASPprojekat/WriteAheadLog"
+	"hash/crc32"
+
 	"encoding/binary"
 	"fmt"
 	"io"
 	"log"
 	"os"
+	"time"
 )
 
 const (
@@ -25,7 +29,7 @@ const (
 )
 
 // potrebna funkcija za koverziju cvora u bajtove, za upis u fajl podataka
-// func NodeToBytes(node *SkipListNode) []byte {}
+// func NodeToBytes(node iz memetable koji je pretvoren u Entry) []byte {}
 
 type SStableSummary struct {
 	FirstKey string //prvi kljuc
@@ -37,9 +41,9 @@ type SSTableIndex struct {
 }
 
 // konstruktori
-func NewSummary(nodes []*SkipNode) *SStableSummary {
-	first := nodes[0].Key()
-	last := nodes[len(nodes)-1].Key()
+func NewSummary(nodes []*WAL.Entry) *SStableSummary {
+	first := nodes[0].Transaction.Key
+	last := nodes[len(nodes)-1].Transaction.Key
 	return &SStableSummary{
 		FirstKey: first,
 		LastKey:  last,
@@ -55,40 +59,19 @@ func NewIndex() *SSTableIndex {
 // funkcija za kreaciju bloom filtera za sstable
 // elems jer niz kljuceva (lako cu modifikovati ako saljete podakte), numElems jer broj podataka u memTable,
 // filePath je gde i pod kojim nazivom cuvamo bloom filter
-func make_filter(elems [][]byte, numElems int, filePath string) {
+func make_filter(elems []*WAL.Entry, numElems int, filePath string) {
 	bf := BloomFilter.BloomFilter{}
 	bf.Init(numElems, 0.01)
 
 	for _, val := range elems {
-		bf.Add(val)
+		bf.Add(val.ToByte())
 	}
 
 	bf.Serialize(filePath)
 }
 
-// funkcija get za sstable
-func Get(key []byte) {
-	where := -1
-
-	for true { // ovde zapravo treba da se ucini da se prodje kroz sve bloom filtere sstable-a
-		filePath := "ovo treba da se izvlaci iz petlje?"
-		bf := BloomFilter.BloomFilter{}
-
-		bf.Deserialize(filePath)
-		if bf.Check_elem(key) {
-			where = 0 // ovde zapravo treba da ide indeks u kojoj sstable je element
-			break
-		}
-	}
-
-	if where != -1 {
-		// ovo znaci da se element nalazi u bloom filteru sa indeksom where, tj u where sstable
-		// dalja pretraga u where summary, pa u index, pa u data deo
-	}
-}
-
 // preko kljuca trazimo u summaryFile poziciju za nas klju u indexFile iz kog kasnije dobijamo poziicju naseg kljuca i vrednosti u dataFile
-func get(key string, SummaryFileName string, IndexFileName string, DataFileName string) string {
+func Get(key string, SummaryFileName string, IndexFileName string, DataFileName string) []byte {
 
 	//iz summary citamo opseg kljuceva u sstable (prvi i poslendji)
 	sumarryFile, _ := os.OpenFile(SummaryFileName, os.O_RDWR, 0777)
@@ -133,13 +116,13 @@ func get(key string, SummaryFileName string, IndexFileName string, DataFileName 
 					}
 					fmt.Println(err)
 					sumarryFile.Close()
-					return ""
+					return []byte{}
 				}
 				continue
 			}
 		}
 	}
-	return ""
+	return []byte{}
 }
 
 // vraca offset za dataFile, nakon sto nadje u indexFile
@@ -200,7 +183,7 @@ func readFromIndex(file *os.File) (string, int64) {
 }
 
 // u Index fajlu: velicina kljuca + kljuc u bajtovima + pozicija (binarna) tog podatka u DataFile
-// u fajlu sa indexima (IndexFileName) se cuva kljuc cvora iz skip liste i pozicija bajta tog cvora (podatka) sa tim kljucem u fajlu sa podacima (DataFileName)
+// u fajlu sa indexima (IndexFileName) se cuva kljuc cvora iz memtable i pozicija bajta tog cvora (podatka) sa tim kljucem u fajlu sa podacima (DataFileName)
 func AddToIndex(offset int64, key string, indexFile *os.File) int64 {
 	data := []byte{}
 	keyBytes := []byte(key)
@@ -221,7 +204,7 @@ func AddToIndex(offset int64, key string, indexFile *os.File) int64 {
 	return indexLength
 }
 
-// u fajlu summary (SummaryFileName) cuva kljuc cvora iz skip liste i poziciju bajta tog cvora (podatka) sa tim kljucem u indexFile
+// u fajlu summary (SummaryFileName) cuva kljuc cvora iz  memtable i poziciju bajta tog cvora (podatka) sa tim kljucem u indexFile
 func AddToSummary(position int64, key string, summary *os.File) {
 	data := []byte{}
 	//vrednost kljuca u bajtovima
@@ -268,7 +251,7 @@ func loadSummary(summary *os.File) *SStableSummary {
 	}
 }
 
-func readData(position int64, DataFileName string) string {
+func readData(position int64, DataFileName string) []byte {
 	file, err := os.OpenFile(DataFileName, os.O_RDWR, 0777)
 	if err != nil {
 		log.Fatal(err)
@@ -297,11 +280,55 @@ func readData(position int64, DataFileName string) string {
 	if err != nil {
 		panic(err)
 	}
-	val := string(data[key_size : key_size+value_size])
+	val := data[key_size : key_size+value_size]
 	return val
 }
 
-func MakeData(nodes []*SkipNode, DataFileName string, IndexFileName string, SummaryFileName string, BloomFileName string) {
+func CRC32(data []byte) uint32 {
+	return crc32.ChecksumIEEE(data)
+}
+
+// funkcija koja pretvara node tj entry u bajtove
+func NodeToBytes(node WAL.Entry) []byte { //pretvara node u bajtove
+	var data []byte
+
+	crcb := make([]byte, CRC_SIZE)
+	binary.LittleEndian.PutUint32(crcb, CRC32(node.Transaction.Value))
+	data = append(data, crcb...) //dodaje se CRC
+
+	sec := time.Now().Unix()
+	secb := make([]byte, TIMESTAMP_SIZE)
+	binary.LittleEndian.PutUint64(secb, uint64(sec))
+	data = append(data, secb...) //dodaje se Timestamp
+
+	//1 - deleted; 0 - not deleted
+	//dodaje se Tombstone
+	if node.Tombstone {
+		var delb byte = 1
+		data = append(data, delb)
+	} else {
+		var delb byte = 0
+		data = append(data, delb)
+	}
+
+	keyb := []byte(node.Transaction.Key)
+	keybs := make([]byte, KEY_SIZE_SIZE)
+	binary.LittleEndian.PutUint64(keybs, uint64(len(keyb)))
+
+	valuebs := make([]byte, VALUE_SIZE_SIZE)
+	binary.LittleEndian.PutUint64(valuebs, uint64(len(node.Transaction.Value)))
+
+	//dodaju se Key Size i Value Size
+	data = append(data, keybs...)
+	data = append(data, valuebs...)
+	//dodaju se Key i Value
+	data = append(data, keyb...)
+	data = append(data, node.Transaction.Value...)
+
+	return data
+}
+
+func MakeData(nodes []*WAL.Entry, DataFileName string, IndexFileName string, SummaryFileName string, BloomFileName string) {
 	indexFile, err := os.OpenFile(IndexFileName, os.O_RDWR|os.O_APPEND, 0777)
 	if err != nil {
 		panic(err)
@@ -313,16 +340,16 @@ func MakeData(nodes []*SkipNode, DataFileName string, IndexFileName string, Summ
 		panic(err)
 	}
 	defer summaryFile.Close()
-	// uzima najmanji i najveci kljuc iz nodes iz skiplist
+	// uzima najmanji i najveci kljuc iz nodes iz memtable
 	first := make([]byte, KEY_SIZE_SIZE)
 	last := make([]byte, KEY_SIZE_SIZE)
-	binary.LittleEndian.PutUint64(first, uint64(len([]byte(nodes[0].Key()))))
-	binary.LittleEndian.PutUint64(last, uint64(len([]byte(nodes[len(nodes)-1].Key()))))
+	binary.LittleEndian.PutUint64(first, uint64(len([]byte(nodes[0].Transaction.Key))))
+	binary.LittleEndian.PutUint64(last, uint64(len([]byte(nodes[len(nodes)-1].Transaction.Key))))
 	// upisuje ih u summary
 	summaryFile.Write(first)
 	summaryFile.Write(last)
-	summaryFile.Write([]byte(nodes[0].Key()))
-	summaryFile.Write([]byte(nodes[len(nodes)-1].Key()))
+	summaryFile.Write([]byte(nodes[0].Transaction.Key))
+	summaryFile.Write([]byte(nodes[len(nodes)-1].Transaction.Key))
 
 	// pravi se bloom filter
 	make_filter(nodes, len(nodes), BloomFileName)
@@ -337,15 +364,15 @@ func MakeData(nodes []*SkipNode, DataFileName string, IndexFileName string, Summ
 	for _, node := range nodes {
 		position, _ := FileLength(file)
 		// cvor se upisuje u DataFile
-		_, err = file.Write(NodeToBytes(node))
+		_, err = file.Write(NodeToBytes(*node))
 		if err != nil {
 			return
 		}
 		// upisivanje u index fajl
-		positionSum := AddToIndex(position, node.Key(), indexFile)
+		positionSum := AddToIndex(position, node.Transaction.Key, indexFile)
 		// upisuje svaki peti u summary file
 		if n%5 == 0 {
-			AddToSummary(positionSum, node.Key(), summaryFile)
+			AddToSummary(positionSum, node.Transaction.Key, summaryFile)
 		}
 		n += 1
 	}
