@@ -3,6 +3,8 @@ package BTree
 import (
 	//"fmt"
 	"math"
+	"encoding/binary"
+	"hash/crc32"
 )
 
 // struktura podatka, mahom preuzeta sa WAL-a ono sto nam treba za memtable
@@ -11,6 +13,44 @@ type Data struct {
 	Tombstone   bool
 	Key   string
 	Value []byte
+}
+
+func (data Data) ToBytes() []byte {
+	var dataBytes []byte
+
+	crcb := make([]byte, 4)
+	binary.LittleEndian.PutUint32(crcb, crc32.ChecksumIEEE(data.Value))
+	dataBytes = append(dataBytes, crcb...) //dodaje se CRC
+
+	secb := make([]byte, 8)
+	binary.LittleEndian.PutUint64(secb, uint64(data.Timestamp))
+	dataBytes = append(dataBytes, secb...) //dodaje se Timestamp
+
+	//1 - deleted; 0 - not deleted
+	//dodaje se Tombstone
+	if data.Tombstone {
+		var delb byte = 1
+		dataBytes = append(dataBytes, delb)
+	} else {
+		var delb byte = 0
+		dataBytes = append(dataBytes, delb)
+	}
+
+	keyb := []byte(data.Key)
+	keybs := make([]byte, 8)
+	binary.LittleEndian.PutUint64(keybs, uint64(len(keyb)))
+
+	valuebs := make([]byte, 8)
+	binary.LittleEndian.PutUint64(valuebs, uint64(len(data.Value)))
+
+	//dodaju se Key Size i Value Size
+	dataBytes = append(dataBytes, keybs...)
+	dataBytes = append(dataBytes, valuebs...)
+	//dodaju se Key i Value
+	dataBytes = append(dataBytes, keyb...)
+	dataBytes = append(dataBytes, data.Value...)
+
+	return dataBytes
 }
 
 /*	
@@ -148,13 +188,14 @@ func (btree *BTree) splitNode(node *BTreeNode) {
 }
 
 // Funkcija za dodavanje elementa u B stablo
-func (btree *BTree) Add(elem string, val []byte, ts uint64) {
+func (btree *BTree) Add(elem string, val []byte, ts uint64) bool {
 	node, indexVal, isThere, dat := btree.Find(elem)
 
 	if isThere {
 		if val == nil {
 			if !dat.Tombstone {
 				dat.Tombstone = true
+				return true
 			} else {
 				// greska, vec obrisan element
 			}
@@ -163,6 +204,8 @@ func (btree *BTree) Add(elem string, val []byte, ts uint64) {
 			dat.Timestamp = ts
 			dat.Tombstone = false
 		}
+
+		return false
 	} else if val != nil{
 		data := Data{ts, false, elem, val}
 		// dodavanje elementa u kljuceva cvora u listu na mesto gde treba (ovo je u sustini insert)
@@ -286,7 +329,11 @@ func (btree *BTree) Add(elem string, val []byte, ts uint64) {
 				btree.splitNode(node)
 			}
 		}
+
+		return true
 	}
+
+	return false
 }
 
 /*

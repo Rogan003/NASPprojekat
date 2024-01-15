@@ -2,6 +2,7 @@ package Memtable
 
 import (
 	"fmt"
+	"time"
 	"NASPprojekat/SkipList"
 	"NASPprojekat/BTree"
 )
@@ -40,7 +41,9 @@ func (mt *Memtable) Init(vers string, mCap int) {
 // funkcija i za dodavanje i za izmenu elementa sa kljucem
 // u zavisnosti od verzije i prisutnosti elementa dodaje elem ili ga menja u odredjenoj strukturi
 // poziva se iz WAL-a, ako je uspesno odradjeno dodavanje/izmena
-func (mt *Memtable) Add(key string, value []byte, timestamp uint64) {
+func (mt *Memtable) Add(key string, value []byte) {
+	timestamp := uint64(time.Now().Unix())
+
 	if mt.version == "skiplist" {
 		// mt.skiplist.Add(elem)
 		ok := mt.skiplist.Add(key, value, timestamp)
@@ -48,13 +51,10 @@ func (mt *Memtable) Add(key string, value []byte, timestamp uint64) {
 			mt.curCap++
 		}
 	} else {
-		/* DODATI: 
 		ok := mt.btree.Add(key, value, timestamp)
 		if (ok) {
 			mt.curCap++
 		}
-		*/
-		mt.btree.Add(key, value, timestamp)
 	}
 
 	if mt.curCap == mt.maxCap {
@@ -65,23 +65,15 @@ func (mt *Memtable) Add(key string, value []byte, timestamp uint64) {
 // funkcija za brisanje elementa sa kljucem iz memtable
 // brisanje je logicko
 // poziva se iz WAL-a ako je uspesno sve zapisano
-func (mt *Memtable) Delete(key string, timestamp uint64) {
+func (mt *Memtable) Delete(key string) bool {
+	timestamp := uint64(time.Now().Unix())
+
 	if mt.version == "skiplist" {
 		// logicko brisanje iz skip liste
-		// ok bool -> vraca true ako je obrisan, false ako smo obrisali element koji ne postoji
-		ok := mt.skiplist.Delete(key, timestamp)
-		if (ok) {
-			mt.curCap--
-		}
+		// funkcija za brisanje -> vraca true ako je obrisan, false ako smo obrisali element koji ne postoji
+		return mt.skiplist.Delete(key, timestamp)
 	} else {
-		// DODATI: 
-		/*
-			ok := mt.btree.Add(key, nil, timestamp)
-			if (ok) {
-				mt.curCap--
-			}
-		*/
-		mt.btree.Add(key, nil, timestamp)
+		return mt.btree.Add(key, nil, timestamp)
 	}
 }
 
@@ -114,7 +106,7 @@ func (mt *Memtable) flush() {
 
 		fmt.Println("\nFLUSHED:")
 		for _, value := range elems {
-			fmt.Printf("%s %d %t\n", value.Key, value.Value, value.Tombstone)
+			fmt.Printf("%s %d %t %s\n", value.Key, value.Value, value.Tombstone, value.ToBytes())
 		}
 		fmt.Printf("\n")
 
@@ -125,7 +117,7 @@ func (mt *Memtable) flush() {
 		elems := mt.btree.AllElem()
 
 		for _, value := range elems {
-			fmt.Printf("%s %d %t\n", value.Key, value.Value, value.Tombstone)
+			fmt.Printf("%s %d %t %s\n", value.Key, value.Value, value.Tombstone, value.ToBytes())
 		}
 		fmt.Printf("\n")
 
