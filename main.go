@@ -60,32 +60,31 @@ func main() {
 	fmt.Println(isThere)
 	*/
 
-	
-	// mt := Memtable.Memtable{}
-	// mt.Init(conf.MemtableStructure, int(conf.MemtableSize))
-
 	/*
-	mt.Add("sv36", []byte{10}, 1)
-	mt.Add("sv48", []byte{10}, 2)
-	mt.Add("ab45", []byte{6}, 3)
-	mt.Add("de34", []byte{5}, 4)
-	mt.Add("tr55", []byte{7}, 5)
+	mt := Memtable.Memtable{}
+	mt.Init(conf.MemtableStructure, int(conf.MemtableSize))
+
+	mt.Add("sv36", []byte{10})
+	mt.Add("sv48", []byte{10})
+	mt.Add("ab45", []byte{6})
+	mt.Add("de34", []byte{5})
+	mt.Add("tr55", []byte{7})
 	mt.Get("ii1")
-	mt.Add("ii1", []byte{9}, 6)
+	mt.Add("ii1", []byte{9})
 	mt.Get("ii1")
-	mt.Add("ii5", []byte{8}, 7)
-	mt.Add("ra4", []byte{8}, 8)
-	mt.Add("ra223", []byte{6}, 9)
-	mt.Add("ok12", []byte{7}, 10)
-	mt.Add("qw23", []byte{10}, 11)
-	mt.Add("yt4", []byte{8}, 12)
-	mt.Add("pr49", []byte{7}, 13)
-	mt.Add("de52", []byte{9}, 14)
-	mt.Add("aa21", []byte{5}, 15)
-	mt.Add("mr32", []byte{8}, 16)
-	mt.Add("mr21", []byte{7}, 17)
-	mt.Delete("yt4", 18)
-	mt.Delete("sv36", 19)
+	mt.Add("ii5", []byte{8})
+	mt.Add("ra4", []byte{8})
+	mt.Add("ra223", []byte{6})
+	mt.Add("ok12", []byte{7})
+	mt.Add("qw23", []byte{10})
+	mt.Add("yt4", []byte{8})
+	mt.Add("pr49", []byte{7})
+	mt.Add("de52", []byte{9})
+	mt.Add("aa21", []byte{5})
+	mt.Add("mr32", []byte{8})
+	mt.Add("mr21", []byte{7})
+	mt.Delete("yt4")
+	mt.Delete("sv36")
 	*/
 
 	// hll :=HyperLogLog.Init(10)

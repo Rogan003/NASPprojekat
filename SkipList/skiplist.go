@@ -5,6 +5,8 @@ package SkipList
 import (
 	"fmt"
 	"math/rand"
+	"encoding/binary"
+	"hash/crc32"
 )
 
 
@@ -13,6 +15,44 @@ type Data struct {
 	Tombstone   bool
 	Key   string
 	Value []byte
+}
+
+func (data Data) ToBytes() []byte {
+	var dataBytes []byte
+
+	crcb := make([]byte, 4)
+	binary.LittleEndian.PutUint32(crcb, crc32.ChecksumIEEE(data.Value))
+	dataBytes = append(dataBytes, crcb...) //dodaje se CRC
+
+	secb := make([]byte, 8)
+	binary.LittleEndian.PutUint64(secb, uint64(data.Timestamp))
+	dataBytes = append(dataBytes, secb...) //dodaje se Timestamp
+
+	//1 - deleted; 0 - not deleted
+	//dodaje se Tombstone
+	if data.Tombstone {
+		var delb byte = 1
+		dataBytes = append(dataBytes, delb)
+	} else {
+		var delb byte = 0
+		dataBytes = append(dataBytes, delb)
+	}
+
+	keyb := []byte(data.Key)
+	keybs := make([]byte, 8)
+	binary.LittleEndian.PutUint64(keybs, uint64(len(keyb)))
+
+	valuebs := make([]byte, 8)
+	binary.LittleEndian.PutUint64(valuebs, uint64(len(data.Value)))
+
+	//dodaju se Key Size i Value Size
+	dataBytes = append(dataBytes, keybs...)
+	dataBytes = append(dataBytes, valuebs...)
+	//dodaju se Key i Value
+	dataBytes = append(dataBytes, keyb...)
+	dataBytes = append(dataBytes, data.Value...)
+
+	return dataBytes
 }
 
 
