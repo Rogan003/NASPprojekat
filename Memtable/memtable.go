@@ -126,34 +126,29 @@ func (mt *Memtable) GetElement(key string) ([]byte, bool) {
 
 // funkcija koja radi flush na disk (sstable)
 func (mt *Memtable) flush() {
+	for _, value := range mt.GetSortedElems() {
+		fmt.Printf("%s %d %t %s\n", value.Key, value.Value, value.Tombstone, value.ToBytes())
+	}
+	fmt.Printf("\n")
+
 	if mt.version == "skiplist" {
-		// isto ovo sto i u else, samo za skiplistu dodati funkciju koja vraca sve elemente sortirane
-		elems := mt.skiplist.AllElem()
-
-		fmt.Println("\nFLUSHED:")
-		for _, value := range elems {
-			fmt.Printf("%s %d %t %s\n", value.Key, value.Value, value.Tombstone, value.ToBytes())
-		}
-		fmt.Printf("\n")
-
 		mt.skiplist = SkipList.SkipList{}
 		mt.skiplist.Init(20)
 
 	} else {
-		elems := mt.btree.AllElem()
-
-		for _, value := range elems {
-			fmt.Printf("%s %d %t %s\n", value.Key, value.Value, value.Tombstone, value.ToBytes())
-		}
-		fmt.Printf("\n")
-
-		// sortirana lista svih elem, nad njom pozvati sstable kreaciju, za sada samo ispisujemo elem
-
 		mt.btree = BTree.BTree{}
 		mt.btree.Init(10)
 	}
 
 	mt.curCap = 0
+}
+
+func (mt *Memtable) GetSortedElems() {
+	if mt.version == "skiplist" {
+		return mt.skiplist.AllElem()
+	}
+
+	return mt.btree.AllElem()
 }
 
 func (m *Memtable) flushToDisk() {

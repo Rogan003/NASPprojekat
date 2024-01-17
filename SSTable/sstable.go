@@ -64,7 +64,7 @@ func make_filter(elems []*WAL.Entry, numElems int, filePath string) {
 	bf.Init(numElems, 0.01)
 
 	for _, val := range elems {
-		bf.Add(val.ToByte())
+		bf.Add(val.ToByte()) // mozda key?
 	}
 
 	bf.Serialize(filePath)
