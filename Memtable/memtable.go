@@ -6,26 +6,24 @@ import (
 	"NASPprojekat/SSTable"
 	"NASPprojekat/SkipList"
 	"time"
-
 	"fmt"
 	"os"
 	"strconv"
 )
 
-/*
-	STRUKTURA MEMTABLE
+
+/* STRUKTURA MEMTABLE
 
 	Sadrzi SkipList i BTree kao strukture preko kojih je moguce da je implementiran
 	Sadrzi preko koje je strukture implementiran
-	Sadrzi maks kapacitet i trenutni broj operacija
-*/
-
+	Sadrzi maks kapacitet i trenutni broj operacija   */
 type Memtable struct {
 	skiplist SkipList.SkipList
 	btree    BTree.BTree
 	version  string
 	maxCap   int
 	curCap   int
+	empty    bool
 }
 
 // konstruktor za memtable, na osnovu verzije (skip lista ili b stablo) i maksimalnog kapaciteta kreira inicijalno stanje strukture
@@ -41,52 +39,104 @@ func (mt *Memtable) Init(vers string, mCap int) {
 	mt.version = vers
 	mt.maxCap = mCap
 	mt.curCap = 0
+	mt.empty = true
 }
+
+
+/* STRUKTURA NMemtables:
+
+    N - broj koji se proslijedi vjerovatno preko configa
+  Arr - niz koji sadrzi N memtabli, samo 1. memtabla je "aktivna" i
+        'read-write' je, a ostale iza nje su sve "neaktivne" i 'read-only'
+    l - pokazivac na poslednju read-only memtablu
+    r - pokazivac na prvu write-read memtablu (aktivnu u koju upisujemo)    
+
+Kada neka od N memtabli treba da se flushuje, provjerava se da li je svih N popunjeno vec,
+ako nije, pomijeramo samo 'r' pokazivac za jedno mjesto unaprijed i popunjavamo sledecu
+slobodnu, a ako jesu ipak sve popunjenje, flushujemo poslednju read-only tabelu i pomijeramo
+oba pokazivaca l' i 'r' za jedno mjesto ispred.
+*/
+type NMemtables struct {
+	N   int           // broj memtabli
+	Arr []*Memtable   // niz memtabli
+	l   int           // left index
+	r   int           // right index
+}
+
+// konstruktor za vise memtabli, sve isto, dodan num = broj memtabli
+func (nmt *NMemtables) Init(vers string, mCap int, num int) {
+	var curArr []*Memtable
+
+	for i = 0; i < num; i++ {
+		memtable = Memtable{}
+		memtable.Init(vers, mCap)
+		curArr = append(curArr, &memtable)
+	}
+
+	nmt.N = num
+	nmt.Arr = curArr
+	nmt.l = 0
+	nmt.r = 0
+}
+
 
 // funkcija i za dodavanje i za izmenu elementa sa kljucem
 // u zavisnosti od verzije i prisutnosti elementa dodaje elem ili ga menja u odredjenoj strukturi
 // poziva se iz WAL-a, ako je uspesno odradjeno dodavanje/izmena
-func (mt *Memtable) Add(key string, value []byte) {
-	timestamp := uint64(time.Now().Unix())
+func (nmt *NMemtables) Add(key string, value []byte) {
+	
+	arr := nmt.Arr             // arr memtabli
+	memtable := arr[nmt.r]     // prva "aktivna" memtabla
 
-	if mt.version == "skiplist" {
-		// mt.skiplist.Add(elem)
-		ok := mt.skiplist.Add(key, value, timestamp)
-		if ok {
-			mt.curCap++
-		}
+	timestamp := uint64(time.Now().Unix())
+	if memtable.version == "skiplist" {
+		ok := memtable.skiplist.Add(key, value, timestamp)
 	} else {
-		ok := mt.btree.Add(key, value, timestamp)
-		if ok {
-			mt.curCap++
-		}
+		ok := memtable.btree.Add(key, value, timestamp)
+	}
+	if ok {
+		memtable.curCap++
+		memtable.empty = false
 	}
 
-	if mt.curCap == mt.maxCap {
-		mt.flush()
+	if memtable.curCap == memtable.maxCap {
+		if ((nmt.r - nmt.l == nmt.N - 1) || (nmt.r < nmt.l)) {
+			memtableLast := arr[nmt.l]          // izbrisala sam proveru da li je memtable empty
+			memtableLast.flush()                // valjda nece trebati (testiracu)
+			nmt.l = (nmt.l + 1) % nmt.N
+		}
+		nmt.r = (nmt.r + 1) % nmt.N
 	}
 }
 
 // funkcija za brisanje elementa sa kljucem iz memtable
 // brisanje je logicko
 // poziva se iz WAL-a ako je uspesno sve zapisano
-func (mt *Memtable) Delete(key string) bool {
-	timestamp := uint64(time.Now().Unix())
+func (nmt *NMemtables) Delete(key string) bool {
 
-	if mt.version == "skiplist" {
+	arr := nmt.Arr  
+	memtable := arr[nmt.r]
+
+	timestamp := uint64(time.Now().Unix())
+	if memtable.version == "skiplist" {
 		// logicko brisanje iz skip liste
 		// funkcija za brisanje -> vraca true ako je obrisan, false ako smo obrisali element koji ne postoji
-		return mt.skiplist.Delete(key, timestamp)
+		return memtable.skiplist.Delete(key, timestamp)
 	} else {
-		return mt.btree.Add(key, nil, timestamp)
+		return memtable.btree.Add(key, nil, timestamp)
 	}
 }
 
 // funkcija za dobavljanje i prikaz elementa sa kljucem iz memtable
-func (mt *Memtable) Get(key string) {
-	if mt.version == "skiplist" {
+/* Get gleda samo prvu aktivnu memtablu, ostale se ne gledaju ni kod Get, ni Delete, ni Add */
+func (nmt *NMemtables) Get(key string) {
+
+	arr := nmt.Arr  
+	memtable := arr[nmt.r]
+
+	if memtable.version == "skiplist" {
 		// pronalazak u skip listi
-		skipNode, found := mt.skiplist.Find(key)
+		skipNode, found := memtable.skiplist.Find(key)
 		if skipNode.Elem.Value != nil && skipNode.Elem.Tombstone && found {
 			fmt.Printf("%s %d\n", skipNode.Elem.Key, skipNode.Elem.Value)
 		} else {
@@ -94,7 +144,7 @@ func (mt *Memtable) Get(key string) {
 		}
 
 	} else {
-		_, _, _, elem := mt.btree.Find(key)
+		_, _, _, elem := memtable.btree.Find(key)
 		if elem != nil && !elem.Tombstone {
 			fmt.Printf("%s %d\n", elem.Key, elem.Value)
 		} else {
@@ -103,11 +153,16 @@ func (mt *Memtable) Get(key string) {
 	}
 }
 
-// funkcija prima kljuc i po njemu trazi podatak u memtable, vraca string vrednosti podatka i bool koji oznacava da li je nadjen element
-func (mt *Memtable) GetElement(key string) ([]byte, bool) {
-	if mt.version == "skiplist" {
+// funkcija prima kljuc i po njemu trazi podatak u memtable,
+// vraca string vrednosti podatka i bool koji oznacava da li je nadjen element
+func (nmt *NMemtables) GetElement(key string) ([]byte, bool) {
+
+	arr := nmt.Arr  
+	memtable := arr[nmt.r]
+
+	if memtable.version == "skiplist" {
 		// pronalazak u skip listi
-		skipNode, found := mt.skiplist.Find(key)
+		skipNode, found := memtable.skiplist.Find(key)
 		if skipNode.Elem.Value != nil && !skipNode.Elem.Tombstone && found {
 			return skipNode.Elem.Value, true
 		} else {
@@ -115,7 +170,7 @@ func (mt *Memtable) GetElement(key string) ([]byte, bool) {
 		}
 
 	} else {
-		_, _, _, elem := mt.btree.Find(key)
+		_, _, _, elem := memtable.btree.Find(key)
 		if elem != nil && !elem.Tombstone {
 			return elem.Value, true
 		} else {
@@ -143,13 +198,20 @@ func (mt *Memtable) flush() {
 	mt.curCap = 0
 }
 
-func (mt *Memtable) GetSortedElems() {
-	if mt.version == "skiplist" {
-		return mt.skiplist.AllElem()
+
+func (nmt *NMemtables) GetSortedElems() {
+
+	arr := nmt.Arr  
+	memtable := arr[nmt.r]
+
+	if memtable.version == "skiplist" {
+		return memtable.skiplist.AllElem()
 	}
 
-	return mt.btree.AllElem()
+	return memtable.btree.AllElem()
 }
+
+
 
 func (m *Memtable) flushToDisk() {
 	fmt.Println("Zapisano na disk.")
