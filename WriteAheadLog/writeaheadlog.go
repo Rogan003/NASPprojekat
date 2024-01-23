@@ -282,7 +282,7 @@ func (wal *WAL) AddTransaction(Tombstone bool, transaction Transaction) (error, 
 	}
 	return nil, entry.Timestamp
 }
-func Put(wal *WAL, mem *Memtable.Memtable, key string, value []byte) bool { //dodaje transakciju dodavanja u wal pa dodaje u memtable
+func Put(wal *WAL, mem *Memtable.NMemtables, key string, value []byte) bool { //dodaje transakciju dodavanja u wal pa dodaje u memtable
 	transaction := NewTransaction(key, value)
 	err, ts := wal.AddTransaction(false, *transaction)
 	if err != nil {
@@ -291,7 +291,7 @@ func Put(wal *WAL, mem *Memtable.Memtable, key string, value []byte) bool { //do
 	mem.Add(key, value, ts)
 	return true
 }
-func Delete(wal *WAL, mem *Memtable.Memtable, key string) { //dodaje transakciju brisanja u wal pa brise iz memtable
+func Delete(wal *WAL, mem *Memtable.NMemtables, key string) { //dodaje transakciju brisanja u wal pa brise iz memtable
 	transaction := NewTransaction(key, []byte{})
 	err, ts := wal.AddTransaction(true, *transaction)
 	if err != nil {

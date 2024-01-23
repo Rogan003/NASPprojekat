@@ -5,8 +5,10 @@ import (
 	"NASPprojekat/Cache"
 	"NASPprojekat/Memtable"
 	"NASPprojekat/SSTable"
+	"NASPprojekat/WriteAheadLog"
 
 	"fmt"
+	"time"
 )
 
 func Get(memtable *Memtable.Memtable, cache *Cache.LRUCache, key string) ([]byte, bool) {
@@ -213,4 +215,25 @@ func RangeIter(memtable *Memtable.Memtable, key1 string, key2 string) {
 
 func PrefixIter(memtable *Memtable.Memtable, prefix string) {
 	PrefixScan(memtable, prefix, 1)
+}
+
+func Put(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, value []byte) bool{
+	//prvo staviti podatak WAL
+	//potom u memtable
+	//dodati u kes?
+	//provera da li je memtable popunjen?
+	//nakon toga ako je memtable popunjen, sortirati memtable po kljucu
+	// zatim zapisati na disk formirajuci sstable
+	// isprazniti memtable ili napraviti novi
+	transaction:= WAL.NewTransaction(key,value)
+	
+	succesful = WriteAheadLog.Put(WAL, memtable, key, value)
+	// if successful{
+
+	// 	cache.Insert(key, value)
+
+	// }else{
+	// 	fmt.Printf("Neuspesan unos.")
+	// }
+	return succesful
 }
