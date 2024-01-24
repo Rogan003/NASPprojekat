@@ -6,9 +6,11 @@ import (
 	"NASPprojekat/Memtable"
 	"NASPprojekat/SSTable"
 	"NASPprojekat/WriteAheadLog"
-
+	"encoding/binary"
 	"fmt"
-	"time"
+	"io"
+	"log"
+	"os"
 )
 
 func Get(memtable *Memtable.Memtable, cache *Cache.LRUCache, key string) ([]byte, bool) {
@@ -80,22 +82,22 @@ func RangeScan(memtable *Memtable.Memtable, key1 string, key2 string, pageSize i
 	} else {
 		memElems := memtable.GetSortedElems()
 		memIter := -1
-	
+
 		for index, value := range memElems {
 			if value.Transaction.Key > key1 {
 				memIter = index
 				break
 			}
 		}
-	
+
 		sstables := [10]string{} // za sada samo placeholder naziva fajlova (smisliti kako cemo ih ucitati inace)
 		indexes := [len(sstables)]int{}
-	
+
 		// postavljamo sve na -1 kako bi znali ako neki sstable nema range koji nama treba
 		for index, _ := range indexes {
 			indexes[index] = -1
 		}
-	
+
 		// citanje pozicija u index fajlovima odakle treba da se krece skeniranje
 		for index, value := range sstables {
 			sumarryFileName := value[0:14] + "summaryFile" + value[22:]
@@ -105,24 +107,24 @@ func RangeScan(memtable *Memtable.Memtable, key1 string, key2 string, pageSize i
 			sumarryFile, _ := os.OpenFile(sumarryFileName, os.O_RDWR, 0777)
 			summary := loadSummary(sumarryFile)
 			defer sumarryFile.Close()
-	
+
 			// ako je trazeni kljuc u tom opsegu, podatak bi trebalo da se nalazi u ovom sstable
 			if summary.FirstKey <= key2 && summary.LastKey >= key1 {
-	
+
 				var indexPosition = uint64(0)
 				for {
 					//citamo velicinu kljuca
 					keySizeBytes := make([]byte, KEY_SIZE_SIZE)
 					_, err := sumarryFile.Read(keySizeBytes)
 					keySize := int64(binary.LittleEndian.Uint64(keySizeBytes))
-	
+
 					//citamo keySize bajtiva da bi dobili kljuc
 					keyValue := make([]byte, keySize)
 					_, err = sumarryFile.Read(keyValue)
 					if err != nil {
 						panic(err)
 					}
-					
+
 					if string(keyValue) > key1 {
 						file, err := os.OpenFile(indexFileName, os.O_RDWR, 0777)
 						if err != nil {
@@ -165,7 +167,7 @@ func RangeScan(memtable *Memtable.Memtable, key1 string, key2 string, pageSize i
 		}
 
 		// pretraga elemenata u range (prvo verzija bez cuvanja elem, pa onda sa cuvanjem)
-		
+
 		forward := true
 		works := true
 
@@ -178,20 +180,20 @@ func RangeScan(memtable *Memtable.Memtable, key1 string, key2 string, pageSize i
 			}
 
 			for index, value := range elems {
-				fmt.Printf("%i. %s: %s\n", index + 1, value.Transaction.Key, value.Transaction.Value) // kako ispisati niz bajtova? kao string?
+				fmt.Printf("%i. %s: %s\n", index+1, value.Transaction.Key, value.Transaction.Value) // kako ispisati niz bajtova? kao string?
 			}
 
 			var option int = -1
 
-			for option < 1 || option > 3{
+			for option < 1 || option > 3 {
 				fmt.Printf("1. Napred\n2. Nazad\n3. Kraj\nOpcija: ")
-				fmt.Scanf("%v",&option) // ako se unese karakter greska? nesto oko ovoga?
+				fmt.Scanf("%v", &option) // ako se unese karakter greska? nesto oko ovoga?
 
 				if option == 1 {
 					forward = true
 				} else if option == 2 {
 					forward = false
-				} else if option == 3{
+				} else if option == 3 {
 					works = false
 				} else {
 					fmt.Println("Nepostojeca opcija!")
@@ -200,13 +202,13 @@ func RangeScan(memtable *Memtable.Memtable, key1 string, key2 string, pageSize i
 
 				break
 			}
-			
+
 		}
 	}
 }
 
 func PrefixScan(memtable *Memtable.Memtable, prefix string, pageSize int) {
-	RangeScan(memtable, prefix, prefix + string('z' + 1), pageSize)
+	RangeScan(memtable, prefix, prefix+string('z'+1), pageSize)
 }
 
 func RangeIter(memtable *Memtable.Memtable, key1 string, key2 string) {
@@ -217,7 +219,7 @@ func PrefixIter(memtable *Memtable.Memtable, prefix string) {
 	PrefixScan(memtable, prefix, 1)
 }
 
-func Put(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, key string, value []byte) bool{
+func Put(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, value []byte) bool {
 	//prvo staviti podatak WAL
 	//potom u memtable
 	//dodati u kes?
@@ -225,8 +227,8 @@ func Put(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, key string, valu
 	//nakon toga ako je memtable popunjen, sortirati memtable po kljucu
 	// zatim zapisati na disk formirajuci sstable
 	// isprazniti memtable ili napraviti novi
-	transaction:= WAL.NewTransaction(key,value)
-	
+	transaction := WAL.NewTransaction(key, value)
+
 	succesful = WriteAheadLog.Put(WAL, memtable, key, value)
 	// if successful{
 
@@ -237,3 +239,50 @@ func Put(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, key string, valu
 	// }
 	return succesful
 }
+
+/*
+
+func MenuCMS() {
+	fmt.Println("1)	Kreiranje nove instance")
+	fmt.Println("2) Brisanje postojeće instance")
+	fmt.Println("3) Dodavanje novog događaja u neku instancu")
+	fmt.Println("4) Provera učestalosti događaja u nekoj instanci")
+
+	for {
+		fmt.Print("Izaberite radnju: ")
+		var choice string
+		fmt.Scanln(&choice)
+
+		switch choice {
+		case "1":
+			fmt.Println("Kreiranje nove instance CMS-a")
+			fmt.Println("--------------")
+			fmt.Println("Unesite parametar sirine: ")
+			var choice string
+			fmt.Scanln(&choice)
+			cms = CountMinSketch.NewCMS(int)
+
+		case "2":
+			fmt.Println("Brisanje postojeće instance")
+			fmt.Println("--------------")
+
+		case "3":
+			fmt.Println("Dodavanje novog događaja u neku instancu.")
+			fmt.Println("--------------")
+		case "4":
+			fmt.Println("Provera učestalosti događaja u nekoj instanci")
+			fmt.Println("--------------")
+
+		default:
+			fmt.Println("Unesite validnu radnju.")
+		}
+	}
+}
+
+// Assuming t is a time.Timer
+//var t = time.NewTimer(60 * time.Second)
+
+// Define Wal, memtable, lru, Get, and Mem.WriteFileNames() accordingly
+
+
+*/
