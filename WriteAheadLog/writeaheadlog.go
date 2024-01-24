@@ -1,9 +1,9 @@
 package WriteAheadLog
 
 import (
+	"NASPprojekat/Config"
 	"NASPprojekat/Memtable"
 	"bufio"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -14,69 +14,6 @@ import (
 	"strings"
 	"time"
 )
-
-func (entry *Entry) ToByte() []byte { //pretvara iz vrednosti u bajtove
-	var data []byte
-
-	crcb := make([]byte, CRC_SIZE)
-	binary.LittleEndian.PutUint32(crcb, CRC32(entry.Transaction.Value))
-	data = append(data, crcb...) //dodaje se CRC
-
-	sec := time.Now().Unix()
-	secb := make([]byte, TIMESTAMP_SIZE)
-	binary.LittleEndian.PutUint64(secb, uint64(sec))
-	data = append(data, secb...) //dodaje se Timestamp
-
-	//1 - deleted; 0 - not deleted
-	//dodaje se Tombstone
-	if entry.Tombstone {
-		var delb byte = 1
-		data = append(data, delb)
-	} else {
-		var delb byte = 0
-		data = append(data, delb)
-	}
-
-	keyb := []byte(entry.Transaction.Key)
-	keybs := make([]byte, KEY_SIZE_SIZE)
-	binary.LittleEndian.PutUint64(keybs, uint64(len(keyb)))
-
-	valuebs := make([]byte, VALUE_SIZE_SIZE)
-	binary.LittleEndian.PutUint64(valuebs, uint64(len(entry.Transaction.Value)))
-
-	//dodaju se Key Size i Value Size
-	data = append(data, keybs...)
-	data = append(data, valuebs...)
-	//dodaju se Key i Value
-	data = append(data, keyb...)
-	data = append(data, entry.Transaction.Value...)
-
-	return data
-}
-
-func toEntry(data []byte) Entry {
-
-	entry := Entry{}
-
-	entry.Crc = binary.LittleEndian.Uint32(data[:4]) //ucitavaju se prva 4 bajta
-	data = data[4:]                                  //pomeramo se za 4 bajta
-
-	entry.Timestamp = binary.LittleEndian.Uint64(data[:8])
-	data = data[8:]
-
-	entry.Tombstone = data[0] != 0 //true ako je 1, false ako je 0
-	data = data[1:]
-
-	keySize := binary.LittleEndian.Uint32(data[:4])
-	data = data[8:] //pomeramo se za 8 zbog key size i value size
-
-	entry.Transaction.Key = string(data[:keySize])
-	data = data[keySize:]
-
-	entry.Transaction.Value = data
-
-	return entry
-}
 
 //prilikom pokretanja wal-a, treba da se skenira folder sa segmentima i unutar wala da se kreira struktura sa offsetima segmenata
 //i putanjama do njih. Poslednji segment treba da se ucita u memorijsku strukturu i moze da se markira sa _END. Da li treba obezbediti trajnost
@@ -136,7 +73,7 @@ func WriteInFile(entry []byte, path string) error {
 //treba mi putanja do poslednjeg segmenta
 //provaliti kako dobiti poslednji segment
 
-func ReadEntriesFromFile(path string) ([]*Entry, error) {
+func ReadEntriesFromFile(path string) ([]*Config.Entry, error) {
 
 	file, err := os.Open(path)
 	if err != nil {
@@ -144,22 +81,26 @@ func ReadEntriesFromFile(path string) ([]*Entry, error) {
 	}
 	defer file.Close()
 
-	var entries []*Entry //kolekcija entrija koja se vraca
+	var entries []*Config.Entry //kolekcija entrija koja se vraca
 
 	scanner := bufio.NewScanner(file) //za kretanje red po red
 
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		entry := toEntry([]byte(line))    //konvertovanje u entry
-		entries = append(entries, &entry) //dodavanje u kolekciju
+		entry := Config.ToEntry([]byte(line)) //konvertovanje u entry
+		entries = append(entries, &entry)     //dodavanje u kolekciju
 	}
 
 	return entries, nil
 
 }
 
-func (wal *WAL)DeleteSegments() error {
+func toEntry(b []byte) {
+	panic("unimplemented")
+}
+
+func (wal *WAL) DeleteSegments() error {
 	//brise fajlove ispod lowWaterMarka
 
 	path := "NASPprojekat/files/WAL"
@@ -172,8 +113,8 @@ func (wal *WAL)DeleteSegments() error {
 
 		filePath := filepath.Join(path, file.Name())
 		num, _ := strconv.Atoi(strings.TrimPrefix(filepath.Base(file.Name()), "segment"))
-		
-		if num < wal.lowWaterMark{
+
+		if num < wal.lowWaterMark {
 
 			err = os.Remove(filePath)
 			if err != nil {
@@ -187,20 +128,19 @@ func (wal *WAL)DeleteSegments() error {
 	return nil
 }
 
-func (wal *WAL)DeleteWAL() {
+func (wal *WAL) DeleteWAL() {
 	//ovde treba da se poziva prethodna funkcija periodicno (vremenski uslov)
 	interval := wal.duration * time.Second
 	ticker := time.NewTicker(interval)
 
-	for{
-		select{
-		case <- ticker.C:
+	for {
+		select {
+		case <-ticker.C:
 			wal.DeleteSegments()
 		}
 	}
 
 }
-
 
 // fja koja iz svih fajlova segmenata saznaje koji je poslednji, po indeksu u imenu fajla, setuje lastIndex u tom wal i postavlja mu lastSegment
 // slicno kao sto si radila scanWAL prodji kroz fajlove i nadji lastindex
@@ -251,7 +191,7 @@ func (wal *WAL) OpenWAL() error {
 }
 
 // dodaje novi entri u aktivni segment, ako je pun segment, pravi novi i cuva stari
-func (wal *WAL) AddEntry(entry *Entry) error {
+func (wal *WAL) AddEntry(entry *Config.Entry) error {
 	//dodaje entri u poslednji segment
 	//ako je pun aktivni segment
 	if wal.lastSegment.size >= wal.segmentSize {
@@ -266,7 +206,7 @@ func (wal *WAL) AddEntry(entry *Entry) error {
 		//pravi novi aktivni segment i na njega dodaje entry
 		wal.lastIndex++
 		newPath := "segment" + strconv.FormatInt(wal.lastIndex, 10) + ".log"
-		wal.lastSegment = *NewSegment(newPath, wal.lastIndex, 0, []*Entry{})
+		wal.lastSegment = *NewSegment(newPath, wal.lastIndex, 0, []*Config.Entry{})
 		wal.lastSegment.AppendEntry(entry)
 	} else {
 		wal.lastSegment.AppendEntry(entry)
@@ -274,8 +214,8 @@ func (wal *WAL) AddEntry(entry *Entry) error {
 	return nil
 
 }
-func (wal *WAL) AddTransaction(Tombstone bool, transaction Transaction) (error, uint64) { // pravi entry od transakcije i cuva ga
-	entry := NewEntry(Tombstone, transaction)
+func (wal *WAL) AddTransaction(Tombstone bool, transaction Config.Transaction) (error, uint64) { // pravi entry od transakcije i cuva ga
+	entry := Config.NewEntry(Tombstone, transaction)
 	err := wal.AddEntry(entry)
 	if err != nil {
 		return err, 0
@@ -283,19 +223,19 @@ func (wal *WAL) AddTransaction(Tombstone bool, transaction Transaction) (error, 
 	return nil, entry.Timestamp
 }
 func Put(wal *WAL, mem *Memtable.NMemtables, key string, value []byte) bool { //dodaje transakciju dodavanja u wal pa dodaje u memtable
-	transaction := NewTransaction(key, value)
-	err, ts := wal.AddTransaction(false, *transaction)
+	transaction := Config.NewTransaction(key, value)
+	err, _ := wal.AddTransaction(false, *transaction)
 	if err != nil {
 		return false
 	}
-	mem.Add(key, value, ts)
+	mem.Add(key, value) // DA LI PROSLEDITI I TRANSAKCIJU U MEM??????
 	return true
 }
 func Delete(wal *WAL, mem *Memtable.NMemtables, key string) { //dodaje transakciju brisanja u wal pa brise iz memtable
-	transaction := NewTransaction(key, []byte{})
-	err, ts := wal.AddTransaction(true, *transaction)
+	transaction := Config.NewTransaction(key, []byte{})
+	err, _ := wal.AddTransaction(true, *transaction)
 	if err != nil {
 		return
 	}
-	mem.Delete(key, ts)
+	mem.Delete(key) // DA LI PROSLEDITI I TRANSAKCIJU U MEM??????
 }

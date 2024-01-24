@@ -2,7 +2,7 @@ package SSTable
 
 import (
 	"NASPprojekat/BloomFilter"
-	WAL "NASPprojekat/WriteAheadLog"
+	"NASPprojekat/Config"
 	"hash/crc32"
 
 	"encoding/binary"
@@ -41,7 +41,7 @@ type SSTableIndex struct {
 }
 
 // konstruktori
-func NewSummary(nodes []*WAL.Entry) *SStableSummary {
+func NewSummary(nodes []*Config.Entry) *SStableSummary {
 	first := nodes[0].Transaction.Key
 	last := nodes[len(nodes)-1].Transaction.Key
 	return &SStableSummary{
@@ -59,7 +59,7 @@ func NewIndex() *SSTableIndex {
 // funkcija za kreaciju bloom filtera za sstable
 // elems jer niz kljuceva (lako cu modifikovati ako saljete podakte), numElems jer broj podataka u memTable,
 // filePath je gde i pod kojim nazivom cuvamo bloom filter
-func make_filter(elems []*WAL.Entry, numElems int, filePath string) {
+func make_filter(elems []*Config.Entry, numElems int, filePath string) {
 	bf := BloomFilter.BloomFilter{}
 	bf.Init(numElems, 0.01)
 
@@ -289,7 +289,7 @@ func CRC32(data []byte) uint32 {
 }
 
 // funkcija koja pretvara node tj entry u bajtove
-func NodeToBytes(node WAL.Entry) []byte { //pretvara node u bajtove
+func NodeToBytes(node Config.Entry) []byte { //pretvara node u bajtove
 	var data []byte
 
 	crcb := make([]byte, CRC_SIZE)
@@ -328,7 +328,7 @@ func NodeToBytes(node WAL.Entry) []byte { //pretvara node u bajtove
 	return data
 }
 
-func MakeData(nodes []*WAL.Entry, DataFileName string, IndexFileName string, SummaryFileName string, BloomFileName string) {
+func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, SummaryFileName string, BloomFileName string) {
 	indexFile, err := os.OpenFile(IndexFileName, os.O_RDWR|os.O_APPEND, 0777)
 	if err != nil {
 		panic(err)

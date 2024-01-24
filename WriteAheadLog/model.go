@@ -1,6 +1,7 @@
 package WriteAheadLog
 
 import (
+	"NASPprojekat/Config"
 	"time"
 )
 
@@ -18,19 +19,7 @@ type Segment struct { //segment
 	index    int64  //pocetak segnemta
 	size     int64  //broj entrija
 	//ENRIJI ILI NIZ BAJTOVA
-	entries []*Entry //entriji u segmentu
-}
-
-type Entry struct { //red u walu
-	Crc         uint32
-	Timestamp   uint64
-	Tombstone   bool
-	Transaction Transaction //transakcije
-}
-
-type Transaction struct { //jedna transakcija
-	Key   string
-	Value []byte
+	entries []*Config.Entry //entriji u segmentu
 }
 
 // Funkcije za segmente
@@ -39,7 +28,7 @@ func (s *Segment) FileName() string {
 	return s.fileName
 }
 
-func (s *Segment) Entries() []*Entry {
+func (s *Segment) Entries() []*Config.Entry {
 	return s.entries
 }
 
@@ -52,7 +41,7 @@ func (s *Segment) Index() int64 {
 }
 
 // funkcionalnosti
-func (s *Segment) AppendEntry(entry *Entry) { //upis novog podatka u segment
+func (s *Segment) AppendEntry(entry *Config.Entry) { //upis novog podatka u segment
 	s.entries = append(s.entries, entry)
 	s.size = s.size + 1
 }
@@ -92,25 +81,11 @@ func NewWAL(path string, duration time.Duration, lowWaterMark int) (*WAL, error)
 		lastIndex:    0,
 	}, nil
 }
-func NewSegment(fileName string, index int64, size int64, entries []*Entry) *Segment {
+func NewSegment(fileName string, index int64, size int64, entries []*Config.Entry) *Segment {
 	return &Segment{
 		fileName: fileName,
 		index:    index,
 		size:     size,
 		entries:  entries,
-	}
-}
-func NewEntry(Tombstone bool, Transaction Transaction) *Entry {
-	return &Entry{
-		Crc:         CRC32(Transaction.Value),
-		Timestamp:   uint64(time.Now().Unix()),
-		Tombstone:   Tombstone,
-		Transaction: Transaction,
-	}
-}
-func NewTransaction(key string, value []byte) *Transaction {
-	return &Transaction{
-		Key:   key,
-		Value: value,
 	}
 }
