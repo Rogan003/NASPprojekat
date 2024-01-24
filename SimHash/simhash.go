@@ -2,8 +2,10 @@ package SimHash
 
 import (
 	"crypto/md5"
+	"encoding/gob"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"strings"
 	"unicode"
 )
@@ -105,6 +107,41 @@ func ReadFromFile(fileName string) (string, error) {
 	}
 	contentString := string(fileContent)
 	return contentString, nil
+}
+
+// serializacija simHasha
+func SerializeSimHash(path string, SimHash [16]byte) {
+	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	encoder := gob.NewEncoder(file)
+	err = encoder.Encode(SimHash)
+
+	if err != nil {
+		panic(err)
+	}
+}
+
+// deserializacija simHasha
+func DeserializeSimHash(path string, SimHash *[16]byte) error {
+	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil {
+		//panic(err)
+		return err
+	}
+	defer file.Close()
+
+	decoder := gob.NewDecoder(file)
+	file.Seek(0, 0)
+	for {
+		err = decoder.Decode(SimHash)
+		if err != nil {
+			return err
+		}
+	}
 }
 
 /*
