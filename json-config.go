@@ -10,6 +10,7 @@ type Config struct {
 	WalSize           uint64 `json:"wal_size"`
 	MemtableSize      uint64 `json:"memtable_size"`
 	MemtableStructure string `json:"memtable_structure"`
+	CacheCapacity	  uint64 `json:"cache_capacity"`
 }
 
 func config() (Config){

@@ -217,7 +217,7 @@ func PrefixIter(memtable *Memtable.Memtable, prefix string) {
 	PrefixScan(memtable, prefix, 1)
 }
 
-func Put(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, value []byte) bool{
+func Put(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, key string, value []byte) bool{
 	//prvo staviti podatak WAL
 	//potom u memtable
 	//dodati u kes?

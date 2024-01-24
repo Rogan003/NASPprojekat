@@ -1,5 +1,6 @@
 {
 	"wal_size": 10,
 	"memtable_size": 10,
-	"memtable_structure": "skiplist"
+	"memtable_structure": "skiplist",
+	"cache_capacity": 10
 }

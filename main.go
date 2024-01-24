@@ -1,22 +1,29 @@
 package main
 
 import (
-	"fmt"
+	//"fmt"
 	//"NASPprojekat/BloomFilter"
-	//"NASPprojekat/SkipList"
+	// "NASPprojekat/SkipList"
 	//"NASPprojekat/CountMinSketch"
-	"NASPprojekat/HyperLogLog"
+	//"NASPprojekat/HyperLogLog"
 	//"NASPprojekat/BTree"
 	//"NASPprojekat/MerkleTree"
-	//"NASPprojekat/WriteAheadLog"
-	//"NASPprojekat/Memtable"
+	// "NASPprojekat/WriteAheadLog"
+	// "NASPprojekat/Memtable"
 	//"NASPprojekat/Cache"
+	//"NASPprojekat/SSTable"
+	//"NASPProjekat/engine.go"
 )
 
 var elem1 = []byte("Stringic")
 
 
 func main() {
+
+	// wal,_ := WriteAheadLog.NewWAL("files/WAL",10000000000,10)
+	// mt := Memtable.Memtable{}
+	// mt.Init(conf.MemtableStructure, int(conf.MemtableSize))
+	// engine.Put(wal,mt, "sv29", "vanja")
 
 	/*
 	conf := config()
@@ -87,33 +94,33 @@ func main() {
 	mt.Delete("sv36")
 	*/
 
-	hll :=HyperLogLog.Init(10)
-	//fmt.Println(hll.p,",",hll.m)
-	element1 := []byte("vanja")
-	element2 := []byte("vanja")
-	element3 := []byte("kostic")
-	element4 := []byte("sv292022")
-	element5 := []byte("asdfghjkl")
-	hll.Add(element1)
-	hll.Add(element3)
-	hll.Add(element2)
-	hll.Add(element4)
-	hll.Add(element5)
+	// hll :=HyperLogLog.Init(10)
+	// //fmt.Println(hll.p,",",hll.m)
+	// element1 := []byte("vanja")
+	// element2 := []byte("vanja")
+	// element3 := []byte("kostic")
+	// element4 := []byte("sv292022")
+	// element5 := []byte("asdfghjkl")
+	// hll.Add(element1)
+	// hll.Add(element3)
+	// hll.Add(element2)
+	// hll.Add(element4)
+	// hll.Add(element5)
 
-	estimation := hll.Estimate()
-	fmt.Printf("Procenjena kardinalnost: %f\n", estimation)
+	// estimation := hll.Estimate()
+	// fmt.Printf("Procenjena kardinalnost: %f\n", estimation)
 
-	hll.Delete()
-	estimation2 := hll.Estimate()
-	fmt.Printf("Procenjena kardinalnost: %f\n", estimation2)
+	// hll.Delete()
+	// estimation2 := hll.Estimate()
+	// fmt.Printf("Procenjena kardinalnost: %f\n", estimation2)
 
 	
-	hll.Serialize("files/hyperloglog.gob")
-	hll.Deserialize("files/hyperloglog.gob")
+	// hll.Serialize("files/hyperloglog.gob")
+	// hll.Deserialize("files/hyperloglog.gob")
 
-	hll.DeleteHLL()
+	// hll.DeleteHLL()
 
-	//wal := WriteAheadLog.
+	// wal := WriteAheadLog.
 	// wal,_:= WriteAheadLog.NewWAL("files/WAL",10000000000,10)
 	// fmt.Println(wal.Duration(),",",wal.Path())
 	// t := WriteAheadLog.NewTransaction("vanja","kostic")
