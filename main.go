@@ -5,12 +5,12 @@ import (
 	//"NASPprojekat/BloomFilter"
 	//"NASPprojekat/SkipList"
 	//"NASPprojekat/CountMinSketch"
-	//"NASPprojekat/HyperLogLog"
+	"NASPprojekat/HyperLogLog"
 	//"NASPprojekat/BTree"
 	//"NASPprojekat/MerkleTree"
 	//"NASPprojekat/WriteAheadLog"
 	//"NASPprojekat/Memtable"
-	"NASPprojekat/Cache"
+	//"NASPprojekat/Cache"
 )
 
 var elem1 = []byte("Stringic")
@@ -87,23 +87,31 @@ func main() {
 	mt.Delete("sv36")
 	*/
 
-	// hll :=HyperLogLog.Init(10)
-	// //fmt.Println(hll.p,",",hll.m)
-	// element1 := []byte("vanja")
-	// element2 := []byte("vanja")
-	// element3 := []byte("kostic")
-	// element4 := []byte("sv292022")
-	// element5 := []byte("asdfghjkl")
-	// hll.Add(element1)
-	// hll.Add(element3)
-	// hll.Add(element2)
-	// hll.Add(element4)
-	// hll.Add(element5)
+	hll :=HyperLogLog.Init(10)
+	//fmt.Println(hll.p,",",hll.m)
+	element1 := []byte("vanja")
+	element2 := []byte("vanja")
+	element3 := []byte("kostic")
+	element4 := []byte("sv292022")
+	element5 := []byte("asdfghjkl")
+	hll.Add(element1)
+	hll.Add(element3)
+	hll.Add(element2)
+	hll.Add(element4)
+	hll.Add(element5)
 
-	// estimation := hll.Estimate()
-	// fmt.Printf("Procenjena kardinalnost: %f\n", estimation)
-	// hll.Serialize("files/hyperloglog.gob")
-	// hll.Deserialize("files/hyperloglog.gob")
+	estimation := hll.Estimate()
+	fmt.Printf("Procenjena kardinalnost: %f\n", estimation)
+
+	hll.Delete()
+	estimation2 := hll.Estimate()
+	fmt.Printf("Procenjena kardinalnost: %f\n", estimation2)
+
+	
+	hll.Serialize("files/hyperloglog.gob")
+	hll.Deserialize("files/hyperloglog.gob")
+
+	hll.DeleteHLL()
 
 	//wal := WriteAheadLog.
 	// wal,_:= WriteAheadLog.NewWAL("files/WAL",10000000000,10)
@@ -111,19 +119,19 @@ func main() {
 	// t := WriteAheadLog.NewTransaction("vanja","kostic")
 	// e := WriteAheadLog.NewEntry(false, t)
 
-	cache := Cache.NewLRUCache(3)
+	// cache := Cache.NewLRUCache(3)
 
-	cache.Insert("key1", "vanja")
-	cache.Insert("key2", "kostic")
+	// cache.Insert("key1", "vanja")
+	// cache.Insert("key2", "kostic")
 
-	fmt.Println(cache.Get("key1")) 
-	fmt.Println(cache.Get("key2")) 
-	fmt.Println(cache.Get("key3")) 
+	// fmt.Println(cache.Get("key1")) 
+	// fmt.Println(cache.Get("key2")) 
+	// fmt.Println(cache.Get("key3")) 
 
-	cache.Insert("key3", "sv29") 
-	cache.Insert("key4", "2022") 
-	fmt.Println(cache.Get("key3")) 
-	fmt.Println(cache.Get("key4")) 
-	fmt.Println(cache.Get("key1")) 
+	// cache.Insert("key3", "sv29") 
+	// cache.Insert("key4", "2022") 
+	// fmt.Println(cache.Get("key3")) 
+	// fmt.Println(cache.Get("key4")) 
+	// fmt.Println(cache.Get("key1")) 
 
 }

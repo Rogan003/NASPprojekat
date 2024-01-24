@@ -6,7 +6,7 @@ import (
 	"hash/fnv"
 	"os"
 	"encoding/gob"
-	
+	//"runtime"
 )
 
 const (
@@ -60,6 +60,20 @@ func (hll *HLL) Add(elem []byte){
 	//fmt.Println(value,";",index)
 }
 
+//brisanje postojece instance
+//u go jeziku nije potrebno ekspilictno obrisati instancu jer to sam go radi kada instanca postane nedostupna
+//pokrene se garbage collector
+func (hll *HLL) DeleteHLL(){
+	hll = nil
+	//runtime.GC()
+}
+
+//uklanja sadrzaj unutar hll-a
+func (hll *HLL) Delete(){
+				
+	registri := make([]uint8, hll.M)			
+	hll.Reg = registri
+}
 
 func (hll *HLL) Estimate() float64 {
 	sum := 0.0
