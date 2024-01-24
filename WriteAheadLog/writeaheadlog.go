@@ -96,10 +96,6 @@ func ReadEntriesFromFile(path string) ([]*Config.Entry, error) {
 
 }
 
-func toEntry(b []byte) {
-	panic("unimplemented")
-}
-
 func (wal *WAL) DeleteSegments() error {
 	//brise fajlove ispod lowWaterMarka
 

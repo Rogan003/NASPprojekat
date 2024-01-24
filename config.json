@@ -2,5 +2,7 @@
 	"wal_size": 10,
 	"memtable_size": 10,
 	"memtable_structure": "skiplist",
-	"cache_capacity": 10
+	"cache_capacity": 10,
+	"level_count": 3,
+	"level_num": 5
 }

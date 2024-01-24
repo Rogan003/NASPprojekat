@@ -2,21 +2,22 @@ package Memtable
 
 import (
 	"NASPprojekat/BTree"
-	"NASPprojekat/BloomFilter"
+	"NASPprojekat/Config"
 	"NASPprojekat/SSTable"
 	"NASPprojekat/SkipList"
-	"time"
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 )
 
+/*
+	STRUKTURA MEMTABLE
 
-/* STRUKTURA MEMTABLE
-
-	Sadrzi SkipList i BTree kao strukture preko kojih je moguce da je implementiran
-	Sadrzi preko koje je strukture implementiran
-	Sadrzi maks kapacitet i trenutni broj operacija   */
+Sadrzi SkipList i BTree kao strukture preko kojih je moguce da je implementiran
+Sadrzi preko koje je strukture implementiran
+Sadrzi maks kapacitet i trenutni broj operacija
+*/
 type Memtable struct {
 	skiplist SkipList.SkipList
 	btree    BTree.BTree
@@ -42,14 +43,14 @@ func (mt *Memtable) Init(vers string, mCap int) {
 	mt.empty = true
 }
 
+/*
+	STRUKTURA NMemtables:
 
-/* STRUKTURA NMemtables:
-
-    N - broj koji se proslijedi vjerovatno preko configa
-  Arr - niz koji sadrzi N memtabli, samo 1. memtabla je "aktivna" i
-        'read-write' je, a ostale iza nje su sve "neaktivne" i 'read-only'
-    l - pokazivac na poslednju read-only memtablu
-    r - pokazivac na prvu write-read memtablu (aktivnu u koju upisujemo)    
+	   N - broj koji se proslijedi vjerovatno preko configa
+	 Arr - niz koji sadrzi N memtabli, samo 1. memtabla je "aktivna" i
+	       'read-write' je, a ostale iza nje su sve "neaktivne" i 'read-only'
+	   l - pokazivac na poslednju read-only memtablu
+	   r - pokazivac na prvu write-read memtablu (aktivnu u koju upisujemo)
 
 Kada neka od N memtabli treba da se flushuje, provjerava se da li je svih N popunjeno vec,
 ako nije, pomijeramo samo 'r' pokazivac za jedno mjesto unaprijed i popunjavamo sledecu
@@ -57,10 +58,10 @@ slobodnu, a ako jesu ipak sve popunjenje, flushujemo poslednju read-only tabelu 
 oba pokazivaca l' i 'r' za jedno mjesto ispred.
 */
 type NMemtables struct {
-	N   int           // broj memtabli
-	Arr []*Memtable   // niz memtabli
-	l   int           // left index
-	r   int           // right index
+	N   int         // broj memtabli
+	Arr []*Memtable // niz memtabli
+	l   int         // left index
+	r   int         // right index
 }
 
 // konstruktor za vise memtabli, sve isto, dodan num = broj memtabli
@@ -79,14 +80,13 @@ func (nmt *NMemtables) Init(vers string, mCap int, num int) {
 	nmt.r = 0
 }
 
-
 // funkcija i za dodavanje i za izmenu elementa sa kljucem
 // u zavisnosti od verzije i prisutnosti elementa dodaje elem ili ga menja u odredjenoj strukturi
 // poziva se iz WAL-a, ako je uspesno odradjeno dodavanje/izmena
 func (nmt *NMemtables) Add(key string, value []byte) {
-	
-	arr := nmt.Arr             // arr memtabli
-	memtable := arr[nmt.r]     // prva "aktivna" memtabla
+
+	arr := nmt.Arr         // arr memtabli
+	memtable := arr[nmt.r] // prva "aktivna" memtabla
 
 	timestamp := uint64(time.Now().Unix())
 	if memtable.version == "skiplist" {
@@ -100,9 +100,9 @@ func (nmt *NMemtables) Add(key string, value []byte) {
 	}
 
 	if memtable.curCap == memtable.maxCap {
-		if ((nmt.r - nmt.l == nmt.N - 1) || (nmt.r < nmt.l)) {
-			memtableLast := arr[nmt.l]          // izbrisala sam proveru da li je memtable empty
-			memtableLast.flush()                // valjda nece trebati (testiracu)
+		if (nmt.r-nmt.l == nmt.N-1) || (nmt.r < nmt.l) {
+			memtableLast := arr[nmt.l] // izbrisala sam proveru da li je memtable empty
+			memtableLast.flush()       // valjda nece trebati (testiracu)
 			nmt.l = (nmt.l + 1) % nmt.N
 		}
 		nmt.r = (nmt.r + 1) % nmt.N
@@ -114,7 +114,7 @@ func (nmt *NMemtables) Add(key string, value []byte) {
 // poziva se iz WAL-a ako je uspesno sve zapisano
 func (nmt *NMemtables) Delete(key string) bool {
 
-	arr := nmt.Arr  
+	arr := nmt.Arr
 	memtable := arr[nmt.r]
 
 	timestamp := uint64(time.Now().Unix())
@@ -131,7 +131,7 @@ func (nmt *NMemtables) Delete(key string) bool {
 /* Get gleda samo prvu aktivnu memtablu, ostale se ne gledaju ni kod Get, ni Delete, ni Add */
 func (nmt *NMemtables) Get(key string) {
 
-	arr := nmt.Arr  
+	arr := nmt.Arr
 	memtable := arr[nmt.r]
 
 	if memtable.version == "skiplist" {
@@ -157,7 +157,7 @@ func (nmt *NMemtables) Get(key string) {
 // vraca string vrednosti podatka i bool koji oznacava da li je nadjen element
 func (nmt *NMemtables) GetElement(key string) ([]byte, bool) {
 
-	arr := nmt.Arr  
+	arr := nmt.Arr
 	memtable := arr[nmt.r]
 
 	if memtable.version == "skiplist" {
@@ -198,10 +198,9 @@ func (mt *Memtable) flush() {
 	mt.curCap = 0
 }
 
-
 func (nmt *NMemtables) GetSortedElems() {
 
-	arr := nmt.Arr  
+	arr := nmt.Arr
 	memtable := arr[nmt.r]
 
 	if memtable.version == "skiplist" {
@@ -211,9 +210,7 @@ func (nmt *NMemtables) GetSortedElems() {
 	return memtable.btree.AllElem()
 }
 
-
-
-func (m *Memtable) flushToDisk() {
+func (m *Memtable) flushToDisk(lsm Config.LSMTree) {
 	fmt.Println("Zapisano na disk.")
 	//citamo podatke prvog nivoa jer u njega flushujemo, osmi sstable na prvom nivou je u fajlu npr SSTable/files/dataFile_1_8
 	var DataFileName = "SSTable/files/dataFile_1"
@@ -222,15 +219,10 @@ func (m *Memtable) flushToDisk() {
 	var BloomFilterFileName = "SSTable/files/bloomFilterFile_1"
 	var MerkleTreeFileName = "SSTable/files/merkleTreeFile_1"
 
-	//pravimo bloomfilter za sstable od memtable broja elemenata
-	bf := BloomFilter.BloomFilter{}
-	// da li je bitno da li prosledjujemo m.curCap ili m.maxCap jer se svakako flush zove akd su oni jendkai tj memtable pun??
-	bf.Init(m.maxCap, 0.01)
-
 	//MEMTABLE TREBA DA SE SORTIRA
 
 	// level[] cuva koliko sstableova se nalazi na svakom od nivoa, dodajemo jos jedan sstable
-	var i = level[0] + 1
+	var i = lsm.Levels[0] + 1
 	//pravimo fajlove za novi sstable
 	DataFileName += "_" + strconv.Itoa(i) + ".txt"
 	IndexFileName += "_" + strconv.Itoa(i) + ".txt"
@@ -270,13 +262,13 @@ func (m *Memtable) flushToDisk() {
 	}
 
 	//novi fajlovi se dodaju u liste sa imenima svih fajlova koji cine lsm tree
-	dataFilesNames = append(dataFilesNames, DataFileName)
-	indexFilesNames = append(indexFilesNames, IndexFileName)
-	summaryFilesNames = append(summaryFilesNames, SummaryFileName)
-	bloomFilterFilesNames = append(bloomFilterFilesNames, BloomFilterFileName)
-	merkleTreeFilesNames = append(merkleTreeFilesNames, MerkleTreeFileName)
+	lsm.DataFilesNames = append(lsm.DataFilesNames, DataFileName)
+	lsm.IndexFilesNames = append(lsm.IndexFilesNames, IndexFileName)
+	lsm.SummaryFilesNames = append(lsm.SummaryFilesNames, SummaryFileName)
+	lsm.BloomFilterFilesNames = append(lsm.BloomFilterFilesNames, BloomFilterFileName)
+	lsm.MerkleTreeFilesNames = append(lsm.MerkleTreeFilesNames, MerkleTreeFileName)
 
 	//pravimo sstable, mora da se pre prosledjivanja SORTIRA MEMTABLE
-	SSTable.MakeData(m, bf, DataFileName, IndexFileName, SummaryFileName, BloomFilterFileName)
-
+	//MORA DA SE PROSLEDI LISTA SORTIRANIH ENTYJA A NE MEMTABLE
+	SSTable.MakeData(m, DataFileName, IndexFileName, SummaryFileName, BloomFilterFileName)
 }

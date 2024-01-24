@@ -1,9 +1,11 @@
-package main
+package Config
 
 import (
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"hash/crc32"
+	"io/ioutil"
 	"log"
 	"os"
 	"time"
@@ -13,25 +15,57 @@ type Config struct {
 	WalSize           uint64 `json:"wal_size"`
 	MemtableSize      uint64 `json:"memtable_size"`
 	MemtableStructure string `json:"memtable_structure"`
+	LevelCount        int    `json:"level_count"` // broj nivoa
+	LevelNumber       int    `json:"level_num"`   // maksimum sstabela po nivou
 }
 
-func config() Config {
+type LSMTree struct {
+	Levels                []int
+	CountOfLevels         int
+	MaxSSTables           int
+	DataFilesNames        []string
+	IndexFilesNames       []string
+	SummaryFilesNames     []string
+	BloomFilterFilesNames []string
+	MerkleTreeFilesNames  []string
+}
+
+// cita parametre programa iz json fajla i pravi intsancu Configa
+func config() (Config, error) {
 	var config Config
 	configData, err := os.ReadFile("config.json")
 	if err != nil {
 		log.Fatal(err)
 	}
-	json.Unmarshal(configData, &config)
-	/*
-		fmt.Println(config.MemtableStructure)
-		marshalled, err := json.Marshal(config)
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Println(string(marshalled))
-	*/
 
-	return config
+	json.Unmarshal(configData, &config)
+	fileContent, err := ioutil.ReadFile("config.json")
+	if err != nil {
+		fmt.Println("Error reading the file:", err)
+		return config, err
+	}
+
+	err = json.Unmarshal(fileContent, &config)
+	if err != nil {
+		fmt.Println("Error unmarshalling JSON:", err)
+		return config, err
+	}
+	return config, nil
+}
+
+func NewLMSTree(Config Config) *LSMTree {
+	l := make([]int, Config.LevelCount)
+	file := make([]string, Config.LevelNumber*Config.LevelNumber)
+	return &LSMTree{
+		Levels:                l,
+		CountOfLevels:         Config.LevelCount,
+		MaxSSTables:           Config.LevelNumber,
+		DataFilesNames:        file,
+		IndexFilesNames:       file,
+		SummaryFilesNames:     file,
+		BloomFilterFilesNames: file,
+		MerkleTreeFilesNames:  file,
+	}
 }
 
 /*
@@ -93,7 +127,7 @@ func NewTransaction(key string, value []byte) *Transaction {
 	}
 }
 
-func toEntry(data []byte) Entry {
+func ToEntry(data []byte) Entry {
 
 	entry := Entry{}
 

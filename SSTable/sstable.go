@@ -4,6 +4,7 @@ import (
 	"NASPprojekat/BloomFilter"
 	"NASPprojekat/Config"
 	"hash/crc32"
+	"strconv"
 
 	"encoding/binary"
 	"fmt"
@@ -41,7 +42,7 @@ type SSTableIndex struct {
 }
 
 // konstruktori
-func NewSummary(nodes []*Config.Entry) *SStableSummary {
+func NewSummary(nodes []*Config.Entry, counter int) *SStableSummary {
 	first := nodes[0].Transaction.Key
 	last := nodes[len(nodes)-1].Transaction.Key
 	return &SStableSummary{
@@ -379,5 +380,32 @@ func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, 
 	err = file.Sync()
 	if err != nil {
 		return
+	}
+}
+
+// levelTierdCompaction
+func LevelTieredCompaction(lsm Config.LSMTree) {
+	for i := 1; i <= lsm.CountOfLevels; i++ {
+		if lsm.Levels[i-1] == lsm.MaxSSTables && i != lsm.CountOfLevels {
+			merge(i, lsm)
+			break
+		}
+	}
+}
+
+func merge(level int, lsm Config.LSMTree) {
+	br := lsm.Levels[level] + 1
+	dataFile, _ := os.Create("SSTable/files/dataFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".txt")
+	indexFile, _ := os.Create("SSTable/files/indexFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".txt")
+	summaryFile, _ := os.Create("SSTable/files/summaryFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".txt")
+	bloomFile, _ := os.Create("SSTable/files/bloomFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".txt")
+	merkleFile, _ := os.Create("SSTable/files/merkleFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".txt")
+
+	lsm.DataFilesNames = append(lsm.DataFilesNames, dataFile.Name())
+	spojiFajlove(level, dataFile, indexFile, summaryFile, bloomFile, merkleFile)
+	lsm.Levels[level-1] = 0
+	lsm.Levels[level]++
+	if lsm.Levels[level] == lsm.MaxSSTables && level != lsm.CountOfLevels { // proverava broj fajlova na sledećem nivou, i ne treba da pozove merge ako je na 3. nivou tj ako je nivo 2
+		merge(level+1, lsm)
 	}
 }
