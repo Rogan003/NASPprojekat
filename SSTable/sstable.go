@@ -403,13 +403,10 @@ func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, 
 	}
 }
 
-// levelTierdCompaction
-func LevelTieredCompaction(lsm Config.LSMTree) {
-	for i := 1; i < lsm.CountOfLevels; i++ {
-		if lsm.Levels[i-1] == lsm.MaxSSTables {
-			merge(i, lsm)
-			break
-		}
+// sizeTierdCompaction
+func SizeTieredCompaction(lsm Config.LSMTree) {
+	if lsm.Levels[0] == lsm.MaxSSTables {
+		merge(1, lsm)
 	}
 }
 
