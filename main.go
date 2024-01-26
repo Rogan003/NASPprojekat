@@ -1,7 +1,10 @@
 package main
 
 import (
-	//"fmt"
+	"fmt"
+	"os"
+	"bufio"
+	"strconv"
 	//"NASPprojekat/BloomFilter"
 	// "NASPprojekat/SkipList"
 	//"NASPprojekat/CountMinSketch"
@@ -20,6 +23,82 @@ var elem1 = []byte("Stringic")
 
 func main() {
 
+	fmt.Println("==================DOBRODOSLI==================")
+	for{
+		fmt.Println("1. Opcija 1")
+		fmt.Println("2. Opcija 2")
+		fmt.Println("3. Moj HLL")
+		fmt.Println("4. Opcija 4")
+		fmt.Println("5. Opcija 5")
+		fmt.Println("x. Izlaz")
+		fmt.Print("Unesi broj opcije: ")
+
+		scanner := bufio.NewScanner(os.Stdin)
+		scanner.Scan()
+		option:= scanner.Text()
+		if option == "x"{
+			break
+		}
+		optionInt,_ := strconv.Atoi(option)
+
+		switch optionInt {
+			case 3:
+
+				fmt.Println("1. Kreiraj HLL")
+				fmt.Println("2. Dodaj u HLL")
+				fmt.Println("3. Kardinalnost")
+				fmt.Println("4. Obrisi HLL")
+				fmt.Println("x. Vrati se")
+				fmt.Println("Unesite opciju: ")
+				scannerhll:= bufio.NewScanner(os.Stdin)
+				scannerhll.Scan()
+				optionhll := scannerhll.Text()
+				if optionhll == "x"{
+					continue
+				}
+
+				optionhllInt,_ :=strconv.Atoi(optionhll)
+				switch optionhllInt {
+				case 1:
+				
+				case 'x':
+					break
+				}
+
+			case 'x':
+				break
+
+			default:
+				fmt.Println("Nepostojeca opcija. Pokusajte ponovo.")
+			}
+	}
+	
+
+	// hll :=HyperLogLog.Init(10)
+	// //fmt.Println(hll.p,",",hll.m)
+	// element1 := []byte("vanja")
+	// element2 := []byte("vanja")
+	// element3 := []byte("kostic")
+	// element4 := []byte("sv292022")
+	// element5 := []byte("asdfghjkl")
+	// hll.Add(element1)
+	// hll.Add(element3)
+	// hll.Add(element2)
+	// hll.Add(element4)
+	// hll.Add(element5)
+
+	// estimation := hll.Estimate()
+	// fmt.Printf("Procenjena kardinalnost: %f\n", estimation)
+
+	// hll.Delete()
+	// estimation2 := hll.Estimate()
+	// fmt.Printf("Procenjena kardinalnost: %f\n", estimation2)
+
+	
+	// hll.Serialize("files/hyperloglog.gob")
+	// hll.Deserialize("files/hyperloglog.gob")
+
+	// hll.DeleteHLL()
 	// wal,_ := WriteAheadLog.NewWAL("files/WAL",10000000000,10)
 	// mt := Memtable.Memtable{}
 	// mt.Init(conf.MemtableStructure, int(conf.MemtableSize))
@@ -94,31 +173,6 @@ func main() {
 	mt.Delete("sv36")
 	*/
 
-	// hll :=HyperLogLog.Init(10)
-	// //fmt.Println(hll.p,",",hll.m)
-	// element1 := []byte("vanja")
-	// element2 := []byte("vanja")
-	// element3 := []byte("kostic")
-	// element4 := []byte("sv292022")
-	// element5 := []byte("asdfghjkl")
-	// hll.Add(element1)
-	// hll.Add(element3)
-	// hll.Add(element2)
-	// hll.Add(element4)
-	// hll.Add(element5)
-
-	// estimation := hll.Estimate()
-	// fmt.Printf("Procenjena kardinalnost: %f\n", estimation)
-
-	// hll.Delete()
-	// estimation2 := hll.Estimate()
-	// fmt.Printf("Procenjena kardinalnost: %f\n", estimation2)
-
-	
-	// hll.Serialize("files/hyperloglog.gob")
-	// hll.Deserialize("files/hyperloglog.gob")
-
-	// hll.DeleteHLL()
 
 	// wal := WriteAheadLog.
 	// wal,_:= WriteAheadLog.NewWAL("files/WAL",10000000000,10)
