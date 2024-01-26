@@ -61,9 +61,7 @@ func main() {
 				switch optionhllInt {
 				case 1:
 				
-				case 'x':
-					break
-				}
+				
 
 			case 'x':
 				break

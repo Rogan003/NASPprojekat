@@ -4,5 +4,6 @@
 	"memtable_structure": "skiplist",
 	"cache_capacity": 10,
 	"level_count": 3,
-	"level_num": 5
+	"level_num": 5,
+	"t":10
 }

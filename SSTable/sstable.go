@@ -403,6 +403,7 @@ func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, 
 	}
 }
 
+
 // sizeTierdCompaction
 func SizeTieredCompaction(lsm Config.LSMTree) {
 	if lsm.Levels[0] == lsm.MaxSSTables {
@@ -648,6 +649,22 @@ func mergeFiles(level int, dataFile *os.File, indexFile *os.File, summaryFile *o
 		removeFileName(lsm, "SSTable/files/bloomFilterFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+"txt")
 		removeFileName(lsm, "SSTable/files/merkleTreeFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+"txt")
 
+	}
+
+
+	func LevelTieredCompaction(lsm Config.LSMTree){
+		for{
+			if lsm.Levels[0] == lsm.MaxSSTables{
+				levelmerge(1,lsm)
+			}
+			break
+		}
+	}
+
+	func levelmerge(level int,lsm Config.LSMTree){
+		current := level
+		next :=level+1
+		
 	}
 
 }

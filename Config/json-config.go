@@ -17,6 +17,7 @@ type Config struct {
 	MemtableStructure string `json:"memtable_structure"`
 	LevelCount        int    `json:"level_count"` // broj nivoa
 	LevelNumber       int    `json:"level_num"`   // maksimum sstabela po nivou
+	T  				  int	 `json:"t"`			//kolikoo se povecava svaki level
 }
 
 type LSMTree struct {
@@ -28,6 +29,7 @@ type LSMTree struct {
 	SummaryFilesNames     []string
 	BloomFilterFilesNames []string
 	MerkleTreeFilesNames  []string
+	T 					  int
 }
 
 // cita parametre programa iz json fajla i pravi intsancu Configa
