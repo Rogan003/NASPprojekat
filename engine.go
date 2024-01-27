@@ -13,8 +13,8 @@ import (
 	"os"
 )
 
-func Get(memtable *Memtable.Memtable, cache *Cache.LRUCache, key string) ([]byte, bool) {
-	data, found := memtable.GetElement(key)
+func Get(memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string) ([]byte, bool) {
+	data, found, _ := memtable.Get(key)
 	if found {
 		fmt.Println("Pronađeno u Memtable.")
 		return data, true
@@ -67,7 +67,7 @@ func SearchTroughBloomFilters(key string) (bool, string) {
 	return false, ""
 }
 
-func RangeScan(memtable *Memtable.Memtable, key1 string, key2 string, pageSize int) {
+func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize int) {
 	// sta se desava?
 	// otvaramo sve sstable i ovu listu elem iz memtabele
 	// kreiramo neku listu pokazivaca za sstable (inicijalno -1, komada koliko ima sstable-a)
@@ -209,15 +209,15 @@ func RangeScan(memtable *Memtable.Memtable, key1 string, key2 string, pageSize i
 	}
 }
 
-func PrefixScan(memtable *Memtable.Memtable, prefix string, pageSize int) {
+func PrefixScan(memtable *Memtable.NMemtables, prefix string, pageSize int) {
 	RangeScan(memtable, prefix, prefix+string('z'+1), pageSize)
 }
 
-func RangeIter(memtable *Memtable.Memtable, key1 string, key2 string) {
+func RangeIter(memtable *Memtable.NMemtables, key1 string, key2 string) {
 	RangeScan(memtable, key1, key2, 1)
 }
 
-func PrefixIter(memtable *Memtable.Memtable, prefix string) {
+func PrefixIter(memtable *Memtable.NMemtables, prefix string) {
 	PrefixScan(memtable, prefix, 1)
 }
 
@@ -242,8 +242,12 @@ func Put(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.LRU
 	return succesful
 }
 
-/*
 
+// func Delete(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, value []byte) bool {}
+
+
+
+/*
 func MenuCMS() {
 	fmt.Println("1)	Kreiranje nove instance")
 	fmt.Println("2) Brisanje postojeće instance")

@@ -172,11 +172,14 @@ func (sl *SkipList) Delete(key string) (bool) {
 		// ako ne postoji, nema potrebe da ga brisemo
 		return false
 	} else {
+		if (sn.Elem.Tombstone == true) {  // vec je obrisan, necemo ga opet brisati
+			return false
+		}
 		sn.Elem = Config.NewEntry(true, *Config.NewTransaction(key, sn.Elem.Transaction.Value))
 		return true
 	}
 }
-func (sl *SkipList) DeletePhysically(key string) {
+/*func (sl *SkipList) DeletePhysically(key string) {
 	sn, found := sl.Find(key)
 	if found != true {
 		// ako ne postoji, nema potrebe da ga brisemo
@@ -186,8 +189,8 @@ func (sl *SkipList) DeletePhysically(key string) {
 		rightNode := sn.Right
 		leftNode.Right = rightNode
 		rightNode.Left = leftNode
-		/* moze i bez ovog ispod, jer niko iz skipliste vise ne
-		   pokazuje na taj obrisani node */
+		// moze i bez ovog ispod, jer niko iz skipliste vise ne
+		   //pokazuje na taj obrisani node 
 		sn.Right = nil
 		sn.Left = nil
 		sn.Down = nil
@@ -197,14 +200,14 @@ func (sl *SkipList) DeletePhysically(key string) {
 			rightNode := sn.Right
 			leftNode.Right = rightNode
 			rightNode.Left = leftNode
-			/* moze i bez ovog ispod, jer niko iz skipliste vise ne
-			   pokazuje na taj obrisani node */
+			// moze i bez ovog ispod, jer niko iz skipliste vise ne
+			   //pokazuje na taj obrisani node 
 			sn.Right = nil
 			sn.Left = nil
 			sn.Down = nil
 		}
 	}
-}
+}*/
 
 // funkcija koja vraca sve elemente sortirane
 func (sl *SkipList) AllElem() ([]*Config.Entry) {

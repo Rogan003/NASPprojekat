@@ -79,6 +79,8 @@ func (nmt *NMemtables) Init(vers string, mCap int, num int) {
 	nmt.r = 0
 }
 
+
+
 // funkcija i za dodavanje i za izmenu elementa sa kljucem
 // u zavisnosti od verzije i prisutnosti elementa dodaje elem ili ga menja u odredjenoj strukturi
 // poziva se iz WAL-a, ako je uspesno odradjeno dodavanje/izmena
@@ -108,74 +110,136 @@ func (nmt *NMemtables) Add(key string, value []byte) {
 	}
 }
 
+
+// pomocna funckija za Delete(),
+// kada se brise element koji je u starijim memtabelama
+// prvo ga doda, pa obrise, kako bi se kasnije flushovalo da je obrisano,
+// a ne da i dalje postoji
+func (nmt *NMemtables) AddAndDelete(key string, value []byte) {
+
+	arr := nmt.Arr         // arr memtabli
+	memtable := arr[nmt.r] // prva "aktivna" memtabla
+
+	var ok bool = false
+	if memtable.version == "skiplist" {
+		ok = memtable.skiplist.Add(key, value)
+		memtable.skiplist.Delete(key)
+	} else {
+		ok = memtable.btree.Add(key, value)
+		memtable.btree.Add(key, nil)
+	}
+	if ok {
+		memtable.curCap++
+		memtable.empty = false
+	}
+
+	if memtable.curCap == memtable.maxCap {
+		if (nmt.r-nmt.l == nmt.N-1) || (nmt.r < nmt.l) {
+			memtableLast := arr[nmt.l] // izbrisala sam proveru da li je memtable empty
+			memtableLast.flush()       // valjda nece trebati (testiracu)
+			nmt.l = (nmt.l + 1) % nmt.N
+		}
+		nmt.r = (nmt.r + 1) % nmt.N
+	}
+}
+
+
+
+
 // funkcija za brisanje elementa sa kljucem iz memtable
 // brisanje je logicko
 // poziva se iz WAL-a ako je uspesno sve zapisano
 func (nmt *NMemtables) Delete(key string) bool {
 
-	arr := nmt.Arr
-	memtable := arr[nmt.r]
+	data, found, primaryMemtable := nmt.Get(key)
 
-	if memtable.version == "skiplist" {
-		// logicko brisanje iz skip liste
-		// funkcija za brisanje -> vraca true ako je obrisan, false ako smo obrisali element koji ne postoji
-		return memtable.skiplist.Delete(key)
+	if (found) {
+		arr := nmt.Arr
+		memtable := arr[nmt.r]
+	
+		if memtable.version == "skiplist" {
+			// logicko brisanje iz skip liste
+			// funkcija za brisanje -> vraca true ako je obrisan, false ako smo obrisali element koji ne postoji
+	
+			if (primaryMemtable) {
+				// ako se nalazi u aktivnoj tabeli, samo obrisi
+				return memtable.skiplist.Delete(key)
+			} else {
+				// ne nalazi se u aktivnoj, nego u nekoj od proslih read-only tabela
+				// dodaj u primarni memtable pa onda izbrisi
+				nmt.AddAndDelete(key, data)
+				return true
+			}
+		} else {
+			if (primaryMemtable) {
+				return memtable.btree.Add(key, nil)
+			} else {
+				// ne nalazi se u aktivnoj, nego u nekoj od proslih read-only tabela
+				// dodaj u primarni memtable pa onda izbrisi
+				nmt.AddAndDelete(key, data)
+				return true
+			}
+		}
 	} else {
-		return memtable.btree.Add(key, nil)
+		fmt.Printf("Element sa kljucem %s ne postoji!\n", key)
+		return false
 	}
+	
+	
 }
 
-// funkcija za dobavljanje i prikaz elementa sa kljucem iz memtable
-/* Get gleda samo prvu aktivnu memtablu, ostale se ne gledaju ni kod Get, ni Delete, ni Add */
-func (nmt *NMemtables) Get(key string) {
 
-	arr := nmt.Arr
-	memtable := arr[nmt.r]
-
-	if memtable.version == "skiplist" {
-		// pronalazak u skip listi
-		skipNode, found := memtable.skiplist.Find(key)
-		if skipNode.Elem.Transaction.Value != nil && skipNode.Elem.Tombstone && found {
-			fmt.Printf("%s %d\n", skipNode.Elem.Transaction.Key, skipNode.Elem.Transaction.Value)
-		} else {
-			fmt.Printf("Element sa kljucem %s ne postoji!\n", key)
-		}
-
-	} else {
-		_, _, _, elem := memtable.btree.Find(key)
-		if elem != nil && !elem.Tombstone {
-			fmt.Printf("%s %d\n", elem.Transaction.Key, elem.Transaction.Value)
-		} else {
-			fmt.Printf("Element sa kljucem %s ne postoji!\n", key)
-		}
-	}
-}
 
 // funkcija prima kljuc i po njemu trazi podatak u memtable,
-// vraca string vrednosti podatka i bool koji oznacava da li je nadjen element
-func (nmt *NMemtables) GetElement(key string) ([]byte, bool) {
+// VRACA: string vrijednosti podatka, bool koji oznacava da li je nadjen element
+//        i bool ("primary") koji oznacava da li se element nalazi u prvoj memtabeli ili u nekoj starijoj
+//        -> (ovaj poslednji bool je potreban zbog Delete)
+func (nmt *NMemtables) Get(key string) ([]byte, bool, bool) {
 
 	arr := nmt.Arr
-	memtable := arr[nmt.r]
+	r := nmt.r   // pretragu pocinjemo od prve aktivne, pa prelazimo dalje na starije
 
-	if memtable.version == "skiplist" {
-		// pronalazak u skip listi
-		skipNode, found := memtable.skiplist.Find(key)
-		if skipNode.Elem.Transaction.Value != nil && !skipNode.Elem.Tombstone && found {
-			return skipNode.Elem.Transaction.Value, true
+	for (true) {
+		memtable := arr[r]
+		if (memtable.empty) {  // ako je naredna memtabela prazna, ni sledece nisu popunjene, nema potrebe dalje da gledamo 
+			//fmt.Printf("Element sa kljucem %s ne postoji!\n", key)
+			return []byte{}, false, false
+		}
+		if memtable.version == "skiplist" {
+			// pronalazak u skip listi
+			skipNode, found := memtable.skiplist.Find(key)
+			if skipNode.Elem.Transaction.Value != nil && !skipNode.Elem.Tombstone && found {
+				//fmt.Printf("%s %d\n", skipNode.Elem.Transaction.Key, skipNode.Elem.Transaction.Value)
+				if (r == nmt.r) {
+					return skipNode.Elem.Transaction.Value, true, true    
+																						  
+				} else {
+					return skipNode.Elem.Transaction.Value, true, false
+				}
+				
+			}
 		} else {
-			return []byte{}, false
+			_, _, _, elem := memtable.btree.Find(key)
+			if elem != nil && !elem.Tombstone {
+				//fmt.Printf("%s %d\n", elem.Transaction.Key, elem.Transaction.Value)
+				if (r == nmt.r) {
+					return elem.Transaction.Value, true, true
+				} else {
+					return elem.Transaction.Value, true, false
+				}
+			} 
 		}
 
-	} else {
-		_, _, _, elem := memtable.btree.Find(key)
-		if elem != nil && !elem.Tombstone {
-			return elem.Transaction.Value, true
-		} else {
-			return []byte{}, false
+		r = (r + 1) % nmt.N
+		if (r == nmt.r) {  // vratili smo se na memtabelu od koje smo krenuli pretragu - prekidamo, nismo nasli podatak
+			break
 		}
 	}
+
+	//fmt.Printf("Element sa kljucem %s ne postoji!\n", key)
+	return []byte{}, false, false
 }
+
 
 // funkcija koja radi flush na disk (sstable)
 func (mt *Memtable) flush() {
