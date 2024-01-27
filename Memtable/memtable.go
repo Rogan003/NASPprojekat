@@ -61,10 +61,11 @@ type NMemtables struct {
 	Arr []*Memtable // niz memtabli
 	l   int         // left index
 	r   int         // right index
+	lsm *Config.LSMTree // lsm tree from config
 }
 
-// konstruktor za vise memtabli, sve isto, dodan num = broj memtabli
-func (nmt *NMemtables) Init(vers string, mCap int, num int) {
+// konstruktor za vise memtabli, sve isto, dodan num = broj memtabli i lsm stablo iz configa
+func (nmt *NMemtables) Init(vers string, mCap int, num int, lsm *Config.LSMTree) {
 	var curArr []*Memtable
 
 	for i := 0; i < num; i++ {
@@ -77,6 +78,7 @@ func (nmt *NMemtables) Init(vers string, mCap int, num int) {
 	nmt.Arr = curArr
 	nmt.l = 0
 	nmt.r = 0
+	nmt.lsm = lsm
 }
 
 
@@ -103,7 +105,7 @@ func (nmt *NMemtables) Add(key string, value []byte) {
 	if memtable.curCap == memtable.maxCap {
 		if (nmt.r-nmt.l == nmt.N-1) || (nmt.r < nmt.l) {
 			memtableLast := arr[nmt.l] // izbrisala sam proveru da li je memtable empty
-			memtableLast.flush()       // valjda nece trebati (testiracu)
+			memtableLast.flush(nmt.lsm)       // valjda nece trebati (testiracu)
 			nmt.l = (nmt.l + 1) % nmt.N
 		}
 		nmt.r = (nmt.r + 1) % nmt.N
@@ -136,7 +138,7 @@ func (nmt *NMemtables) AddAndDelete(key string, value []byte) {
 	if memtable.curCap == memtable.maxCap {
 		if (nmt.r-nmt.l == nmt.N-1) || (nmt.r < nmt.l) {
 			memtableLast := arr[nmt.l] // izbrisala sam proveru da li je memtable empty
-			memtableLast.flush()       // valjda nece trebati (testiracu)
+			memtableLast.flush(nmt.lsm)       // valjda nece trebati (testiracu)
 			nmt.l = (nmt.l + 1) % nmt.N
 		}
 		nmt.r = (nmt.r + 1) % nmt.N
@@ -242,13 +244,15 @@ func (nmt *NMemtables) Get(key string) ([]byte, bool, bool) {
 
 
 // funkcija koja radi flush na disk (sstable)
-func (mt *Memtable) flush() {
+func (mt *Memtable) flush(lsm *Config.LSMTree) {
+	/*
 	for _, value := range mt.GetSortedElems() {
 		fmt.Printf("%s %d %t %s\n", value.Transaction.Key, value.Transaction.Value, value.Tombstone, value.ToByte())
 	}
 	fmt.Printf("\n")
+	*/
 
-	// mt.flushToDisk() ovde treba ovaj flushToDisk da se pozove
+	mt.flushToDisk(lsm)
 
 	if mt.version == "skiplist" {
 		mt.skiplist = SkipList.SkipList{}
@@ -274,7 +278,7 @@ func (mt *Memtable) GetSortedElems() ([]*Config.Entry) {
 	return mt.btree.AllElem()
 }
 
-func (m *Memtable) flushToDisk(lsm Config.LSMTree) {
+func (m *Memtable) flushToDisk(lsm *Config.LSMTree) {
 	fmt.Println("Zapisano na disk.")
 	//citamo podatke prvog nivoa jer u njega flushujemo, osmi sstable na prvom nivou je u fajlu npr SSTable/files/dataFile_1_8
 	var DataFileName = "SSTable/files/dataFile_1"

@@ -5,58 +5,55 @@ import (
 	"os"
 	"bufio"
 	"strconv"
-	//"NASPprojekat/Config"
+	"time"
+	"NASPprojekat/Config"
 	//"NASPprojekat/BloomFilter"
 	// "NASPprojekat/SkipList"
 	//"NASPprojekat/CountMinSketch"
 	//"NASPprojekat/HyperLogLog"
 	//"NASPprojekat/BTree"
 	//"NASPprojekat/MerkleTree"
-	// "NASPprojekat/WriteAheadLog"
-	//"NASPprojekat/Memtable"
-	//"NASPprojekat/Cache"
+	"NASPprojekat/WriteAheadLog"
+	"NASPprojekat/Memtable"
+	"NASPprojekat/Cache"
 	//"NASPprojekat/SSTable"
 	//"NASPProjekat/engine.go"
+	"NASPprojekat/TokenBucket"
 )
 
 var elem1 = []byte("Stringic")
 
 func main() {
-	/*
-	conf, _ := Config.ConfigInst()
+	conf, err := Config.ConfigInst()
+
+	if err != nil {
+		return
+	}
+
+	lsm := Config.NewLMSTree(conf)
 
 	mt := Memtable.NMemtables{}
-	mt.Init(conf.MemtableStructure, int(conf.MemtableSize), conf.MemtableNumber)
-	
-	mt.Add("sv36", []byte{10})
-	mt.Add("sv48", []byte{10})
-	mt.Add("ab45", []byte{6})
-	mt.Add("de34", []byte{5})
-	mt.Add("tr55", []byte{7})
-	mt.Get("ii1")
-	mt.Add("ii1", []byte{9})
-	mt.Get("ii1")
-	mt.Add("ii5", []byte{8})
-	mt.Add("ra4", []byte{8})
-	mt.Add("ra223", []byte{6})
-	mt.Add("ok12", []byte{7})
-	mt.Add("qw23", []byte{10})
-	mt.Add("yt4", []byte{8})
-	mt.Add("pr49", []byte{7})
-	mt.Add("de52", []byte{9})
-	mt.Add("aa21", []byte{5})
-	mt.Add("mr32", []byte{8})
-	mt.Add("mr21", []byte{7})
-	mt.Delete("yt4")
-	mt.Delete("sv36")
-	*/
+	mt.Init(conf.MemtableStructure, int(conf.MemtableSize), conf.MemtableNumber, lsm)
+
+	tb := TokenBucket.TokenBucket{}
+	tb.Init(conf.TokenBucketSize, time.Minute)
+
+	wal, err := WriteAheadLog.NewWAL("NASPprojekat/files/WAL", 60000000000, 5) // ne znam ove parametre kako i sta?
+	// inace ovo je putanja do foldera gde bi WAL segmenti mogli biti smesteni, ovaj ogroman broj je kao sat vremena za duration, i eto
+	// low watermark lupih 5, ne znam gde treba conf.WalSize???
+
+	if err != nil {
+		return
+	}
+
+	cache := Cache.NewLRUCache(int(conf.CacheCapacity))
 
 	fmt.Println("==================DOBRODOSLI==================")
 	for{
-		fmt.Println("1. Opcija 1")
-		fmt.Println("2. Opcija 2")
-		fmt.Println("3. Moj HLL")
-		fmt.Println("4. Opcija 4")
+		fmt.Println("1. PUT")
+		fmt.Println("2. GET")
+		fmt.Println("3. DELETE")
+		fmt.Println("4. Moj HLL")
 		fmt.Println("5. Opcija 5")
 		fmt.Println("x. Izlaz")
 		fmt.Print("Unesi broj opcije: ")
@@ -70,7 +67,46 @@ func main() {
 		optionInt,_ := strconv.Atoi(option)
 
 		switch optionInt {
+			case 1:
+				fmt.Println("Unesite kljuc elementa: ")
+				scanner.Scan()
+				key := scanner.Text()
+				fmt.Println("Unesite vrednost elementa: ")
+				scanner.Scan()
+				value := scanner.Bytes()
+				done := Put(wal, &mt, cache, key, value, &tb)
+
+				if done {
+					fmt.Printf("Uspesno dodat kljuc %s!", key)
+				} else {
+					fmt.Printf("GRESKA! Neuspesno dodavanje kljuca %s!", key)
+				}
+			
+			case 2:
+				fmt.Println("Unesite kljuc elementa: ")
+				scanner.Scan()
+				key := scanner.Text()
+				elem, done := Get(&mt, cache, key, &tb)
+
+				if done {
+					fmt.Printf("Vrednost pod kljucem %s: %s", key, elem)
+				} else {
+					fmt.Printf("GRESKA! Neuspesno dobavljanje kljuca %s!", key)
+				}
+
 			case 3:
+				fmt.Println("Unesite kljuc elementa: ")
+				scanner.Scan()
+				key := scanner.Text()
+				elem, done := Delete(wal, &mt, cache, key, &tb)
+
+				if done {
+					fmt.Printf("Uspesno obrisan element pod kljucem %s!", elem)
+				} else {
+					fmt.Printf("GRESKA! Neuspesno brisanje kljuca %s!", key)
+				}
+
+			case 4:
 
 				fmt.Println("1. Kreiraj HLL")
 				fmt.Println("2. Dodaj u HLL")
@@ -222,4 +258,32 @@ func main() {
 	// fmt.Println(cache.Get("key4")) 
 	// fmt.Println(cache.Get("key1")) 
 
+	/*
+	conf, _ := Config.ConfigInst()
+
+	mt := Memtable.NMemtables{}
+	mt.Init(conf.MemtableStructure, int(conf.MemtableSize), conf.MemtableNumber)
+	
+	mt.Add("sv36", []byte{10})
+	mt.Add("sv48", []byte{10})
+	mt.Add("ab45", []byte{6})
+	mt.Add("de34", []byte{5})
+	mt.Add("tr55", []byte{7})
+	mt.Get("ii1")
+	mt.Add("ii1", []byte{9})
+	mt.Get("ii1")
+	mt.Add("ii5", []byte{8})
+	mt.Add("ra4", []byte{8})
+	mt.Add("ra223", []byte{6})
+	mt.Add("ok12", []byte{7})
+	mt.Add("qw23", []byte{10})
+	mt.Add("yt4", []byte{8})
+	mt.Add("pr49", []byte{7})
+	mt.Add("de52", []byte{9})
+	mt.Add("aa21", []byte{5})
+	mt.Add("mr32", []byte{8})
+	mt.Add("mr21", []byte{7})
+	mt.Delete("yt4")
+	mt.Delete("sv36")
+	*/
 }

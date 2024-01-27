@@ -20,6 +20,7 @@ type Config struct {
 	LevelCount        int    `json:"level_count"` // broj nivoa
 	LevelNumber       int    `json:"level_num"`   // maksimum sstabela po nivou
 	T  				  int	 `json:"t"`			//kolikoo se povecava svaki level
+	TokenBucketSize   int	  `json:"token_bucket_maxsize"` 
 }
 
 type LSMTree struct {
