@@ -15,12 +15,13 @@ type Config struct {
 	WalSize           uint64 `json:"wal_size"`
 	MemtableSize      uint64 `json:"memtable_size"`
 	MemtableStructure string `json:"memtable_structure"`
-	MemtableNumber	  int	 `json:"memtable_number"`
-	CacheCapacity	  uint64 `json:"cache_capacity"`
+	MemtableNumber    int    `json:"memtable_number"`
+	CacheCapacity     uint64 `json:"cache_capacity"`
 	LevelCount        int    `json:"level_count"` // broj nivoa
 	LevelNumber       int    `json:"level_num"`   // maksimum sstabela po nivou
-	T  				  int	 `json:"t"`			//kolikoo se povecava svaki level
-	TokenBucketSize   int	  `json:"token_bucket_maxsize"` 
+	T                 int    `json:"t"`           //kolikoo se povecava svaki level
+	TokenBucketSize   int    `json:"token_bucket_maxsize"`
+	DegreeOfDilution  int    `json:"degree_of_dilution"` // stepen proredjenosti u summaryfile sstabla
 }
 
 type LSMTree struct {
@@ -32,7 +33,7 @@ type LSMTree struct {
 	SummaryFilesNames     []string
 	BloomFilterFilesNames []string
 	MerkleTreeFilesNames  []string
-	T 					  int
+	T                     int
 }
 
 // cita parametre programa iz json fajla i pravi intsancu Configa
