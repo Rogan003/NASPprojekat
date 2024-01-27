@@ -652,20 +652,44 @@ func mergeFiles(level int, dataFile *os.File, indexFile *os.File, summaryFile *o
 	}
 
 }
-/*
-DAVALO GRESKU PA SAM PREMESTIO DOLE, takodje rekao bih i da je mesto ovome ovde al moguce da gresim
-func LevelTieredCompaction(lsm Config.LSMTree){
-	for{
-		if lsm.Levels[0] == lsm.MaxSSTables{
-			levelmerge(1,lsm)
-		}
-		break
+
+
+
+
+// level tiered compaction
+func LevelTieredCompaction(lsm Config.LSMTree) {
+	if lsm.Levels[0] == lsm.MaxSSTables {
+		levelMerge(0, lsm)
 	}
 }
 
-func levelmerge(level int,lsm Config.LSMTree){
-	current := level
-	next :=level+1
+func levelMerge(level int, lsm Config.LSMTree) {
+	br := lsm.Levels[level] + 1
+	
+	dataFile, _ := os.Create("SSTable/files/dataFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".txt")
+	indexFile, _ := os.Create("SSTable/files/indexFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".txt")
+	summaryFile, _ := os.Create("SSTable/files/summaryFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".txt")
+	bloomFile, _ := os.Create("SSTable/files/bloomFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".txt")
+	merkleFile, _ := os.Create("SSTable/files/merkleFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".txt")
+
+	lsm.DataFilesNames = append(lsm.DataFilesNames, dataFile.Name())
+
+	// num = broj mergeovanih iz narednog nivoa (ne ukljucujuci pocetnu od koje smo krenuli)
+	num = levelMergeFiles(level, dataFile, indexFile, summaryFile, bloomFile, merkleFile, lsm)
+
+	// oduzmi jednu iz levela sto smo prebacili dole
+	lsm.Levels[level]--
+	// (dodaj tu jednu iz levela na [level+1], i oduzmi num merge-ovanih)
+	lsm.Levels[level + 1] -= (num - 1)
+
+	if lsm.Levels[level + 1] == lsm.MaxSSTables && level != lsm.CountOfLevels { // proverava broj fajlova na sledećem nivou, i ne treba da pozove merge ako je na 3. nivou tj ako je nivo 2
+		levelMerge(level + 1, lsm)
+	}
+
 	
 }
-*/
+
+
+	
+
+
