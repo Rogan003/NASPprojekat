@@ -11,15 +11,14 @@ type WAL struct {
 	duration     time.Duration //na koji period ce se zvati brisanje
 	lowWaterMark int           //do kog indeksa se brisu segmenti
 	lastIndex    int64         //indeks poslednjeg segmenta u walu
-	segmentSize  int64
+	segmentSize  int64         //maksimalni broj bajtova u segmentu
 }
 
 type Segment struct { //segment
-	fileName string //putanja do fajla segmenta
-	index    int64  //pocetak segnemta
-	size     int64  //broj entrija
-	//ENRIJI ILI NIZ BAJTOVA
-	entries []*Config.Entry //entriji u segmentu
+	fileName string          //putanja do fajla segmenta
+	index    int64           //pocetak segnemta
+	size     int64           //broj popunjenih bajtova u segmentu
+	entries  []*Config.Entry //entriji u segmentu
 }
 
 // Funkcije za segmente

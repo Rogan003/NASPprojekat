@@ -189,8 +189,9 @@ func (wal *WAL) OpenWAL() error {
 // dodaje novi entri u aktivni segment, ako je pun segment, pravi novi i cuva stari
 func (wal *WAL) AddEntry(entry *Config.Entry) error {
 	//dodaje entri u poslednji segment
-	//ako je pun aktivni segment
-	if wal.lastSegment.size >= wal.segmentSize {
+	//ako ne moze zeljeni entry da se upise jer nema dovoljno prostora
+	entryBytes := entry.ToByte()
+	if wal.lastSegment.size+int64(len(entryBytes)) > wal.segmentSize {
 		//pise entirje iz segmenta u njegov fajl
 		for _, e := range wal.lastSegment.entries {
 			entryBytes := e.ToByte()
@@ -224,7 +225,7 @@ func Put(wal *WAL, mem *Memtable.NMemtables, key string, value []byte) bool { //
 	if err != nil {
 		return false
 	}
-	mem.Add(key, value) // DA LI PROSLEDITI I TRANSAKCIJU U MEM??????
+	mem.Add(key, value)
 	return true
 }
 func Delete(wal *WAL, mem *Memtable.NMemtables, key string) { //dodaje transakciju brisanja u wal pa brise iz memtable
@@ -233,5 +234,5 @@ func Delete(wal *WAL, mem *Memtable.NMemtables, key string) { //dodaje transakci
 	if err != nil {
 		return
 	}
-	mem.Delete(key) // DA LI PROSLEDITI I TRANSAKCIJU U MEM??????
+	mem.Delete(key)
 }
