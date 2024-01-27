@@ -672,29 +672,19 @@ func levelMerge(level int, lsm Config.LSMTree) {
 	//pa da se potraze ostale tabele u sledecem nivou
 
 	//za file na visem nivou-uzimamo prvu tabelu jer eto??
-	dataFile := "SSTable/files/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(1) + ".txt"
-	indexFile := "SSTable/files/indexFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(1) + ".txt"
-	summaryFile := "SSTable/files/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(1) + ".txt"
-	bloomFile := "SSTable/files/bloomFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(1) + ".txt"
-	merkleFile := "SSTable/files/merkleFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(1) + ".txt"
+	br := lsm.Levels[level]
+
+	dataFile := "SSTable/files/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".txt"
+	indexFile := "SSTable/files/indexFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".txt"
+	summaryFile := "SSTable/files/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".txt"
+	bloomFile := "SSTable/files/bloomFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".txt"
+	merkleFile := "SSTable/files/merkleFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".txt"
 
 	//trazimo opseg indeksa
-	SummaryContent, err := ioutil.ReadFile(summaryFile)
-	if err != nil {
-		fmt.Println("Greška prilikom čitanja datoteke:", err)
-		return
-	}
+	SummaryContent :=LoadSummary(summaryFile)
 
-	//ovo dekodiranje je sastavio chatgpt, treba proveriti!!
-	var summary SStableSummary
-	err = json.Unmarshal(fileContent, &summary)
-	if err != nil {
-		fmt.Println("Greška prilikom dekodiranja JSON-a:", err)
-		return
-	}
-
-	bottomIdx := summary.FirstKey
-	topIdx := summary.LastKey
+	bottomIdx := SummaryContent.FirstKey
+	topIdx := SummaryContent.LastKey
 
 	//nizovi putanja SSTable-ova kojima odgovaraju indeksi
 	dataFiles, indexFiles, summaryFiles, bloomFiles, merkleFiles := findOtherTables(level+1, bottomIdx, topIdx, lsm)
@@ -725,18 +715,10 @@ func findOtherTables(level, bottomIdx, topIdx int, lsm Config.LSMTree) ([]string
 	for i := 1; i <= lsm.Levels[level]; i++ {
 		summaryFile := "SSTable/files/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt"
 
-		SummaryContent, err := ioutil.ReadFile(summaryFile)
-		if err != nil {
-			fmt.Println("Greška prilikom čitanja datoteke:", err)
-			return
-		}
+		SummaryContent :=LoadSummary(summaryFile)
 
-		var summary SStableSummary
-		err = json.Unmarshal(fileContent, &summary)
-		if err != nil {
-			fmt.Println("Greška prilikom dekodiranja JSON-a:", err)
-			return
-		}
+		FirstKey := SummaryContent.FirstKey
+		LastKey := SummaryContent.LastKey
 
 		if summary.FirstKey >= bottomIdx && summary.FirstKey <= topIdx && summary.LastKey >= bottomIdx && summary.LastKey <= topIdx {
 			dataFiles = append(dataFiles, "SSTable/files/dataFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".txt")
