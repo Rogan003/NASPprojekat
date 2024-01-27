@@ -6,6 +6,8 @@ import (
 	"NASPprojekat/Memtable"
 	"NASPprojekat/SSTable"
 	"NASPprojekat/WriteAheadLog"
+	"NASPprojekat/TokenBucket"
+	//"NASPprojekat/Config"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -13,7 +15,14 @@ import (
 	"os"
 )
 
-func Get(memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string) ([]byte, bool) {
+func Get(memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *TokenBucket.TokenBucket) ([]byte, bool) {
+
+	ok := tb.ConsumeToken()
+	if (!ok) {
+		fmt.Println("\nGreska! Previse obavljenih requestova u odredjenom vremenskom rasponu!\n")
+		return nil, false
+	}
+
 	data, found, _ := memtable.Get(key)
 	if found {
 		fmt.Println("Pronađeno u Memtable.")
@@ -223,7 +232,14 @@ func PrefixIter(memtable *Memtable.NMemtables, prefix string) {
 	PrefixScan(memtable, prefix, 1)
 }
 
-func Put(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, value []byte) bool {
+func Put(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, value []byte, tb *TokenBucket.TokenBucket) bool {
+
+	ok := tb.ConsumeToken()
+	if (!ok) {
+		fmt.Println("\nGreska! Previse obavljenih requestova u odredjenom vremenskom rasponu!\n")
+		return false
+	}
+	
 	//prvo staviti podatak WAL
 	//potom u memtable
 	//dodati u kes?
@@ -231,9 +247,9 @@ func Put(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.LRU
 	//nakon toga ako je memtable popunjen, sortirati memtable po kljucu
 	// zatim zapisati na disk formirajuci sstable
 	// isprazniti memtable ili napraviti novi
-	transaction := WAL.NewTransaction(key, value)
+	// ---> ovo ne treba? izbrisan je za sada transaction := Config.NewTransaction(key, value)
 
-	succesful = WriteAheadLog.Put(WAL, memtable, key, value)
+	succesful := WriteAheadLog.Put(WAL, memtable, key, value)
 	// if successful{
 
 	// 	cache.Insert(key, value)
@@ -245,7 +261,13 @@ func Put(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.LRU
 }
 
 
-func Delete(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, key string) ([]byte, bool) {
+func Delete(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *TokenBucket.TokenBucket) ([]byte, bool) {
+
+	ok := tb.ConsumeToken()
+	if (!ok) {
+		fmt.Println("\nGreska! Previse obavljenih requestova u odredjenom vremenskom rasponu!\n")
+		return nil, false
+	}
 
 	// nasli smo ga u memtable
 	data, found, _ := memtable.Get(key)
@@ -260,8 +282,9 @@ func Delete(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, key string) (
 	if (value != nil) {
 		fmt.Println("Pronađeno u cache.")
 		cache.Delete(key)
-		memtable.AddAndDelete(key, value) 
-		return value, true
+		valueByte := value.([]byte)
+		memtable.AddAndDelete(key, valueByte) 
+		return valueByte, true
 	}
 
 	// provjeravamo disk

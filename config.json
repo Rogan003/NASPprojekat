@@ -6,5 +6,6 @@
 	"cache_capacity": 10,
 	"level_count": 3,
 	"level_num": 5,
-	"t":10
+	"t":10,
+	"token_bucket_maxsize": 10
 }

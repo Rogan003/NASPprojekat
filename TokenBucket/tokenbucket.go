@@ -33,6 +33,7 @@ func (tb *TokenBucket) Init(cntSize int, timeLimit time.Duration) {
 func (tb *TokenBucket) refresh() {
 	tb.Cnt = tb.MaxSize
 	tb.LastRefresh = time.Now()
+	//tb.Serialize()  // ** da li treba jos nekad Serialize?? nakon svakog Consume??
 }
 
 
