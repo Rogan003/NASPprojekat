@@ -4,17 +4,17 @@ import (
 	"NASPprojekat/BloomFilter"
 	"NASPprojekat/Config"
 	"hash/crc32"
+	"io/ioutil"
 	"strconv"
 	"strings"
 
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"time"
-	"io/ioutil"
-	"encoding/json"
 )
 
 const (
@@ -405,7 +405,6 @@ func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, 
 	}
 }
 
-
 // sizeTierdCompaction
 func SizeTieredCompaction(lsm Config.LSMTree) {
 	if lsm.Levels[0] == lsm.MaxSSTables {
@@ -658,10 +657,10 @@ func mergeFiles(level int, dataFile *os.File, indexFile *os.File, summaryFile *o
 //---------------------------LEVEL TIERED COMPACTION--------------------------------
 // kod level tiered kompakcije svaki nivo (run) je T puta veci od prethodnog. T je uglavnom 10. Kriterijum za kompakciju ce biti broj tabela po run-u.
 // Uzima se tabela iz nivoa na kom se vrsi kompakcija i traze se odgovarajuce tabele u narednom nivou. Spajaju se i nova tabela se dodaje u nizi nivo.
-// Imenuju se kao level_brojulevelu. 
+// Imenuju se kao level_brojulevelu.
 
-//utvrditi nivo na kom se kompakcija desava
-//znaci kada se flushuje
+// utvrditi nivo na kom se kompakcija desava
+// znaci kada se flushuje
 func LevelTieredCompaction(lsm Config.LSMTree) {
 	if lsm.Levels[0] == lsm.MaxSSTables {
 		levelMerge(0, lsm)
@@ -679,7 +678,6 @@ func levelMerge(level int, lsm Config.LSMTree) {
 	bloomFile := "SSTable/files/bloomFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(1) + ".txt"
 	merkleFile := "SSTable/files/merkleFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(1) + ".txt"
 
-	
 	//trazimo opseg indeksa
 	SummaryContent, err := ioutil.ReadFile(summaryFile)
 	if err != nil {
@@ -699,17 +697,9 @@ func levelMerge(level int, lsm Config.LSMTree) {
 	topIdx := summary.LastKey
 
 	//nizovi putanja SSTable-ova kojima odgovaraju indeksi
-	dataFiles, indexFiles, summaryFiles, bloomFiles, merkleFiles := findOtherTables(level+1, bottomIdx,topIdx,lsm)
+	dataFiles, indexFiles, summaryFiles, bloomFiles, merkleFiles := findOtherTables(level+1, bottomIdx, topIdx, lsm)
 
 	//Sada treba mergovati tabele
-
-
-
-
-
-
-
-	
 
 	// num = broj mergeovanih iz narednog nivoa (ne ukljucujuci pocetnu od koje smo krenuli)
 	num = levelMergeFiles(level, dataFile, indexFile, summaryFile, bloomFile, merkleFile, lsm)
@@ -717,22 +707,22 @@ func levelMerge(level int, lsm Config.LSMTree) {
 	// oduzmi jednu iz levela sto smo prebacili dole
 	lsm.Levels[level]--
 	// (dodaj tu jednu iz levela na [level+1], i oduzmi num merge-ovanih)
-	lsm.Levels[level + 1] -= (num - 1)
+	lsm.Levels[level+1] -= (num - 1)
 
-	if lsm.Levels[level + 1] == lsm.MaxSSTables && level != lsm.CountOfLevels { // proverava broj fajlova na sledećem nivou, i ne treba da pozove merge ako je na 3. nivou tj ako je nivo 2
-		levelMerge(level + 1, lsm)
+	if lsm.Levels[level+1] == lsm.MaxSSTables && level != lsm.CountOfLevels { // proverava broj fajlova na sledećem nivou, i ne treba da pozove merge ako je na 3. nivou tj ako je nivo 2
+		levelMerge(level+1, lsm)
 	}
 }
 
-func findOtherTables(level,bottomIdx, topIdx int, lsm Config.LSMTree) ([]string,[]string, []string, []string,[]string){
+func findOtherTables(level, bottomIdx, topIdx int, lsm Config.LSMTree) ([]string, []string, []string, []string, []string) {
 
 	var dataFiles []string
 	var indexFiles []string
 	var summaryFiles []string
 	var bloomFiles []string
 	var merkleFiles []string
-	
-	for i:=1 ; i<= lsm.Levels[level] ; i++ {
+
+	for i := 1; i <= lsm.Levels[level]; i++ {
 		summaryFile := "SSTable/files/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt"
 
 		SummaryContent, err := ioutil.ReadFile(summaryFile)
@@ -748,12 +738,12 @@ func findOtherTables(level,bottomIdx, topIdx int, lsm Config.LSMTree) ([]string,
 			return
 		}
 
-		if summary.FirstKey >= bottomIdx && summary.FirstKey <= topIdx && summary.LastKey >= bottomIdx && summary.LastKey <= topIdx{
-			dataFiles = append(dataFiles,"SSTable/files/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt" )
-			indexFiles = append(dataFiles,"SSTable/files/indexFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt" )
-			summaryFiles = append(dataFiles,"SSTable/files/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt" )
-			bloomFiles = append(dataFiles,"SSTable/files/bloomFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt" )
-			merkleFiles = append(dataFiles,"SSTable/files/merkleFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt" )
+		if summary.FirstKey >= bottomIdx && summary.FirstKey <= topIdx && summary.LastKey >= bottomIdx && summary.LastKey <= topIdx {
+			dataFiles = append(dataFiles, "SSTable/files/dataFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".txt")
+			indexFiles = append(dataFiles, "SSTable/files/indexFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".txt")
+			summaryFiles = append(dataFiles, "SSTable/files/summaryFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".txt")
+			bloomFiles = append(dataFiles, "SSTable/files/bloomFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".txt")
+			merkleFiles = append(dataFiles, "SSTable/files/merkleFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".txt")
 		}
 	}
 
@@ -762,7 +752,3 @@ func findOtherTables(level,bottomIdx, topIdx int, lsm Config.LSMTree) ([]string,
 }
 
 //func levelMergeFiles(level, )
-
-	
-
-
