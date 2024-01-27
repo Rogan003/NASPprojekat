@@ -175,7 +175,9 @@ func RangeScan(memtable *Memtable.Memtable, key1 string, key2 string, pageSize i
 			elems := [pageSize]WAL.Entry{}
 
 			for i := 0; i < 10; i++ {
-				// ovde se magija desava, sve okej validne elem dodati
+				// ovde se magija desava, sve okej validne elem dodati u elems
+				// prolazak kroz sve elemente na pozicijama, vidimo najmanji i dodajmeo i inkrementiramo (pomeramo napred), ako je previse napred -1
+				// ovo je sve ako je forward
 				// back bez neke cache strukture, problem?
 			}
 

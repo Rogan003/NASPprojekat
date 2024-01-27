@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"time"
 )
 
 /*
@@ -68,8 +67,8 @@ type NMemtables struct {
 func (nmt *NMemtables) Init(vers string, mCap int, num int) {
 	var curArr []*Memtable
 
-	for i = 0; i < num; i++ {
-		memtable = Memtable{}
+	for i := 0; i < num; i++ {
+		memtable := Memtable{}
 		memtable.Init(vers, mCap)
 		curArr = append(curArr, &memtable)
 	}
@@ -88,11 +87,11 @@ func (nmt *NMemtables) Add(key string, value []byte) {
 	arr := nmt.Arr         // arr memtabli
 	memtable := arr[nmt.r] // prva "aktivna" memtabla
 
-	timestamp := uint64(time.Now().Unix())
+	var ok bool = false
 	if memtable.version == "skiplist" {
-		ok := memtable.skiplist.Add(key, value, timestamp)
+		ok = memtable.skiplist.Add(key, value)
 	} else {
-		ok := memtable.btree.Add(key, value, timestamp)
+		ok = memtable.btree.Add(key, value)
 	}
 	if ok {
 		memtable.curCap++
@@ -117,13 +116,12 @@ func (nmt *NMemtables) Delete(key string) bool {
 	arr := nmt.Arr
 	memtable := arr[nmt.r]
 
-	timestamp := uint64(time.Now().Unix())
 	if memtable.version == "skiplist" {
 		// logicko brisanje iz skip liste
 		// funkcija za brisanje -> vraca true ako je obrisan, false ako smo obrisali element koji ne postoji
-		return memtable.skiplist.Delete(key, timestamp)
+		return memtable.skiplist.Delete(key)
 	} else {
-		return memtable.btree.Add(key, nil, timestamp)
+		return memtable.btree.Add(key, nil)
 	}
 }
 
@@ -137,8 +135,8 @@ func (nmt *NMemtables) Get(key string) {
 	if memtable.version == "skiplist" {
 		// pronalazak u skip listi
 		skipNode, found := memtable.skiplist.Find(key)
-		if skipNode.Elem.Value != nil && skipNode.Elem.Tombstone && found {
-			fmt.Printf("%s %d\n", skipNode.Elem.Key, skipNode.Elem.Value)
+		if skipNode.Elem.Transaction.Value != nil && skipNode.Elem.Tombstone && found {
+			fmt.Printf("%s %d\n", skipNode.Elem.Transaction.Key, skipNode.Elem.Transaction.Value)
 		} else {
 			fmt.Printf("Element sa kljucem %s ne postoji!\n", key)
 		}
@@ -146,7 +144,7 @@ func (nmt *NMemtables) Get(key string) {
 	} else {
 		_, _, _, elem := memtable.btree.Find(key)
 		if elem != nil && !elem.Tombstone {
-			fmt.Printf("%s %d\n", elem.Key, elem.Value)
+			fmt.Printf("%s %d\n", elem.Transaction.Key, elem.Transaction.Value)
 		} else {
 			fmt.Printf("Element sa kljucem %s ne postoji!\n", key)
 		}
@@ -163,8 +161,8 @@ func (nmt *NMemtables) GetElement(key string) ([]byte, bool) {
 	if memtable.version == "skiplist" {
 		// pronalazak u skip listi
 		skipNode, found := memtable.skiplist.Find(key)
-		if skipNode.Elem.Value != nil && !skipNode.Elem.Tombstone && found {
-			return skipNode.Elem.Value, true
+		if skipNode.Elem.Transaction.Value != nil && !skipNode.Elem.Tombstone && found {
+			return skipNode.Elem.Transaction.Value, true
 		} else {
 			return []byte{}, false
 		}
@@ -172,7 +170,7 @@ func (nmt *NMemtables) GetElement(key string) ([]byte, bool) {
 	} else {
 		_, _, _, elem := memtable.btree.Find(key)
 		if elem != nil && !elem.Tombstone {
-			return elem.Value, true
+			return elem.Transaction.Value, true
 		} else {
 			return []byte{}, false
 		}
@@ -182,9 +180,11 @@ func (nmt *NMemtables) GetElement(key string) ([]byte, bool) {
 // funkcija koja radi flush na disk (sstable)
 func (mt *Memtable) flush() {
 	for _, value := range mt.GetSortedElems() {
-		fmt.Printf("%s %d %t %s\n", value.Key, value.Value, value.Tombstone, value.ToBytes())
+		fmt.Printf("%s %d %t %s\n", value.Transaction.Key, value.Transaction.Value, value.Tombstone, value.ToByte())
 	}
 	fmt.Printf("\n")
+
+	// m.flushToDisk() ovde treba ovaj flushToDisk da se pozove
 
 	if mt.version == "skiplist" {
 		mt.skiplist = SkipList.SkipList{}
@@ -198,16 +198,16 @@ func (mt *Memtable) flush() {
 	mt.curCap = 0
 }
 
-func (nmt *NMemtables) GetSortedElems() {
+func (mt *Memtable) GetSortedElems() ([]*Config.Entry) {
 
-	arr := nmt.Arr
-	memtable := arr[nmt.r]
+	// arr := nmt.Arr
+	// memtable := arr[nmt.r]
 
-	if memtable.version == "skiplist" {
-		return memtable.skiplist.AllElem()
+	if mt.version == "skiplist" {
+		return mt.skiplist.AllElem()
 	}
 
-	return memtable.btree.AllElem()
+	return mt.btree.AllElem()
 }
 
 func (m *Memtable) flushToDisk(lsm Config.LSMTree) {
@@ -270,5 +270,5 @@ func (m *Memtable) flushToDisk(lsm Config.LSMTree) {
 
 	//pravimo sstable, mora da se pre prosledjivanja SORTIRA MEMTABLE
 	//MORA DA SE PROSLEDI LISTA SORTIRANIH ENTYJA A NE MEMTABLE
-	SSTable.MakeData(m, DataFileName, IndexFileName, SummaryFileName, BloomFilterFileName)
+	SSTable.MakeData(m.GetSortedElems(), DataFileName, IndexFileName, SummaryFileName, BloomFilterFileName)
 }

@@ -5,6 +5,7 @@ import (
 	"os"
 	"bufio"
 	"strconv"
+	//"NASPprojekat/Config"
 	//"NASPprojekat/BloomFilter"
 	// "NASPprojekat/SkipList"
 	//"NASPprojekat/CountMinSketch"
@@ -12,7 +13,7 @@ import (
 	//"NASPprojekat/BTree"
 	//"NASPprojekat/MerkleTree"
 	// "NASPprojekat/WriteAheadLog"
-	// "NASPprojekat/Memtable"
+	//"NASPprojekat/Memtable"
 	//"NASPprojekat/Cache"
 	//"NASPprojekat/SSTable"
 	//"NASPProjekat/engine.go"
@@ -20,8 +21,35 @@ import (
 
 var elem1 = []byte("Stringic")
 
-
 func main() {
+	/*
+	conf, _ := Config.ConfigInst()
+
+	mt := Memtable.NMemtables{}
+	mt.Init(conf.MemtableStructure, int(conf.MemtableSize), conf.MemtableNumber)
+	
+	mt.Add("sv36", []byte{10})
+	mt.Add("sv48", []byte{10})
+	mt.Add("ab45", []byte{6})
+	mt.Add("de34", []byte{5})
+	mt.Add("tr55", []byte{7})
+	mt.Get("ii1")
+	mt.Add("ii1", []byte{9})
+	mt.Get("ii1")
+	mt.Add("ii5", []byte{8})
+	mt.Add("ra4", []byte{8})
+	mt.Add("ra223", []byte{6})
+	mt.Add("ok12", []byte{7})
+	mt.Add("qw23", []byte{10})
+	mt.Add("yt4", []byte{8})
+	mt.Add("pr49", []byte{7})
+	mt.Add("de52", []byte{9})
+	mt.Add("aa21", []byte{5})
+	mt.Add("mr32", []byte{8})
+	mt.Add("mr21", []byte{7})
+	mt.Delete("yt4")
+	mt.Delete("sv36")
+	*/
 
 	fmt.Println("==================DOBRODOSLI==================")
 	for{
@@ -69,6 +97,7 @@ func main() {
 			default:
 				fmt.Println("Nepostojeca opcija. Pokusajte ponovo.")
 			}
+		}
 	}
 	
 
@@ -111,36 +140,36 @@ func main() {
 	fmt.Println(bf.Check_elem(elem1))
 	*/
 
-	/*
+		/*
 	var btree = BTree.BTree{}
 	btree.Init(4)
-	btree.Add(10)
-	btree.Add(8)
-	btree.Add(14)
-	btree.Add(5)
-	btree.Add(4)
-	btree.Add(12)
-	btree.Add(19)
-	btree.Add(7)
-	btree.Add(20)
-	btree.Add(11)
-	btree.Add(2)
-	btree.Add(9)
-	btree.Add(16)
-	btree.Add(22)
-	btree.Add(13)
-	btree.Add(3)
+	btree.Add("sv36", []byte{10})
+	btree.Add("aa1", []byte{8})
+	btree.Add("ab5", []byte{9})
+	btree.Add("fd4", []byte{5})
+	btree.Add("ac3", []byte{110})
+	btree.Add("bw3", []byte{104})
+	btree.Add("pw2", []byte{50})
+	btree.Add("zsw23", []byte{16})
+	btree.Add("ok43", []byte{34})
+	btree.Add("aw12", []byte{21})
+	btree.Add("xs3", []byte{70})
+	btree.Add("ud43", []byte{91})
+	btree.Add("mo023", []byte{34})
+	btree.Add("ko23", []byte{12})
+	btree.Add("sw231", []byte{61})
+	btree.Add("hg01", []byte{78})
 	//btree.RootElem()
 	//btree.RootChildElem()
 	//btree.RootGrandChildElem()
 	for _, value := range btree.AllElem() {
-		fmt.Printf("%d ", value)
+		fmt.Printf("%s %d %t %s\n", value.Transaction.Key, value.Transaction.Value, value.Tombstone, value.ToByte())
 	}
 	fmt.Printf("\n")
 
-	_,_,isThere := btree.Find(16)
+	_,_,isThere,_ := btree.Find("sv36")
 	fmt.Println(isThere)
-	_,_,isThere = btree.Find(15)
+	_,_,isThere,_ = btree.Find("sv37")
 	fmt.Println(isThere)
 	*/
 

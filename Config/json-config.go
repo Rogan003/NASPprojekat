@@ -15,6 +15,8 @@ type Config struct {
 	WalSize           uint64 `json:"wal_size"`
 	MemtableSize      uint64 `json:"memtable_size"`
 	MemtableStructure string `json:"memtable_structure"`
+	MemtableNumber	  int	 `json:"memtable_number"`
+	CacheCapacity	  uint64 `json:"cache_capacity"`
 	LevelCount        int    `json:"level_count"` // broj nivoa
 	LevelNumber       int    `json:"level_num"`   // maksimum sstabela po nivou
 	T  				  int	 `json:"t"`			//kolikoo se povecava svaki level
@@ -33,7 +35,7 @@ type LSMTree struct {
 }
 
 // cita parametre programa iz json fajla i pravi intsancu Configa
-func config() (Config, error) {
+func ConfigInst() (Config, error) {
 	var config Config
 	configData, err := os.ReadFile("config.json")
 	if err != nil {

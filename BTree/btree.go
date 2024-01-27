@@ -3,55 +3,8 @@ package BTree
 import (
 	//"fmt"
 	"math"
-	"encoding/binary"
-	"hash/crc32"
+	"NASPprojekat/Config"
 )
-
-// struktura podatka, mahom preuzeta sa WAL-a ono sto nam treba za memtable
-type Data struct {
-	Timestamp   uint64
-	Tombstone   bool
-	Key   string
-	Value []byte
-}
-
-func (data Data) ToBytes() []byte {
-	var dataBytes []byte
-
-	crcb := make([]byte, 4)
-	binary.LittleEndian.PutUint32(crcb, crc32.ChecksumIEEE(data.Value))
-	dataBytes = append(dataBytes, crcb...) //dodaje se CRC
-
-	secb := make([]byte, 8)
-	binary.LittleEndian.PutUint64(secb, uint64(data.Timestamp))
-	dataBytes = append(dataBytes, secb...) //dodaje se Timestamp
-
-	//1 - deleted; 0 - not deleted
-	//dodaje se Tombstone
-	if data.Tombstone {
-		var delb byte = 1
-		dataBytes = append(dataBytes, delb)
-	} else {
-		var delb byte = 0
-		dataBytes = append(dataBytes, delb)
-	}
-
-	keyb := []byte(data.Key)
-	keybs := make([]byte, 8)
-	binary.LittleEndian.PutUint64(keybs, uint64(len(keyb)))
-
-	valuebs := make([]byte, 8)
-	binary.LittleEndian.PutUint64(valuebs, uint64(len(data.Value)))
-
-	//dodaju se Key Size i Value Size
-	dataBytes = append(dataBytes, keybs...)
-	dataBytes = append(dataBytes, valuebs...)
-	//dodaju se Key i Value
-	dataBytes = append(dataBytes, keyb...)
-	dataBytes = append(dataBytes, data.Value...)
-
-	return dataBytes
-}
 
 /*	
 	STRUKTURA B STABLO
@@ -62,7 +15,7 @@ func (data Data) ToBytes() []byte {
 */
 
 type BTreeNode struct {
-	keys	[]*Data
+	keys	[]*Config.Entry
 	children	[]*BTreeNode
 	parent	*BTreeNode
 }
@@ -77,22 +30,22 @@ type BTree struct {
 func (btree *BTree) Init(max int) {
 	btree.maxKids = max
 	btree.minKids = int(math.Ceil(float64(btree.maxKids / 2)))
-	node := BTreeNode{make([]*Data, 0, max - 1), nil, nil}
+	node := BTreeNode{make([]*Config.Entry, 0, max - 1), nil, nil}
 	btree.Root = &node
 }
 
 // Funkcija pretrage, za zadati element prolazi kroz stablo i trazi gde on treba da bude
 // vraca cvor i ako je zadati element tu vraca true, a ako nije vraca cvor pre kog treba dodati i false
-func (btree *BTree) Find(elem string) (*BTreeNode, int, bool, *Data) {
+func (btree *BTree) Find(elem string) (*BTreeNode, int, bool, *Config.Entry) {
 	iterNode := btree.Root
 
 	for true {
 		indexFound := false
 
 		for index, key := range iterNode.keys {
-			if key.Key == elem {
+			if key.Transaction.Key == elem {
 				return iterNode, index, true, key
-			} else if key.Key > elem {
+			} else if key.Transaction.Key > elem {
 				if iterNode.children != nil {
 					iterNode = iterNode.children[index]
 					indexFound = true
@@ -123,7 +76,7 @@ func (btree *BTree) splitNode(node *BTreeNode) {
 	// prebaci u parent node element na indexu
 	if(btree.Root == node) {
 		// moramo novi root da imamo, ako je pun trenutni root
-		newRoot := BTreeNode{make([]*Data, 1, btree.maxKids - 1), make([]*BTreeNode, 1, btree.maxKids), nil}
+		newRoot := BTreeNode{make([]*Config.Entry, 1, btree.maxKids - 1), make([]*BTreeNode, 1, btree.maxKids), nil}
 		newRoot.keys[0] = node.keys[index]
 		btree.Root = &newRoot
 		node.parent = &newRoot
@@ -131,7 +84,7 @@ func (btree *BTree) splitNode(node *BTreeNode) {
 		place := 0
 
 		for _, value := range node.parent.keys {
-			if value.Key > node.keys[index].Key {
+			if value.Transaction.Key > node.keys[index].Transaction.Key {
 				break
 			}
 
@@ -149,8 +102,8 @@ func (btree *BTree) splitNode(node *BTreeNode) {
 	
 	// rastavi keys i napravi dva niza koja ces dodati na mesta gde treba kao decu gore
 	var nodeOne, nodeTwo BTreeNode
-	one := make([]*Data, len(node.keys[:index]), btree.maxKids - 1)
-	two := make([]*Data, len(node.keys[index + 1:]), btree.maxKids - 1)
+	one := make([]*Config.Entry, len(node.keys[:index]), btree.maxKids - 1)
+	two := make([]*Config.Entry, len(node.keys[index + 1:]), btree.maxKids - 1)
 	copy(one, node.keys[:index])
 	copy(two, node.keys[index + 1:])
 	if node.children == nil {
@@ -188,7 +141,7 @@ func (btree *BTree) splitNode(node *BTreeNode) {
 }
 
 // Funkcija za dodavanje elementa u B stablo
-func (btree *BTree) Add(elem string, val []byte, ts uint64) bool {
+func (btree *BTree) Add(elem string, val []byte) bool {
 	node, indexVal, isThere, dat := btree.Find(elem)
 
 	if isThere {
@@ -199,21 +152,21 @@ func (btree *BTree) Add(elem string, val []byte, ts uint64) bool {
 			} else {
 				// greska, vec obrisan element
 			}
+		} else if !dat.Tombstone {
+			dat = Config.NewEntry(false, *Config.NewTransaction(elem, val))
 		} else {
-			dat.Value = val
-			dat.Timestamp = ts
-			dat.Tombstone = false
+			// greska, izmena obrisanog elementa
 		}
 
 		return false
 	} else if val != nil{
-		data := Data{ts, false, elem, val}
+		data := Config.NewEntry(false, *Config.NewTransaction(elem, val))
 		// dodavanje elementa u kljuceva cvora u listu na mesto gde treba (ovo je u sustini insert)
 		if len(node.keys) == indexVal {
-			node.keys = append(node.keys, &data)
+			node.keys = append(node.keys, data)
 		} else {
 			node.keys = append(node.keys[:indexVal+1], node.keys[indexVal:]...)
-			node.keys[indexVal] = &data
+			node.keys[indexVal] = data
 		}
 
 		// ako je broj kljuceva sada veci od dozvoljenog(tj veci jednak maksimalnom dozvoljenom broju dece), radimo rotacije ili split
@@ -268,7 +221,7 @@ func (btree *BTree) Add(elem string, val []byte, ts uint64) bool {
 
 					for nodeIndex <= last {
 						// elem na trazenom indexu u node.parent.keys postaje prvi u value.keys
-						node.parent.children[nodeIndex].keys = append([]*Data{node.parent.keys[nodeIndex]}, node.parent.children[nodeIndex].keys...)	
+						node.parent.children[nodeIndex].keys = append([]*Config.Entry{node.parent.keys[nodeIndex]}, node.parent.children[nodeIndex].keys...)	
 		
 						// remove taj elem
 						node.parent.keys = append(node.parent.keys[:nodeIndex], node.parent.keys[nodeIndex+1:]...)
@@ -333,6 +286,7 @@ func (btree *BTree) Add(elem string, val []byte, ts uint64) bool {
 		return true
 	}
 
+	// greska, brisanje elementa koji ne postoji
 	return false
 }
 
@@ -581,11 +535,11 @@ func (btree *BTree) Delete(elem int) {
 
 // Pomocna funkcija za funkciju koja vraca listu svih elemenata u sortiranom redosledu
 // Vraca listu svih elemenata u sortiranom redosledu za odredjeni cvor
-func allElemNode(node *BTreeNode) ([]*Data) {
+func allElemNode(node *BTreeNode) ([]*Config.Entry) {
 	if node.children == nil {
 		return node.keys
 	} else {
-		elems := make([]*Data, 0, len(node.children))
+		elems := make([]*Config.Entry, 0, len(node.children))
 		for index, key := range node.keys {
 			elems = append(elems, allElemNode(node.children[index])...)
 			elems = append(elems, key)
@@ -598,7 +552,7 @@ func allElemNode(node *BTreeNode) ([]*Data) {
 }
 
 // Funkcija koja vraca listu svih elem u sortiranom redosledu
-func (btree *BTree) AllElem() ([]*Data) {
+func (btree *BTree) AllElem() ([]*Config.Entry) {
 	return allElemNode(btree.Root)
 }
 

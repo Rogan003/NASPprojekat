@@ -5,62 +5,14 @@ package SkipList
 import (
 	"fmt"
 	"math/rand"
-	"encoding/binary"
-	"hash/crc32"
+	"NASPprojekat/Config"
 )
-
-
-type Data struct {
-	Timestamp   uint64
-	Tombstone   bool
-	Key   string
-	Value []byte
-}
-
-func (data Data) ToBytes() []byte {
-	var dataBytes []byte
-
-	crcb := make([]byte, 4)
-	binary.LittleEndian.PutUint32(crcb, crc32.ChecksumIEEE(data.Value))
-	dataBytes = append(dataBytes, crcb...) //dodaje se CRC
-
-	secb := make([]byte, 8)
-	binary.LittleEndian.PutUint64(secb, uint64(data.Timestamp))
-	dataBytes = append(dataBytes, secb...) //dodaje se Timestamp
-
-	//1 - deleted; 0 - not deleted
-	//dodaje se Tombstone
-	if data.Tombstone {
-		var delb byte = 1
-		dataBytes = append(dataBytes, delb)
-	} else {
-		var delb byte = 0
-		dataBytes = append(dataBytes, delb)
-	}
-
-	keyb := []byte(data.Key)
-	keybs := make([]byte, 8)
-	binary.LittleEndian.PutUint64(keybs, uint64(len(keyb)))
-
-	valuebs := make([]byte, 8)
-	binary.LittleEndian.PutUint64(valuebs, uint64(len(data.Value)))
-
-	//dodaju se Key Size i Value Size
-	dataBytes = append(dataBytes, keybs...)
-	dataBytes = append(dataBytes, valuebs...)
-	//dodaju se Key i Value
-	dataBytes = append(dataBytes, keyb...)
-	dataBytes = append(dataBytes, data.Value...)
-
-	return dataBytes
-}
-
 
 /* JEDAN CVOR, sadrzi:
    elem - vrijednost koju prosledjujemo u SkipListu
    left, right, down, up - pokazivaci na cvorove oko njega */
 type SkipNode struct {
-	Elem  *Data
+	Elem  *Config.Entry
 	Left  *SkipNode
 	Right *SkipNode
 	Down  *SkipNode
@@ -84,10 +36,10 @@ type SkipList struct {
 func (sl *SkipList) Init(maxHeight int) {
 	sl.maxHeight = maxHeight
 
-	data1 := Data{0, false, "", make([]byte, 0)}
-	data2 := Data{0, false, "\x7F", make([]byte, 0)}
-	var leftNode = SkipNode{&data1, nil, nil, nil, nil}
-	var rightNode = SkipNode{&data2, nil, nil, nil, nil}
+	data1 := Config.NewEntry(false, *Config.NewTransaction("", make([]byte, 0)))
+	data2 := Config.NewEntry(false, *Config.NewTransaction("\x7F", make([]byte, 0)))
+	var leftNode = SkipNode{data1, nil, nil, nil, nil}
+	var rightNode = SkipNode{data2, nil, nil, nil, nil}
 	leftNode.Right = &rightNode
 	rightNode.Left = &leftNode
 
@@ -105,7 +57,7 @@ func (sl SkipList) Find(key string) (*SkipNode, bool) {
 		- ako je element desnog cvora od trenutnog cvora == elementu koji trazimo,
 		  stajemo sa pretragom, i silazimo vertikalno dole dok ne nadjemoc
 		  poslednji cvor u poslednjem nivou koji je jednak elementu kojeg trazimo */
-		if sn.Right.Elem.Key == key {
+		if sn.Right.Elem.Transaction.Key == key {
 			sn = sn.Right
 			for sn.Down != nil {
 				sn = sn.Down
@@ -115,7 +67,7 @@ func (sl SkipList) Find(key string) (*SkipNode, bool) {
 
 		- ako je element desnog cvora od trenutnog cvora < elementa koji trazimo,
 		  nastavljamo desno sa pretragom */
-		if sn.Right.Elem.Key < key {
+		if sn.Right.Elem.Transaction.Key < key {
 			sn = sn.Right
 			continue
 		} /*
@@ -123,7 +75,7 @@ func (sl SkipList) Find(key string) (*SkipNode, bool) {
 		- ako je element desnog cvora od trenutnog cvora > elementa koji trazimo,
 		  nastavljamo dole sa pretragom, ako je donji u tom trenutku nil,
 		  vracamo taj trenutni koji nije nil  */
-		if sn.Right.Elem.Key > key {
+		if sn.Right.Elem.Transaction.Key > key {
 			if sn.Down == nil {
 				return sn, false
 			}
@@ -134,14 +86,17 @@ func (sl SkipList) Find(key string) (*SkipNode, bool) {
 	return nil, false
 }
 
-func (sl *SkipList) Add(key string, value []byte, timestamp uint64) (bool) {
+func (sl *SkipList) Add(key string, value []byte) (bool) {
 	sn, found := sl.Find(key)
 	if found == true { // ako postoji vec, ne dodajemo ga
+		/*
 		if sn.Elem.Tombstone == true {
 			sn.Elem.Tombstone = false
 		}
-		sn.Elem.Value = value
+		sn.Elem.Transaction.Value = value
 		sn.Elem.Timestamp = timestamp
+		*/
+		sn.Elem = Config.NewEntry(false, *Config.NewTransaction(key, value))
 		return false
 	} else { /*
 		- posto element ne postoji, sn pokazuje na prvi manji iza njega
@@ -149,8 +104,8 @@ func (sl *SkipList) Add(key string, value []byte, timestamp uint64) (bool) {
 		  sn <-- newSkipNode --> sn.Right
 		- povezujemo u suprotnom pravcu:
 		  random <-> sn <-> newSkipNode <-> sn.Right */
-		data := Data{timestamp, false, key, value}
-		newSkipNode := SkipNode{&data, sn, sn.Right, nil, nil}
+		data := Config.NewEntry(false, *Config.NewTransaction(key, value))
+		newSkipNode := SkipNode{data, sn, sn.Right, nil, nil}
 		sn.Right.Left = &newSkipNode
 		sn.Right = &newSkipNode /*
 			- povezali smo sve kako treba, sada roll-ujemo da vidimo koliko
@@ -175,10 +130,10 @@ func (sl *SkipList) Add(key string, value []byte, timestamp uint64) (bool) {
 					- pravimo novi endNode i povezujemo ga sa prethodnim endNode-om
 					- povezujemo novi startNode i endNode
 					- povecavamo trenutnu visinu za += 1 */
-					data1 := Data{0, false, "", make([]byte, 0)}
-					data2 := Data{0, false, "\x7F", make([]byte, 0)}
-					var newStartNode = SkipNode{&data1, nil, nil, sl.StartNode, nil}
-					var newEndNode = SkipNode{&data2, nil, nil, sl.EndNode, nil}
+					data1 := Config.NewEntry(false, *Config.NewTransaction("", make([]byte, 0)))
+					data2 := Config.NewEntry(false, *Config.NewTransaction("\x7F", make([]byte, 0)))
+					var newStartNode = SkipNode{data1, nil, nil, sl.StartNode, nil}
+					var newEndNode = SkipNode{data2, nil, nil, sl.EndNode, nil}
 
 					sl.StartNode.Up = &newStartNode
 					sl.StartNode = &newStartNode
@@ -200,7 +155,7 @@ func (sl *SkipList) Add(key string, value []byte, timestamp uint64) (bool) {
 			}
 			rightNode = rightNode.Up
 
-			newestSkipNode := SkipNode{&data, leftNode, rightNode, prevNode, nil}
+			newestSkipNode := SkipNode{data, leftNode, rightNode, prevNode, nil}
 			prevNode.Up = &newestSkipNode
 			leftNode.Right = &newestSkipNode
 			rightNode.Left = &newestSkipNode
@@ -211,14 +166,13 @@ func (sl *SkipList) Add(key string, value []byte, timestamp uint64) (bool) {
 	}
 }
 
-func (sl *SkipList) Delete(key string, timestamp uint64) (bool) {
+func (sl *SkipList) Delete(key string) (bool) {
 	sn, found := sl.Find(key)
 	if found != true {
 		// ako ne postoji, nema potrebe da ga brisemo
 		return false
 	} else {
-		sn.Elem.Tombstone = true
-		sn.Elem.Timestamp = timestamp
+		sn.Elem = Config.NewEntry(true, *Config.NewTransaction(key, sn.Elem.Transaction.Value))
 		return true
 	}
 }
@@ -253,12 +207,12 @@ func (sl *SkipList) DeletePhysically(key string) {
 }
 
 // funkcija koja vraca sve elemente sortirane
-func (sl *SkipList) AllElem() ([]*Data) {
-	elements := make([]*Data, 0)
+func (sl *SkipList) AllElem() ([]*Config.Entry) {
+	elements := make([]*Config.Entry, 0)
 
 	sn, _ := sl.Find("")
 	for sn.Right != nil {
-		if (sn.Right.Elem.Key == "\x7F") {
+		if (sn.Right.Elem.Transaction.Key == "\x7F") {
 			break
 		}
 		sn = sn.Right
@@ -286,12 +240,12 @@ func (sl *SkipList) ToVisual() {
 		r := sn.Right
 		for r != nil {
 			var toAdd string = "0"
-			if r.Elem.Key == "" {
+			if r.Elem.Transaction.Key == "" {
 				toAdd = "-1000"
-			} else if r.Elem.Key == "\x7F" {
+			} else if r.Elem.Transaction.Key == "\x7F" {
 				toAdd = "1000"
 			} else {
-				toAdd = r.Elem.Key
+				toAdd = r.Elem.Transaction.Key
 			}
 			if r.Down != nil {
 				if n[x+1][y] != toAdd {
@@ -319,7 +273,7 @@ func (sl *SkipList) ToVisual() {
 					fmt.Print("0 ")
 					continue
 				}
-				fmt.Print("(", sn.Elem.Key, ", ", sn.Elem.Tombstone, ", ", sn.Elem.Timestamp, ", ", sn.Elem.Value, ") ")
+				fmt.Print("(", sn.Elem.Transaction.Key, ", ", sn.Elem.Tombstone, ", ", sn.Elem.Timestamp, ", ", sn.Elem.Transaction.Value, ") ")
 			}
 		} 
 		fmt.Println()

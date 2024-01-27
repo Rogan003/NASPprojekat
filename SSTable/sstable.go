@@ -651,20 +651,21 @@ func mergeFiles(level int, dataFile *os.File, indexFile *os.File, summaryFile *o
 
 	}
 
-
-	func LevelTieredCompaction(lsm Config.LSMTree){
-		for{
-			if lsm.Levels[0] == lsm.MaxSSTables{
-				levelmerge(1,lsm)
-			}
-			break
-		}
-	}
-
-	func levelmerge(level int,lsm Config.LSMTree){
-		current := level
-		next :=level+1
-		
-	}
-
 }
+/*
+DAVALO GRESKU PA SAM PREMESTIO DOLE, takodje rekao bih i da je mesto ovome ovde al moguce da gresim
+func LevelTieredCompaction(lsm Config.LSMTree){
+	for{
+		if lsm.Levels[0] == lsm.MaxSSTables{
+			levelmerge(1,lsm)
+		}
+		break
+	}
+}
+
+func levelmerge(level int,lsm Config.LSMTree){
+	current := level
+	next :=level+1
+	
+}
+*/
