@@ -6,6 +6,7 @@ import(
 type CacheEntry struct {
 	key   string
 	value interface{}			//interface{} znaci da value moze biti bilo koje vrednosti
+	tombstone bool
 }
 
 type LRUCache struct{
@@ -24,12 +25,22 @@ func NewLRUCache(capacity int) *LRUCache{
 
 func (c*LRUCache) Get(key string) interface{}{
 	element,exist := c.cache[key]					//proverava da li je element tu
-	if exist{										//ako jeste premesti ga na pocetak i vrati vrednost
+	if exist && !element.tombstone{										//ako jeste premesti ga na pocetak i vrati vrednost
 		c.lrulist.MoveToFront(element)
 		return element.Value.(*CacheEntry).value
 	}
 	return nil										//ako nije, vrati nil
 	
+}
+
+func (c*LRUCache)Delete(key string) bool{
+	element, exist := c.cache[key]
+	if exist && !element.tombstone{
+		element.tombstone = true
+		return true
+	}
+	
+	return false
 }
 
 
