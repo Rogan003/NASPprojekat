@@ -60,7 +60,7 @@ func SearchTroughBloomFilters(key string) (bool, string) {
 		if err != nil {
 			return false, ""
 		}
-		found := bf.Check_elem(key)
+		found := bf.Check_elem([]byte(key))
 		if found {
 			return found, bloomFilterFilesNames[i]
 		}
@@ -250,12 +250,17 @@ func Delete(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, key string) (
 	// nasli smo ga u memtable
 	data, found, _ := memtable.Get(key)
 	if (found) {
+		fmt.Println("Pronađeno u memtable.")
 		WriteAheadLog.Delete(WAL, memtable, key)
 		return data, true
-
 	} 
 	
-	// nema potrebe da provjeravam cache???
+	// ako je u cache, onda je i na disku, brisemo u cache ako postoji
+	// idemo dalje na disk
+	ok := cache.Delete(key)
+	if (ok) {
+		fmt.Println("Pronađeno u cache.")
+	}
 
 	// provjeravamo disk
 	foundBF, fileBF := SearchTroughBloomFilters(key) // trazi u disku
