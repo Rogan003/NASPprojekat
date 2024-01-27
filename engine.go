@@ -53,14 +53,16 @@ func convertToBytes(value interface{}) ([]byte, error) {
 // trazenje elementa sa nekim kljucem u svim bloomfilterima
 func SearchTroughBloomFilters(key string) (bool, string) {
 	bf := BloomFilter.BloomFilter{}
+	var bloomFilterFilesNames []string
+	// dodaj putanje u bloomFilterFilesNames...
 	for i := 0; i < len(bloomFilterFilesNames); i++ {
-		err := bf.Deserialize(bloomFiltersFilesNames[i])
+		err := bf.Deserialize(bloomFilterFilesNames[i])
 		if err != nil {
 			return false, ""
 		}
 		found := bf.Check_elem(key)
 		if found {
-			return found, bloomFiltersFilesNames[i]
+			return found, bloomFilterFilesNames[i]
 		}
 
 	}
@@ -243,7 +245,37 @@ func Put(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.LRU
 }
 
 
-// func Delete(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, value []byte) bool {}
+func Delete(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, key string) ([]byte, bool) {
+
+	// nasli smo ga u memtable
+	data, found, _ := memtable.Get(key)
+	if (found) {
+		WriteAheadLog.Delete(WAL, memtable, key)
+		return data, true
+
+	} 
+	
+	// nema potrebe da provjeravam cache???
+
+	// provjeravamo disk
+	foundBF, fileBF := SearchTroughBloomFilters(key) // trazi u disku
+	if foundBF {
+		fmt.Println("Mozda postoji na disku.")
+		//ucitavamo summary i index fajlove za sstable u kojem je mozda element (saznali preko bloomfiltera)
+		summaryFileName := fileBF[0:14] + "summaryFile" + fileBF[22:]
+		indexFileName := fileBF[0:14] + "indexFile" + fileBF[22:]
+		foundValue := SSTable.Get(key, summaryFileName, indexFileName, fileBF)
+
+		memtable.AddAndDelete(key, foundValue) 
+		// *** da li treba dodati pa obrisati u memtable, ako je tombstone pronadjenog u sstable = true?
+		// kako provjeriti tombstone iz sstable Get()?
+
+		
+		return foundValue, true
+	}
+
+	return nil, false
+}
 
 
 

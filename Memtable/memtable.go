@@ -181,7 +181,7 @@ func (nmt *NMemtables) Delete(key string) bool {
 			}
 		}
 	} else {
-		fmt.Printf("Element sa kljucem %s ne postoji!\n", key)
+		//fmt.Printf("Element sa kljucem %s ne postoji!\n", key)
 		return false
 	}
 	
