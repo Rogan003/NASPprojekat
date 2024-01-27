@@ -13,6 +13,8 @@ import (
 	"log"
 	"os"
 	"time"
+	"io/ioutil"
+	"encoding/json"
 )
 
 const (
@@ -653,10 +655,13 @@ func mergeFiles(level int, dataFile *os.File, indexFile *os.File, summaryFile *o
 
 }
 
+//---------------------------LEVEL TIERED COMPACTION--------------------------------
+// kod level tiered kompakcije svaki nivo (run) je T puta veci od prethodnog. T je uglavnom 10. Kriterijum za kompakciju ce biti broj tabela po run-u.
+// Uzima se tabela iz nivoa na kom se vrsi kompakcija i traze se odgovarajuce tabele u narednom nivou. Spajaju se i nova tabela se dodaje u nizi nivo.
+// Imenuju se kao level_brojulevelu. 
 
-
-
-// level tiered compaction
+//utvrditi nivo na kom se kompakcija desava
+//znaci kada se flushuje
 func LevelTieredCompaction(lsm Config.LSMTree) {
 	if lsm.Levels[0] == lsm.MaxSSTables {
 		levelMerge(0, lsm)
@@ -664,15 +669,47 @@ func LevelTieredCompaction(lsm Config.LSMTree) {
 }
 
 func levelMerge(level int, lsm Config.LSMTree) {
-	br := lsm.Levels[level] + 1
-	
-	dataFile, _ := os.Create("SSTable/files/dataFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".txt")
-	indexFile, _ := os.Create("SSTable/files/indexFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".txt")
-	summaryFile, _ := os.Create("SSTable/files/summaryFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".txt")
-	bloomFile, _ := os.Create("SSTable/files/bloomFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".txt")
-	merkleFile, _ := os.Create("SSTable/files/merkleFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".txt")
+	//treba da se izabere tabela koja se merguje
+	//pa da se potraze ostale tabele u sledecem nivou
 
-	lsm.DataFilesNames = append(lsm.DataFilesNames, dataFile.Name())
+	//za file na visem nivou-uzimamo prvu tabelu jer eto??
+	dataFile := "SSTable/files/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(1) + ".txt"
+	indexFile := "SSTable/files/indexFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(1) + ".txt"
+	summaryFile := "SSTable/files/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(1) + ".txt"
+	bloomFile := "SSTable/files/bloomFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(1) + ".txt"
+	merkleFile := "SSTable/files/merkleFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(1) + ".txt"
+
+	
+	//trazimo opseg indeksa
+	SummaryContent, err := ioutil.ReadFile(summaryFile)
+	if err != nil {
+		fmt.Println("Greška prilikom čitanja datoteke:", err)
+		return
+	}
+
+	//ovo dekodiranje je sastavio chatgpt, treba proveriti!!
+	var summary SStableSummary
+	err = json.Unmarshal(fileContent, &summary)
+	if err != nil {
+		fmt.Println("Greška prilikom dekodiranja JSON-a:", err)
+		return
+	}
+
+	bottomIdx := summary.FirstKey
+	topIdx := summary.LastKey
+
+	//nizovi putanja SSTable-ova kojima odgovaraju indeksi
+	dataFiles, indexFiles, summaryFiles, bloomFiles, merkleFiles := findOtherTables(level+1, bottomIdx,topIdx,lsm)
+
+	//Sada treba mergovati tabele
+
+
+
+
+
+
+
+	
 
 	// num = broj mergeovanih iz narednog nivoa (ne ukljucujuci pocetnu od koje smo krenuli)
 	num = levelMergeFiles(level, dataFile, indexFile, summaryFile, bloomFile, merkleFile, lsm)
@@ -685,10 +722,46 @@ func levelMerge(level int, lsm Config.LSMTree) {
 	if lsm.Levels[level + 1] == lsm.MaxSSTables && level != lsm.CountOfLevels { // proverava broj fajlova na sledećem nivou, i ne treba da pozove merge ako je na 3. nivou tj ako je nivo 2
 		levelMerge(level + 1, lsm)
 	}
-
-	
 }
 
+func findOtherTables(level,bottomIdx, topIdx int, lsm Config.LSMTree) ([]string,[]string, []string, []string,[]string){
+
+	var dataFiles []string
+	var indexFiles []string
+	var summaryFiles []string
+	var bloomFiles []string
+	var merkleFiles []string
+	
+	for i:=1 ; i<= lsm.Levels[level] ; i++ {
+		summaryFile := "SSTable/files/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt"
+
+		SummaryContent, err := ioutil.ReadFile(summaryFile)
+		if err != nil {
+			fmt.Println("Greška prilikom čitanja datoteke:", err)
+			return
+		}
+
+		var summary SStableSummary
+		err = json.Unmarshal(fileContent, &summary)
+		if err != nil {
+			fmt.Println("Greška prilikom dekodiranja JSON-a:", err)
+			return
+		}
+
+		if summary.FirstKey >= bottomIdx && summary.FirstKey <= topIdx && summary.LastKey >= bottomIdx && summary.LastKey <= topIdx{
+			dataFiles = append(dataFiles,"SSTable/files/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt" )
+			indexFiles = append(dataFiles,"SSTable/files/indexFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt" )
+			summaryFiles = append(dataFiles,"SSTable/files/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt" )
+			bloomFiles = append(dataFiles,"SSTable/files/bloomFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt" )
+			merkleFiles = append(dataFiles,"SSTable/files/merkleFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt" )
+		}
+	}
+
+	return dataFiles, indexFiles, summaryFiles, bloomFiles, merkleFiles
+
+}
+
+//func levelMergeFiles(level, )
 
 	
 

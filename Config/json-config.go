@@ -70,6 +70,7 @@ func NewLMSTree(Config Config) *LSMTree {
 		SummaryFilesNames:     file,
 		BloomFilterFilesNames: file,
 		MerkleTreeFilesNames:  file,
+		T:					   Config.T,
 	}
 }
 
