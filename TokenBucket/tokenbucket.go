@@ -63,7 +63,7 @@ func (tb *TokenBucket) ConsumeToken() bool {
 
 func (tb *TokenBucket) Serialize(fileName string) {
 	var f = ""
-	f += "../files%c"
+	f += "files%c"
 	f += fileName
 	/* ako testiramo ovde, iz custom maina, onda dodati: "../files%" ("../" ispred files) */
 
@@ -85,7 +85,7 @@ func (tb *TokenBucket) Serialize(fileName string) {
 
 func Deserialize(fileName string) *TokenBucket {
 	var f = ""     
-	f += "../files%c"
+	f += "files%c"
 	f += fileName 
 	/* ako testiramo ovde, iz custom maina, onda dodati: "../files%" ("../" ispred files) */
 
