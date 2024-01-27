@@ -25,7 +25,7 @@ func NewLRUCache(capacity int) *LRUCache{
 
 func (c*LRUCache) Get(key string) interface{}{
 	element,exist := c.cache[key]					//proverava da li je element tu
-	if exist && !element.tombstone{										//ako jeste premesti ga na pocetak i vrati vrednost
+	if exist && !element.Value.(*CacheEntry).tombstone{										//ako jeste premesti ga na pocetak i vrati vrednost
 		c.lrulist.MoveToFront(element)
 		return element.Value.(*CacheEntry).value
 	}
@@ -35,8 +35,8 @@ func (c*LRUCache) Get(key string) interface{}{
 
 func (c*LRUCache)Delete(key string) bool{
 	element, exist := c.cache[key]
-	if exist && !element.tombstone{
-		element.tombstone = true
+	if exist && !element.Value.(*CacheEntry).tombstone{
+		element.Value.(*CacheEntry).tombstone = true
 		return true
 	}
 	
@@ -58,7 +58,7 @@ func (c*LRUCache)Insert(key string, value interface{}){
 			c.lrulist.Remove(lastElement)
 		}
 													//ako nije onda treba postaviti taj novi element na pocetak liste i ubaciti u kes
-		newElement := c.lrulist.PushFront(&CacheEntry{key, value})
+		newElement := c.lrulist.PushFront(&CacheEntry{key, value, false})
 		c.cache[key] = newElement
 	}
 

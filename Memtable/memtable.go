@@ -248,7 +248,7 @@ func (mt *Memtable) flush() {
 	}
 	fmt.Printf("\n")
 
-	// m.flushToDisk() ovde treba ovaj flushToDisk da se pozove
+	// mt.flushToDisk() ovde treba ovaj flushToDisk da se pozove
 
 	if mt.version == "skiplist" {
 		mt.skiplist = SkipList.SkipList{}
