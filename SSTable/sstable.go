@@ -351,6 +351,7 @@ func NodeToBytes(node Config.Entry) []byte { //pretvara node u bajtove
 	return data
 }
 
+
 func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, SummaryFileName string, BloomFileName string) {
 	indexFile, err := os.OpenFile(IndexFileName, os.O_RDWR|os.O_APPEND, 0777)
 	if err != nil {
@@ -689,6 +690,13 @@ func levelMerge(level int, lsm Config.LSMTree) {
 	//nizovi putanja SSTable-ova kojima odgovaraju indeksi
 	dataFiles, indexFiles, summaryFiles, bloomFiles, merkleFiles := findOtherTables(level+1, bottomIdx, topIdx, lsm)
 
+	dataFiles = append(dataFiles, dataFile)
+	indexFiles = append(indexFiles, indexFile)
+	summaryFiles = append(summaryFiles, summaryFile)
+	bloomFiles = append(bloomFiles, bloomFile)
+	merkleFiles = append(merkleFiles, merkleFile)
+		
+
 	//Sada treba mergovati tabele
 
 	// num = broj mergeovanih iz narednog nivoa (ne ukljucujuci pocetnu od koje smo krenuli)
@@ -722,10 +730,10 @@ func findOtherTables(level, bottomIdx, topIdx int, lsm Config.LSMTree) ([]string
 
 		if summary.FirstKey >= bottomIdx && summary.FirstKey <= topIdx && summary.LastKey >= bottomIdx && summary.LastKey <= topIdx {
 			dataFiles = append(dataFiles, "SSTable/files/dataFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".txt")
-			indexFiles = append(dataFiles, "SSTable/files/indexFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".txt")
-			summaryFiles = append(dataFiles, "SSTable/files/summaryFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".txt")
-			bloomFiles = append(dataFiles, "SSTable/files/bloomFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".txt")
-			merkleFiles = append(dataFiles, "SSTable/files/merkleFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".txt")
+			indexFiles = append(indexFiles, "SSTable/files/indexFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".txt")
+			summaryFiles = append(summaryFiles, "SSTable/files/summaryFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".txt")
+			bloomFiles = append(bloomFiles, "SSTable/files/bloomFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".txt")
+			merkleFiles = append(merkleFiles, "SSTable/files/merkleFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".txt")
 		}
 	}
 
@@ -733,4 +741,109 @@ func findOtherTables(level, bottomIdx, topIdx int, lsm Config.LSMTree) ([]string
 
 }
 
-//func levelMergeFiles(level, )
+func levelMergeFiles(level int, dataFiles []string, indexFiles []string, summaryFiles []string, bloomFiles []string, merkleFiles []string) int{
+
+	//levelFiles su SStabele iz narednog nivoa + tabela iz prethodnog
+	levelFiles, err := openFiles(dataFiles)
+	if err != nil {
+		
+		panic(err)
+	}
+
+	var entries []*Config.Entry
+	var sortedAllEntries []*Config.Entry
+	//u entries cuvamo trenutne entie na kojim smo iz svakog sstablea sa ovog nivoa
+	for _, file := range levelFiles {
+		entry := readMerge(file)
+		entries = append(entries, entry)
+	}
+
+	for {
+		//procitali smo sve fajlove do kraja
+		if areAllNil(entries) {
+			break
+		}
+		minKeyArray, minEntry := findMinKeyEntry(entries)
+		sortedAllEntries = append(sortedAllEntries, minEntry)
+		//citamo naredne entye za fajlove koji su bili na min entry
+		for _, index := range minKeyArray {
+			newEntry := readMerge(levelFiles[index])
+			entries[index] = newEntry
+		}
+
+	}
+
+	closeFiles(levelFiles)
+
+	dataFileName := dataFiles[0]
+	indexFileName := indexFiles[0]
+	summaryFileName := summaryFiles[0]
+	bloomFileName := bloomFiles[0]
+	merkleFileName := merkleFiles[0]
+	
+	err = os.Remove(dataFileName)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = os.Remove(indexFileName)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = os.Remove(summaryFileName)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = os.Remove(bloomFileName)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = os.Remove(merkleFileName)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+
+	removeFileName(lsm, dataFilesName)
+	removeFileName(lsm, indexFilesName)
+	removeFileName(lsm, summaryFilesName)
+	removeFileName(lsm, bloomFilesName)
+	removeFileName(lsm, merkleFilesName)
+
+	//pravljenje novog sstablea od svih sstableova ovog nivoa koji su sada spojeni
+	//fali merkle???
+	MakeData(sortedAllEntries, dataFileName, indexFileName, summaryFileName, bloomFileName)
+
+
+	for i := 1; i < len(dataFiles); i++ {
+		err = os.Remove(dataFiles[i])
+		if err != nil {
+			log.Fatal(err)
+		}
+		err = os.Remove(indexFiles[i])
+		if err != nil {
+			log.Fatal(err)
+		}
+		err = os.Remove(summaryFiles[i])
+		if err != nil {
+			log.Fatal(err)
+		}
+		err = os.Remove(bloomFiles[i])
+		if err != nil {
+			log.Fatal(err)
+		}
+		err = os.Remove(merkleFiles[i])
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		removeFileName(lsm, dataFiles[i])
+		removeFileName(lsm, indexFiles[i])
+		removeFileName(lsm, summaryFiles[i])
+		removeFileName(lsm, bloomFiles[i])
+		removeFileName(lsm, merkleFiles[i])
+		
+	}
+
+	//Da li treba rename ostalih fajlova??
+
+}
