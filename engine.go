@@ -7,7 +7,7 @@ import (
 	"NASPprojekat/SSTable"
 	"NASPprojekat/WriteAheadLog"
 	"NASPprojekat/TokenBucket"
-	//"NASPprojekat/Config"
+	"NASPprojekat/Config"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -88,16 +88,22 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 	// ako korisnik kaze da nastavlja jos onda mu ispisemo jos, ako ne, onda je je to kraj ove fje
 	// smisliti efikasan nacin za odrzavanje nekih stranica u cache (da li treba uopste?)
 
+	// DODATI PRESKAKANJE ZA STRUKTURE KAD IH ZAVRSIMO
+
 	if key1 > key2 {
 		fmt.Println("Greska! Opseg nije moguc!")
 	} else {
-		memElems := memtable.GetSortedElems()
-		memIter := -1
+		mem_indexes := make([]int, memtable.N)
+		
+		for index, value := range memtable.Arr {
+			memElems := value.GetSortedElems()
+			mem_indexes[index] = -1
 
-		for index, value := range memElems {
-			if value.Transaction.Key > key1 {
-				memIter = index
-				break
+			for index, value := range memElems {
+				if value.Transaction.Key > key1 {
+					mem_indexes[index] = index
+					break
+				}
 			}
 		}
 
@@ -116,7 +122,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 
 			//iz summary citamo opseg kljuceva u sstable (prvi i poslendji)
 			sumarryFile, _ := os.OpenFile(sumarryFileName, os.O_RDWR, 0777)
-			summary := loadSummary(sumarryFile)
+			summary := SSTable.LoadSummary(sumarryFile)
 			defer sumarryFile.Close()
 
 			// ako je trazeni kljuc u tom opsegu, podatak bi trebalo da se nalazi u ovom sstable
@@ -125,7 +131,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 				var indexPosition = uint64(0)
 				for {
 					//citamo velicinu kljuca
-					keySizeBytes := make([]byte, KEY_SIZE_SIZE)
+					keySizeBytes := make([]byte, SSTable.KEY_SIZE_SIZE)
 					_, err := sumarryFile.Read(keySizeBytes)
 					keySize := int64(binary.LittleEndian.Uint64(keySizeBytes))
 
@@ -149,9 +155,9 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 						}
 
 						for {
-							currentKey, position := readFromIndex(file)
+							currentKey, position := SSTable.ReadFromIndex(file)
 							if currentKey >= key1 {
-								indexes[index] = uint64(position)
+								indexes[index] = int(position)
 								break
 							}
 						}
@@ -159,7 +165,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 						break
 					} else {
 						// citanje pozicije za taj kljuc u indexFile
-						positionBytes := make([]byte, KEY_SIZE_SIZE)
+						positionBytes := make([]byte, SSTable.KEY_SIZE_SIZE)
 						_, err = sumarryFile.Read(positionBytes)
 						position := binary.LittleEndian.Uint64(positionBytes)
 						indexPosition = position
@@ -183,10 +189,12 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 		works := true
 
 		for works {
-			elems := [pageSize]WAL.Entry{}
+			elems := make([]Config.Entry, pageSize)
 
 			for i := 0; i < 10; i++ {
+				fmt.Println(forward) // ovo je samo da ne javlja gresku
 				// ovde se magija desava, sve okej validne elem dodati u elems
+				// prolaziti i kroz memtable u pravilnom redosledu od najnovije do najstarije
 				// prolazak kroz sve elemente na pozicijama, vidimo najmanji i dodajmeo i inkrementiramo (pomeramo napred), ako je previse napred -1
 				// ovo je sve ako je forward
 				// back bez neke cache strukture, problem?
@@ -221,7 +229,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 }
 
 func PrefixScan(memtable *Memtable.NMemtables, prefix string, pageSize int) {
-	RangeScan(memtable, prefix, prefix+string('z'+1), pageSize)
+	RangeScan(memtable, prefix, prefix+string('z' + 1), pageSize)
 }
 
 func RangeIter(memtable *Memtable.NMemtables, key1 string, key2 string) {

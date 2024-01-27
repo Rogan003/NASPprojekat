@@ -77,7 +77,7 @@ func Get(key string, SummaryFileName string, IndexFileName string, DataFileName 
 
 	//iz summary citamo opseg kljuceva u sstable (prvi i poslendji)
 	sumarryFile, _ := os.OpenFile(SummaryFileName, os.O_RDWR, 0777)
-	summary := loadSummary(sumarryFile)
+	summary := LoadSummary(sumarryFile)
 	defer sumarryFile.Close()
 
 	// ako je trazeni kljuc u tom opsegu, podatak bi trebalo da se nalazi u ovom sstable
@@ -142,7 +142,7 @@ func findInIndex(startPosition uint64, key string, IndexFileName string) uint64 
 	}
 
 	for {
-		currentKey, position := readFromIndex(file)
+		currentKey, position := ReadFromIndex(file)
 		if currentKey > key {
 			notFound := -1
 			return uint64(notFound)
@@ -162,7 +162,7 @@ func FileLength(file *os.File) (int64, error) {
 }
 
 // cita jedan key sa svojom velicinom i positionom iz indexFile
-func readFromIndex(file *os.File) (string, int64) {
+func ReadFromIndex(file *os.File) (string, int64) {
 	keyLenBytes := make([]byte, KEY_SIZE_SIZE)
 	_, err := file.Read(keyLenBytes)
 	if err != nil {
@@ -233,7 +233,7 @@ func AddToSummary(position int64, key string, summary *os.File) {
 // sizeb(vel1) | sizeb(vel2) | vel1(k1) | vel2(k2) - podaci o najmanjem i najvecem kljucu
 // ostali bajtovi:
 // sizeb(velk) | velk(k) | sizeb(pozicija u index) - za jedan podatak
-func loadSummary(summary *os.File) *SStableSummary {
+func LoadSummary(summary *os.File) *SStableSummary {
 	lenFirst := make([]byte, KEY_SIZE_SIZE) //size upitan
 	lenLast := make([]byte, KEY_SIZE_SIZE)
 
