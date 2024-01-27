@@ -256,10 +256,12 @@ func Delete(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, key string) (
 	} 
 	
 	// ako je u cache, onda je i na disku, brisemo u cache ako postoji
-	// idemo dalje na disk
-	ok := cache.Delete(key)
-	if (ok) {
+	value := cache.Get(key)
+	if (value != nil) {
 		fmt.Println("Pronađeno u cache.")
+		cache.Delete(key)
+		memtable.AddAndDelete(key, value) 
+		return value, true
 	}
 
 	// provjeravamo disk
