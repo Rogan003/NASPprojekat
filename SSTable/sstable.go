@@ -280,7 +280,7 @@ func ReadData(position int64, DataFileName string) ([]byte, []byte) {
 	tombstone := binary.LittleEndian.Uint64(info[TOMBSTONE_START:KEY_SIZE_START])
 	//ako je tombstone 1 ne citaj dalje
 	if tombstone == 1 {
-		return []byte{}
+		return []byte{}, []byte{}
 	}
 	//ako je tombstone 0 onda citaj sve
 	info2 := make([]byte, KEY_START-KEY_SIZE_START)

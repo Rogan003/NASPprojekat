@@ -194,8 +194,8 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 
 		forward := true
 		works := true
-		lastElemsTables := make([]string, pageSize)
-		lastElemsPos := make([]int, pageSize)
+		//lastElemsTables := make([]string, pageSize)
+		//lastElemsPos := make([]int, pageSize)
 		lastIter := 0
 
 		for works {
@@ -217,7 +217,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 					keys[i] = "{"
 
 					for i := memtable.R + memtable.N; i > memtable.R; i-- {
-						memElems := value.GetSortedElems()
+						memElems := memtable.Arr[i % memtable.N].GetSortedElems()
 						
 						if len(memElems) == 0 {
 							break
@@ -248,26 +248,24 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 							continue
 						}
 
-						indexFileName := value[0:14] + "indexFile" + value[22:]
-
 						for {
-							keyHelp, valHelp := SSTable.ReadData(indexes[index], value) // u get se poziva nad ovim value?
+							keyHelp, valHelp := SSTable.ReadData(int64(indexes[index]), value) // u get se poziva nad ovim value?
 							// sta ako dodjemo do kraja fajla?
-							if keyHelp < keys[i] && keyHelp <= key2 && !bytes.Equal(keyHelp, []byte{}) {
-								keys[i] = keyHelp
+							if string(keyHelp) < keys[i] && string(keyHelp) <= key2 && !bytes.Equal(keyHelp, []byte{}) {
+								keys[i] = string(keyHelp)
 								vals[i] = valHelp
 								break
-							} else if keyHelp > key2 {
+							} else if string(keyHelp) > key2 {
 								indexes[index] = -1
 								break
-							} else if keyHelp < keys[i] {
+							} else if string(keyHelp) < keys[i] {
 								file, err := os.OpenFile(value, os.O_RDWR, 0777)
 								if err != nil {
 									log.Fatal(err)
 								}
 								defer file.Close()
 								// pomeramo se na poziciju u dataFile gde je nas podatak
-								_, err = file.Seek(indexes[index], 0)
+								_, err = file.Seek(int64(indexes[index]), 0)
 								if err != nil {
 									log.Fatal(err)
 								}
@@ -288,7 +286,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 								key_size := binary.LittleEndian.Uint64(info2[:SSTable.KEY_SIZE_SIZE])
 								value_size := binary.LittleEndian.Uint64(info2[SSTable.KEY_SIZE_SIZE:])
 
-								indexes[index] += SSTable.KEY_START + key_size + value_size
+								indexes[index] += int(SSTable.KEY_START) + int(key_size) + int(value_size)
 							}
 						}
 					}
@@ -309,17 +307,17 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 				fmt.Printf("%i. %s: %s\n", index + 1, value, vals[index]) // kako ispisati niz bajtova? kao string?
 			}
 
-			var option char = '0'
+			var option string = "0"
 
-			for option < 1 || option > 3 {
+			for true {
 				fmt.Printf("1. Napred\n2. Nazad\n3. Kraj\nOpcija: ")
-				fmt.Scanf("%c", &option) // ako se unese karakter greska? nesto oko ovoga?
+				fmt.Scanf("%s", &option) // ako se unese karakter greska? nesto oko ovoga?
 
-				if option == '1' {
+				if option == "1" {
 					forward = true
-				} else if option == '2' {
+				} else if option == "2" {
 					forward = false
-				} else if option == '3' {
+				} else if option == "3" {
 					works = false
 				} else {
 					fmt.Println("Nepostojeca opcija!")
