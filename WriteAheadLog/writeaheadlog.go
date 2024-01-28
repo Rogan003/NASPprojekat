@@ -56,7 +56,7 @@ func ScanWALFolder() ([]string, error) {
 //funkcija samo radi cisto upisivanje jednog entry-ja
 
 func WriteInFile(entry []byte, path string) error {
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0644) //0644 - vlasnik moze da cita i pise, ostali mogu samo da citaju
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644) //0644 - vlasnik moze da cita i pise, ostali mogu samo da citaju
 	if err != nil {
 		return err
 	}

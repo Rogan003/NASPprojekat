@@ -37,12 +37,18 @@ func Get(memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *T
 	}
 
 	foundBF, fileBF := SearchTroughBloomFilters(key) // trazi u disku
-	if foundBF {
+	if foundBF { // ovde nesto potencijalno ne valja, mozda treba dodati putanje u bloomFilterFilesNames?
 		fmt.Println("Mozda postoji na disku.")
 		//ucitavamo summary i index fajlove za sstable u kojem je mozda element (saznali preko bloomfiltera)
 		summaryFileName := fileBF[0:14] + "summaryFile" + fileBF[22:]
 		indexFileName := fileBF[0:14] + "indexFile" + fileBF[22:]
 		foundValue := SSTable.Get(key, summaryFileName, indexFileName, fileBF)
+
+		if foundValue == nil { // slucaj kada je bf dao false positive
+			return nil, false
+		}
+
+		cache.Insert(key, foundValue) // dodavanje u cache
 		return foundValue, true
 	}
 	return nil, false
@@ -281,7 +287,7 @@ func Delete(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.
 	data, found, _ := memtable.Get(key)
 	if (found) {
 		fmt.Println("Pronađeno u memtable.")
-		WriteAheadLog.Delete(WAL, memtable, key)
+		WriteAheadLog.Delete(WAL, memtable, key) // da li ovo samo ako radi sa memtable? ima mi smisla ali eto nek bude note
 		return data, true
 	} 
 	

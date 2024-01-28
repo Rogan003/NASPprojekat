@@ -203,15 +203,19 @@ func (nmt *NMemtables) Get(key string) ([]byte, bool, bool) {
 
 	for (true) {
 		memtable := arr[r]
-		if (memtable.empty) {  // ako je naredna memtabela prazna, ni sledece nisu popunjene, nema potrebe dalje da gledamo 
+		if (memtable.empty && r != nmt.r) {  // ako je naredna memtabela prazna, ni sledece nisu popunjene, nema potrebe dalje da gledamo 
 			//fmt.Printf("Element sa kljucem %s ne postoji!\n", key)
 			return []byte{}, false, false
 		}
 		if memtable.version == "skiplist" {
 			// pronalazak u skip listi
 			skipNode, found := memtable.skiplist.Find(key)
-			if skipNode.Elem.Transaction.Value != nil && !skipNode.Elem.Tombstone && found {
+			if skipNode.Elem.Transaction.Value != nil && found {
 				//fmt.Printf("%s %d\n", skipNode.Elem.Transaction.Key, skipNode.Elem.Transaction.Value)
+				if (skipNode.Elem.Tombstone) {
+					return []byte{}, false, false
+				}
+
 				if (r == nmt.r) {
 					return skipNode.Elem.Transaction.Value, true, true    
 																						  
@@ -222,8 +226,12 @@ func (nmt *NMemtables) Get(key string) ([]byte, bool, bool) {
 			}
 		} else {
 			_, _, _, elem := memtable.btree.Find(key)
-			if elem != nil && !elem.Tombstone {
+			if elem != nil {
 				//fmt.Printf("%s %d\n", elem.Transaction.Key, elem.Transaction.Value)
+				if (elem.Tombstone) {
+					return []byte{}, false, false
+				}
+
 				if (r == nmt.r) {
 					return elem.Transaction.Value, true, true
 				} else {
@@ -232,7 +240,7 @@ func (nmt *NMemtables) Get(key string) ([]byte, bool, bool) {
 			} 
 		}
 
-		r = (r + 1) % nmt.N
+		r = (r - 1 + nmt.N) % nmt.N
 		if (r == nmt.r) {  // vratili smo se na memtabelu od koje smo krenuli pretragu - prekidamo, nismo nasli podatak
 			break
 		}

@@ -38,7 +38,7 @@ func main() {
 	tb := TokenBucket.TokenBucket{}
 	tb.Init(conf.TokenBucketSize, time.Minute)
 
-	wal, err := WriteAheadLog.NewWAL("NASPprojekat/files/WAL", 60000000000, 5) // ne znam ove parametre kako i sta?
+	wal, err := WriteAheadLog.NewWAL("files/WAL", 60000000000, 5) // ne znam ove parametre kako i sta?
 	// inace ovo je putanja do foldera gde bi WAL segmenti mogli biti smesteni, ovaj ogroman broj je kao sat vremena za duration, i eto
 	// low watermark lupih 5, ne znam gde treba conf.WalSize???
 
@@ -77,9 +77,9 @@ func main() {
 				done := Put(wal, &mt, cache, key, value, &tb)
 
 				if done {
-					fmt.Printf("Uspesno dodat kljuc %s!", key)
+					fmt.Printf("Uspesno dodat/azuriran kljuc %s!\n", key)
 				} else {
-					fmt.Printf("GRESKA! Neuspesno dodavanje kljuca %s!", key)
+					fmt.Printf("GRESKA! Neuspesno dodavanje kljuca %s!\n", key)
 				}
 			
 			case 2:
@@ -89,21 +89,21 @@ func main() {
 				elem, done := Get(&mt, cache, key, &tb)
 
 				if done {
-					fmt.Printf("Vrednost pod kljucem %s: %s", key, elem)
+					fmt.Printf("Vrednost pod kljucem %s: %s\n", key, elem)
 				} else {
-					fmt.Printf("GRESKA! Neuspesno dobavljanje kljuca %s!", key)
+					fmt.Printf("GRESKA! Neuspesno dobavljanje kljuca %s!\n", key)
 				}
 
 			case 3:
 				fmt.Println("Unesite kljuc elementa: ")
 				scanner.Scan()
 				key := scanner.Text()
-				elem, done := Delete(wal, &mt, cache, key, &tb)
+				_, done := Delete(wal, &mt, cache, key, &tb)
 
 				if done {
-					fmt.Printf("Uspesno obrisan element pod kljucem %s!", elem)
+					fmt.Printf("Uspesno obrisan element pod kljucem %s!\n", key)
 				} else {
-					fmt.Printf("GRESKA! Neuspesno brisanje kljuca %s!", key)
+					fmt.Printf("GRESKA! Neuspesno brisanje kljuca %s!\n", key)
 				}
 
 			case 4:
