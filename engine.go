@@ -3,11 +3,11 @@ package main
 import (
 	"NASPprojekat/BloomFilter"
 	"NASPprojekat/Cache"
+	"NASPprojekat/Config"
 	"NASPprojekat/Memtable"
 	"NASPprojekat/SSTable"
-	"NASPprojekat/WriteAheadLog"
 	"NASPprojekat/TokenBucket"
-	"NASPprojekat/Config"
+	"NASPprojekat/WriteAheadLog"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -15,10 +15,10 @@ import (
 	"os"
 )
 
-func Get(memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *TokenBucket.TokenBucket) ([]byte, bool) {
+func Get(memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *TokenBucket.TokenBucket, lsm *Config.LSMTree) ([]byte, bool) {
 
 	ok := tb.ConsumeToken()
-	if (!ok) {
+	if !ok {
 		fmt.Println("\nGreska! Previse obavljenih requestova u odredjenom vremenskom rasponu!\n")
 		return nil, false
 	}
@@ -36,8 +36,8 @@ func Get(memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *T
 		return data, true
 	}
 
-	foundBF, fileBF := SearchTroughBloomFilters(key) // trazi u disku
-	if foundBF { // ovde nesto potencijalno ne valja, mozda treba dodati putanje u bloomFilterFilesNames?
+	foundBF, fileBF := SearchTroughBloomFilters(key, lsm) // trazi u disku
+	if foundBF {                                          // ovde nesto potencijalno ne valja, mozda treba dodati putanje u bloomFilterFilesNames?
 		fmt.Println("Mozda postoji na disku.")
 		//ucitavamo summary i index fajlove za sstable u kojem je mozda element (saznali preko bloomfiltera)
 		summaryFileName := fileBF[0:14] + "summaryFile" + fileBF[22:]
@@ -66,18 +66,17 @@ func convertToBytes(value interface{}) ([]byte, error) {
 }
 
 // trazenje elementa sa nekim kljucem u svim bloomfilterima
-func SearchTroughBloomFilters(key string) (bool, string) {
+func SearchTroughBloomFilters(key string, lsm *Config.LSMTree) (bool, string) {
 	bf := BloomFilter.BloomFilter{}
-	var bloomFilterFilesNames []string
 	// dodaj putanje u bloomFilterFilesNames...
-	for i := 0; i < len(bloomFilterFilesNames); i++ {
-		err := bf.Deserialize(bloomFilterFilesNames[i])
+	for i := 0; i < len(lsm.BloomFilterFilesNames); i++ {
+		err := bf.Deserialize(lsm.BloomFilterFilesNames[i])
 		if err != nil {
 			return false, ""
 		}
 		found := bf.Check_elem([]byte(key))
 		if found {
-			return found, bloomFilterFilesNames[i]
+			return found, lsm.BloomFilterFilesNames[i]
 		}
 
 	}
@@ -100,7 +99,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 		fmt.Println("Greska! Opseg nije moguc!")
 	} else {
 		mem_indexes := make([]int, memtable.N)
-		
+
 		for index, value := range memtable.Arr {
 			memElems := value.GetSortedElems()
 			mem_indexes[index] = -1
@@ -235,7 +234,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 }
 
 func PrefixScan(memtable *Memtable.NMemtables, prefix string, pageSize int) {
-	RangeScan(memtable, prefix, prefix+string('z' + 1), pageSize)
+	RangeScan(memtable, prefix, prefix+string('z'+1), pageSize)
 }
 
 func RangeIter(memtable *Memtable.NMemtables, key1 string, key2 string) {
@@ -249,11 +248,11 @@ func PrefixIter(memtable *Memtable.NMemtables, prefix string) {
 func Put(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, value []byte, tb *TokenBucket.TokenBucket) bool {
 
 	ok := tb.ConsumeToken()
-	if (!ok) {
+	if !ok {
 		fmt.Println("\nGreska! Previse obavljenih requestova u odredjenom vremenskom rasponu!\n")
 		return false
 	}
-	
+
 	//prvo staviti podatak WAL
 	//potom u memtable
 	//dodati u kes?
@@ -274,35 +273,34 @@ func Put(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.LRU
 	return succesful
 }
 
-
-func Delete(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *TokenBucket.TokenBucket) ([]byte, bool) {
+func Delete(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *TokenBucket.TokenBucket, lsm *Config.LSMTree) ([]byte, bool) {
 
 	ok := tb.ConsumeToken()
-	if (!ok) {
+	if !ok {
 		fmt.Println("\nGreska! Previse obavljenih requestova u odredjenom vremenskom rasponu!\n")
 		return nil, false
 	}
 
 	// nasli smo ga u memtable
 	data, found, _ := memtable.Get(key)
-	if (found) {
+	if found {
 		fmt.Println("Pronađeno u memtable.")
 		WriteAheadLog.Delete(WAL, memtable, key) // da li ovo samo ako radi sa memtable? ima mi smisla ali eto nek bude note
 		return data, true
-	} 
-	
+	}
+
 	// ako je u cache, onda je i na disku, brisemo u cache ako postoji
 	value := cache.Get(key)
-	if (value != nil) {
+	if value != nil {
 		fmt.Println("Pronađeno u cache.")
 		cache.Delete(key)
 		valueByte := value.([]byte)
-		memtable.AddAndDelete(key, valueByte) 
+		memtable.AddAndDelete(key, valueByte)
 		return valueByte, true
 	}
 
 	// provjeravamo disk
-	foundBF, fileBF := SearchTroughBloomFilters(key) // trazi u disku
+	foundBF, fileBF := SearchTroughBloomFilters(key, lsm) // trazi u disku
 	if foundBF {
 		fmt.Println("Mozda postoji na disku.")
 		//ucitavamo summary i index fajlove za sstable u kojem je mozda element (saznali preko bloomfiltera)
@@ -310,11 +308,10 @@ func Delete(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.
 		indexFileName := fileBF[0:14] + "indexFile" + fileBF[22:]
 		foundValue := SSTable.Get(key, summaryFileName, indexFileName, fileBF)
 
-		memtable.AddAndDelete(key, foundValue) 
+		memtable.AddAndDelete(key, foundValue)
 		// *** da li treba dodati pa obrisati u memtable, ako je tombstone pronadjenog u sstable = true?
 		// kako provjeriti tombstone iz sstable Get()?
 
-		
 		return foundValue, true
 	}
 
@@ -339,7 +336,7 @@ func EncodeBF(bf *BloomFilter.BloomFilter) ([]byte, bool) {
 }
 
 func DecodeBF(bytes []byte) (*BloomFilter.BloomFilter, bool) {
-	bf := BloomFilter.BloomFilter{} 
+	bf := BloomFilter.BloomFilter{}
 	err := bf.FromBytes(bytes)
 
 	if err != nil {
