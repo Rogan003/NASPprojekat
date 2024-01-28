@@ -2,6 +2,7 @@ package BloomFilter
 
 import (
 	"encoding/gob"
+	"bytes"
 	"os"
 )
 
@@ -91,4 +92,29 @@ func (bf *BloomFilter) Deserialize(path string) error {
 	}
 	//zasto je unreachable???
 	return nil
+}
+
+func (bf *BloomFilter) ToBytes() ([]byte, error) {
+	var network bytes.Buffer
+    enc := gob.NewEncoder(&network)
+
+    err := enc.Encode(*bf)
+    if err != nil {
+        return nil, err
+    }
+
+    return network.Bytes(), nil
+}
+
+func (bf *BloomFilter) FromBytes(bytess []byte) error {
+	network := bytes.NewBuffer(bytess)
+    dec := gob.NewDecoder(network)
+
+    err := dec.Decode(&bf)
+
+    if err != nil {
+        return err
+    }
+
+    return nil
 }
