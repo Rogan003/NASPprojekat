@@ -321,7 +321,34 @@ func Delete(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.
 	return nil, false
 }
 
+func CreateBF(expectedElements int, falsePositiveRate float64) ([]byte, bool) {
+	bf := BloomFilter.BloomFilter{}
+	bf.Init(expectedElements, falsePositiveRate)
 
+	return EncodeBF(&bf)
+}
+
+func EncodeBF(bf *BloomFilter.BloomFilter) ([]byte, bool) {
+	bytes, err := bf.ToBytes()
+
+	if err != nil {
+		return nil, true
+	}
+
+	return bytes, false
+}
+
+func DecodeBF(bytes []byte) (*BloomFilter.BloomFilter, bool) {
+	bf := BloomFilter.BloomFilter{} 
+	err := bf.FromBytes(bytes)
+
+	if err != nil {
+		fmt.Println(err)
+		return nil, true
+	}
+
+	return &bf, false
+}
 
 /*
 func MenuCMS() {
