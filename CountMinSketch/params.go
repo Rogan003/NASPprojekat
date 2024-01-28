@@ -1,6 +1,7 @@
 package CountMinSketch
 
 import (
+	"bytes"
 	"encoding/gob"
 	"math"
 	"os"
@@ -21,7 +22,7 @@ type CMS struct {
 	K         int
 }
 
-func NewCMS(e float64, d float64) CMS {
+func (cms *CMS) NewCMS(e float64, d float64) {
 	NumHash := CalculateK(e)
 	cols := CalculateM(d)
 	data := make([][]int, NumHash)
@@ -32,13 +33,12 @@ func NewCMS(e float64, d float64) CMS {
 		}
 	}
 	hashArray := CreateHashFunctions(NumHash)
-	return CMS{
-		HashArray: hashArray,
-		Data:      data,
-		M:         int(cols),
-		K:         int(NumHash),
-	}
+	cms.HashArray = hashArray
+	cms.Data = data
+	cms.M = int(cols)
+	cms.K = int(NumHash)
 }
+
 func (cms *CMS) AddToCMS(newData string) {
 	//data je novi podatak kao niz bajtova
 	data := []byte(newData)
@@ -97,6 +97,31 @@ func (cms *CMS) Deserialize(path string) error {
 			return err
 		}
 	}
+}
+
+func (cms *CMS) ToBytes() ([]byte, error) {
+	var network bytes.Buffer
+	enc := gob.NewEncoder(&network)
+
+	err := enc.Encode(*cms)
+	if err != nil {
+		return nil, err
+	}
+
+	return network.Bytes(), nil
+}
+
+func (cms *CMS) FromBytes(bytess []byte) error {
+	network := bytes.NewBuffer(bytess)
+	dec := gob.NewDecoder(network)
+
+	err := dec.Decode(&cms)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 /*

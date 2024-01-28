@@ -4,6 +4,7 @@ import (
 	"NASPprojekat/BloomFilter"
 	"NASPprojekat/Cache"
 	"NASPprojekat/Config"
+	"NASPprojekat/CountMinSketch"
 	"NASPprojekat/Memtable"
 	"NASPprojekat/SSTable"
 	"NASPprojekat/TokenBucket"
@@ -345,6 +346,34 @@ func DecodeBF(bytes []byte) (*BloomFilter.BloomFilter, bool) {
 	}
 
 	return &bf, false
+}
+
+func CreateCMS(width float64, depth float64) ([]byte, bool) {
+	cms := CountMinSketch.CMS{}
+	cms.NewCMS(depth, width)
+	return EncodeCMS(&cms)
+}
+
+func EncodeCMS(cms *CountMinSketch.CMS) ([]byte, bool) {
+	bytes, err := cms.ToBytes()
+
+	if err != nil {
+		return nil, true
+	}
+
+	return bytes, false
+}
+
+func DecodeCMS(bytes []byte) (*CountMinSketch.CMS, bool) {
+	cms := CountMinSketch.CMS{}
+	err := cms.FromBytes(bytes)
+
+	if err != nil {
+		fmt.Println(err)
+		return nil, true
+	}
+
+	return &cms, false
 }
 
 /*
