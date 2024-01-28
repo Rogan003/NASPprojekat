@@ -707,7 +707,7 @@ func levelMerge(level int, lsm Config.LSMTree) {
 
 	//Sada treba mergovati tabele
 		// num - ne treba ovde, prebacila sam ga gore jer odatle isto mozemo naci broj svakako
-	levelMergeFiles(level, dataFiles, indexFiles, summaryFiles, bloomFiles, merkleFiles, lsm,num)
+	levelMergeFiles(level, dataFiles, indexFiles, summaryFiles, bloomFiles, merkleFiles, lsm, num)
 
 	
 	// oduzmi jednu iz levela sto smo prebacili dole
@@ -723,6 +723,7 @@ func levelMerge(level int, lsm Config.LSMTree) {
 		levelMerge(level + 1, lsm)
 	}
 }
+
 
 
 func findOtherTables(level int, bottomIdx string, topIdx string, lsm Config.LSMTree) ([]string, []string, []string, []string, []string) {
@@ -742,17 +743,114 @@ func findOtherTables(level int, bottomIdx string, topIdx string, lsm Config.LSMT
 		FirstKey := SummaryContent.FirstKey
 		LastKey := SummaryContent.LastKey
 
+		var dataFile = "SSTable/files/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt"
+		var indexFile = "SSTable/files/indexFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt"
+		//var summaryFile = "SSTable/files/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt"   // vec ima gore
+		var bloomFile = "SSTable/files/bloomFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt"
+		var merkleFile = "SSTable/files/merkleFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt"
+
 		if FirstKey >= bottomIdx && FirstKey <= topIdx && LastKey >= bottomIdx && LastKey <= topIdx {
-			dataFiles = append(dataFiles, "SSTable/files/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt")
-			indexFiles = append(indexFiles, "SSTable/files/indexFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt")
-			summaryFiles = append(summaryFiles, "SSTable/files/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt")
-			bloomFiles = append(bloomFiles, "SSTable/files/bloomFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt")
-			merkleFiles = append(merkleFiles, "SSTable/files/merkleFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt")
+			dataFiles = append(dataFiles, dataFile)
+			indexFiles = append(indexFiles, indexFile)
+			summaryFiles = append(summaryFiles, summaryFile)
+			bloomFiles = append(bloomFiles, bloomFile)
+			merkleFiles = append(merkleFiles, merkleFile)
+		} else {
+
+			// NPR. ukupan prvi opseg = [30 - 80]
+
+			// prvi se nalazi u opsegu
+			if FirstKey >= bottomIdx && FirstKey <= topIdx {
+
+			}
+
+			// u ovoj sstabeli je npr. [1 - 40]
+			// drugi se nalazi u opsegu
+			if LastKey >= bottomIdx && LastKey <= topIdx {
+				// k1, k2       k2, k3
+				// 1   30		 30, 40
+				k1 := FirstKey   
+				k2 := bottomIdx
+				k3 := LastKey
+
+				// mogu poslati u jednu funckiju npr. splitSSTable(1, 30, 40)
+				// ona vrati entries1, entries2
+				// (entries1 - entry za rewrite samo)							 //   1 - 30
+				// (entries2 - entry za dodati u novu, veliku sstaeblu)   //  30 - 40
+
+			   entries1, entries2 := splitSSTable(k1, k2, k3, dataFile, indexFile, summaryFile, bloomFile, merkleFile)
+				_ = entries1
+				_ = entries2
+			}
 		}
 	}
 
 	return dataFiles, indexFiles, summaryFiles, bloomFiles, merkleFiles
 }
+
+
+
+func splitSSTable(k1 string, k2 string, k3 string, dataFile string, indexFile string, summaryFile string, bloomFile string, merkleFile string) ([]*Config.Entry, []*Config.Entry) {
+	// k1 = 1               1 - 30
+	// k2 = 30             30 - 40
+	// k3 = 40
+	// otvaramo samo taj jedan fajl koji treba rewrite  // onaj od   1 - 40 
+	file, err := os.OpenFile(dataFile, os.O_RDWR, 0777)
+	if err != nil {
+		panic(err)
+	}
+
+	var entries1 []*Config.Entry
+	var entries2 []*Config.Entry
+	var sortedAllEntries1 []*Config.Entry
+	var sortedAllEntries2 []*Config.Entry
+
+	var entries []*Config.Entry
+	entry := readMerge(file)
+	entries = append(entries, entry)  // valjda svi entry moguci iz dataFile
+	
+
+	// proci kroz sve entrije, podijeliti po kljucevima na entries1 i entries2
+	for i := 0; i < len(entries); i++ {
+		entry := entries[i]
+		key := entry.Transaction.Key
+		if (key >= k2) {
+			entries2 = append(entries2, entry)
+		} else {
+			entries1 = append(entries1, entry)
+		}
+	}
+
+	for {
+		//procitali smo sve fajlove do kraja
+		if areAllNil(entries1) {
+			break
+		}
+		_, minEntry := findMinKeyEntry(entries1)
+		sortedAllEntries1 = append(sortedAllEntries1, minEntry)
+		//citamo naredne entye za fajlove koji su bili na min entry
+		/*for _, index := range minKeyArray {
+			newEntry := readMerge(levelFiles[index])
+			entries[index] = newEntry
+		}*/
+	}
+
+	for {
+		//procitali smo sve fajlove do kraja
+		if areAllNil(entries2) {
+			break
+		}
+		_, minEntry := findMinKeyEntry(entries)
+		sortedAllEntries = append(sortedAllEntries, minEntry)
+		//citamo naredne entye za fajlove koji su bili na min entry
+		for _, index := range minKeyArray {
+			newEntry := readMerge(levelFiles[index])
+			entries[index] = newEntry
+		}
+	}
+	closeFiles(levelFiles)
+}
+
 
 
 func levelMergeFiles(level int, dataFiles []string, indexFiles []string, summaryFiles []string, bloomFiles []string, merkleFiles []string, lsm Config.LSMTree, num int) {
