@@ -943,6 +943,8 @@ func extractNumbers(fileName string) (int, int) {
 	// Konverzija pretposlednjeg dela u broj
 	preLastPart := parts[len(parts)-2]
 	preLastNum, _ := strconv.Atoi(preLastPart)
+
+	return lastNum, preLastNum
 }
 
 func renameFiles(files []string, targetFile string, num int){
@@ -980,7 +982,7 @@ func renameFiles(files []string, targetFile string, num int){
 	for i:=firstIdx ; i<lastIdx ;i++{
 
 		path := files[i]
-		tempLastNum, tempPreLastNum := extractNumbers(path)
+		tempLastNum, _ := extractNumbers(path)
 		
 		tempLastNum-=num
 		newPath := strings.Replace(path, fmt.Sprintf("_%d.", lastNum), fmt.Sprintf("_%d.", tempLastNum), 1)
@@ -991,6 +993,4 @@ func renameFiles(files []string, targetFile string, num int){
 			return
 		}
 	}
-
-
 }
