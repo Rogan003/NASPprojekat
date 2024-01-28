@@ -14,6 +14,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"bytes"
 )
 
 func Get(memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *TokenBucket.TokenBucket, lsm *Config.LSMTree) ([]byte, bool) {
@@ -100,13 +101,13 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 		fmt.Println("Greska! Opseg nije moguc!")
 	} else {
 		mem_indexes := make([]int, memtable.N)
-
+		
 		for index, value := range memtable.Arr {
 			memElems := value.GetSortedElems()
 			mem_indexes[index] = -1
 
 			for index, value := range memElems {
-				if value.Transaction.Key > key1 {
+				if value.Transaction.Key >= key1 && value.Transaction.Key <= key2 {
 					mem_indexes[index] = index
 					break
 				}
@@ -141,7 +142,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 					_, err := sumarryFile.Read(keySizeBytes)
 					keySize := int64(binary.LittleEndian.Uint64(keySizeBytes))
 
-					//citamo keySize bajtiva da bi dobili kljuc
+					//citamo keySize bajtova da bi dobili kljuc
 					keyValue := make([]byte, keySize)
 					_, err = sumarryFile.Read(keyValue)
 					if err != nil {
@@ -162,7 +163,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 
 						for {
 							currentKey, position := SSTable.ReadFromIndex(file)
-							if currentKey >= key1 {
+							if currentKey >= key1 && currentKey <= key2 {
 								indexes[index] = int(position)
 								break
 							}
@@ -193,34 +194,132 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 
 		forward := true
 		works := true
+		lastElemsTables := make([]string, pageSize)
+		lastElemsPos := make([]int, pageSize)
+		lastIter := 0
 
 		for works {
-			elems := make([]Config.Entry, pageSize)
+			keys := make([]string, pageSize)
+			vals := make([][]byte, pageSize)
 
-			for i := 0; i < 10; i++ {
-				fmt.Println(forward) // ovo je samo da ne javlja gresku
-				// ovde se magija desava, sve okej validne elem dodati u elems
-				// prolaziti i kroz memtable u pravilnom redosledu od najnovije do najstarije
-				// prolazak kroz sve elemente na pozicijama, vidimo najmanji i dodajmeo i inkrementiramo (pomeramo napred), ako je previse napred -1
-				// ovo je sve ako je forward
-				// back bez neke cache strukture, problem?
+			if forward {
+				lastIter += pageSize
+
+				for i := 0; i < pageSize; i++ {
+					// ovde se magija desava, sve okej validne elem dodati u elems
+					// prolaziti i kroz memtable u pravilnom redosledu od najnovije do najstarije
+					// prolazak kroz sve elemente na pozicijama, vidimo najmanji i dodajmeo i inkrementiramo (pomeramo napred), ako je previse napred -1
+					// ovo je sve ako je forward
+					// back bez neke cache strukture, problem?
+					
+					// pretraga za najmanjim kljucem koji nije obrisan i nije izmenjen
+					// KAKO PROVERITI DA NIJE IZMENJEN? Pregledati prethodni zabelezeni? Pregledati prethodni zabelezeni u lastElems itd...
+					keys[i] = "{"
+
+					for i := memtable.R + memtable.N; i > memtable.R; i-- {
+						memElems := value.GetSortedElems()
+						
+						if len(memElems) == 0 {
+							break
+						}
+						
+						if mem_indexes[i % memtable.N] == -1 {
+							continue
+						}
+
+						for {
+							keyHelp := memElems[mem_indexes[i % memtable.N]].Transaction.Key
+
+							if keyHelp < keys[i] && keyHelp <= key2 && !memElems[mem_indexes[i % memtable.N]].Tombstone {
+								keys[i] = keyHelp
+								vals[i] = memElems[mem_indexes[i % memtable.N]].Transaction.Value
+								break
+							} else if keyHelp > key2 {
+								mem_indexes[i % memtable.N] = -1
+								break
+							} else if keyHelp < keys[i] {
+								mem_indexes[i % memtable.N]++;
+							}
+						}
+					}
+
+					for index, value := range sstables {
+						if indexes[index] == -1 {
+							continue
+						}
+
+						indexFileName := value[0:14] + "indexFile" + value[22:]
+
+						for {
+							keyHelp, valHelp := SSTable.ReadData(indexes[index], value) // u get se poziva nad ovim value?
+							// sta ako dodjemo do kraja fajla?
+							if keyHelp < keys[i] && keyHelp <= key2 && !bytes.Equal(keyHelp, []byte{}) {
+								keys[i] = keyHelp
+								vals[i] = valHelp
+								break
+							} else if keyHelp > key2 {
+								indexes[index] = -1
+								break
+							} else if keyHelp < keys[i] {
+								file, err := os.OpenFile(value, os.O_RDWR, 0777)
+								if err != nil {
+									log.Fatal(err)
+								}
+								defer file.Close()
+								// pomeramo se na poziciju u dataFile gde je nas podatak
+								_, err = file.Seek(indexes[index], 0)
+								if err != nil {
+									log.Fatal(err)
+								}
+								// cita bajtove podatka DO key i value u info
+								// CRC (4B)   | Timestamp (8B) | Tombstone(1B) | Key Size (8B) | Value Size (8B)
+								info := make([]byte, SSTable.KEY_SIZE_START)
+								_, err = file.Read(info)
+								if err != nil {
+									panic(err)
+								}
+								
+								info2 := make([]byte, SSTable.KEY_START-SSTable.KEY_SIZE_START)
+								_, err = file.Read(info2)
+								if err != nil {
+									panic(err)
+								}
+							
+								key_size := binary.LittleEndian.Uint64(info2[:SSTable.KEY_SIZE_SIZE])
+								value_size := binary.LittleEndian.Uint64(info2[SSTable.KEY_SIZE_SIZE:])
+
+								indexes[index] += SSTable.KEY_START + key_size + value_size
+							}
+						}
+					}
+				}
+
+			} else if lastIter > 0 {
+				lastIter -= pageSize
+
+				for i := 0; i < pageSize; i++ {
+					// ucitavanje sa lastElemsPos[lastIter + i]
+				}
+
+			} else {
+				fmt.Println("Nema podataka nazad!")
 			}
 
-			for index, value := range elems {
-				fmt.Printf("%i. %s: %s\n", index+1, value.Transaction.Key, value.Transaction.Value) // kako ispisati niz bajtova? kao string?
+			for index, value := range keys {
+				fmt.Printf("%i. %s: %s\n", index + 1, value, vals[index]) // kako ispisati niz bajtova? kao string?
 			}
 
-			var option int = -1
+			var option char = '0'
 
 			for option < 1 || option > 3 {
 				fmt.Printf("1. Napred\n2. Nazad\n3. Kraj\nOpcija: ")
-				fmt.Scanf("%v", &option) // ako se unese karakter greska? nesto oko ovoga?
+				fmt.Scanf("%c", &option) // ako se unese karakter greska? nesto oko ovoga?
 
-				if option == 1 {
+				if option == '1' {
 					forward = true
-				} else if option == 2 {
+				} else if option == '2' {
 					forward = false
-				} else if option == 3 {
+				} else if option == '3' {
 					works = false
 				} else {
 					fmt.Println("Nepostojeca opcija!")

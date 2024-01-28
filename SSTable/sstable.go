@@ -108,7 +108,8 @@ func Get(key string, SummaryFileName string, IndexFileName string, DataFileName 
 				if dataPosition == uint64(notFound) {
 					panic("sstable: Nije pronadjen key u indexFile")
 				}
-				return readData(int64(dataPosition), DataFileName)
+				_, data := ReadData(int64(dataPosition), DataFileName)
+				return data
 			} else {
 				// citanje pozicije za taj kljuc u indexFile
 				positionBytes := make([]byte, KEY_SIZE_SIZE)
@@ -257,7 +258,7 @@ func LoadSummary(summary *os.File) *SStableSummary {
 	}
 }
 
-func readData(position int64, DataFileName string) []byte {
+func ReadData(position int64, DataFileName string) ([]byte, []byte) {
 	file, err := os.OpenFile(DataFileName, os.O_RDWR, 0777)
 	if err != nil {
 		log.Fatal(err)
@@ -298,8 +299,9 @@ func readData(position int64, DataFileName string) []byte {
 	if err != nil {
 		panic(err)
 	}
+	key := data[:key_size]
 	val := data[key_size : key_size+value_size]
-	return val
+	return key, val
 }
 
 func CRC32(data []byte) uint32 {

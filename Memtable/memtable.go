@@ -60,7 +60,7 @@ type NMemtables struct {
 	N   int         // broj memtabli
 	Arr []*Memtable // niz memtabli
 	l   int         // left index
-	r   int         // right index
+	R   int         // right index
 	lsm *Config.LSMTree // lsm tree from config
 }
 
@@ -77,7 +77,7 @@ func (nmt *NMemtables) Init(vers string, mCap int, num int, lsm *Config.LSMTree)
 	nmt.N = num
 	nmt.Arr = curArr
 	nmt.l = 0
-	nmt.r = 0
+	nmt.R = 0
 	nmt.lsm = lsm
 }
 
@@ -89,7 +89,7 @@ func (nmt *NMemtables) Init(vers string, mCap int, num int, lsm *Config.LSMTree)
 func (nmt *NMemtables) Add(key string, value []byte) {
 
 	arr := nmt.Arr         // arr memtabli
-	memtable := arr[nmt.r] // prva "aktivna" memtabla
+	memtable := arr[nmt.R] // prva "aktivna" memtabla
 
 	var ok bool = false
 	if memtable.version == "skiplist" {
@@ -103,12 +103,12 @@ func (nmt *NMemtables) Add(key string, value []byte) {
 	}
 
 	if memtable.curCap == memtable.maxCap {
-		if (nmt.r-nmt.l == nmt.N-1) || (nmt.r < nmt.l) {
+		if (nmt.R-nmt.l == nmt.N-1) || (nmt.R < nmt.l) {
 			memtableLast := arr[nmt.l] // izbrisala sam proveru da li je memtable empty
 			memtableLast.flush(nmt.lsm)       // valjda nece trebati (testiracu)
 			nmt.l = (nmt.l + 1) % nmt.N
 		}
-		nmt.r = (nmt.r + 1) % nmt.N
+		nmt.R = (nmt.R + 1) % nmt.N
 	}
 }
 
@@ -120,7 +120,7 @@ func (nmt *NMemtables) Add(key string, value []byte) {
 func (nmt *NMemtables) AddAndDelete(key string, value []byte) {
 
 	arr := nmt.Arr         // arr memtabli
-	memtable := arr[nmt.r] // prva "aktivna" memtabla
+	memtable := arr[nmt.R] // prva "aktivna" memtabla
 
 	var ok bool = false
 	if memtable.version == "skiplist" {
@@ -136,12 +136,12 @@ func (nmt *NMemtables) AddAndDelete(key string, value []byte) {
 	}
 
 	if memtable.curCap == memtable.maxCap {
-		if (nmt.r-nmt.l == nmt.N-1) || (nmt.r < nmt.l) {
+		if (nmt.R-nmt.l == nmt.N-1) || (nmt.R < nmt.l) {
 			memtableLast := arr[nmt.l] // izbrisala sam proveru da li je memtable empty
 			memtableLast.flush(nmt.lsm)       // valjda nece trebati (testiracu)
 			nmt.l = (nmt.l + 1) % nmt.N
 		}
-		nmt.r = (nmt.r + 1) % nmt.N
+		nmt.R = (nmt.R + 1) % nmt.N
 	}
 }
 
@@ -157,7 +157,7 @@ func (nmt *NMemtables) Delete(key string) bool {
 
 	if (found) {
 		arr := nmt.Arr
-		memtable := arr[nmt.r]
+		memtable := arr[nmt.R]
 	
 		if memtable.version == "skiplist" {
 			// logicko brisanje iz skip liste
@@ -199,11 +199,11 @@ func (nmt *NMemtables) Delete(key string) bool {
 func (nmt *NMemtables) Get(key string) ([]byte, bool, bool) {
 
 	arr := nmt.Arr
-	r := nmt.r   // pretragu pocinjemo od prve aktivne, pa prelazimo dalje na starije
+	r := nmt.R   // pretragu pocinjemo od prve aktivne, pa prelazimo dalje na starije
 
 	for (true) {
 		memtable := arr[r]
-		if (memtable.empty && r != nmt.r) {  // ako je naredna memtabela prazna, ni sledece nisu popunjene, nema potrebe dalje da gledamo 
+		if (memtable.empty && r != nmt.R) {  // ako je naredna memtabela prazna, ni sledece nisu popunjene, nema potrebe dalje da gledamo 
 			//fmt.Printf("Element sa kljucem %s ne postoji!\n", key)
 			return []byte{}, false, false
 		}
@@ -216,7 +216,7 @@ func (nmt *NMemtables) Get(key string) ([]byte, bool, bool) {
 					return []byte{}, false, false
 				}
 
-				if (r == nmt.r) {
+				if (r == nmt.R) {
 					return skipNode.Elem.Transaction.Value, true, true    
 																						  
 				} else {
@@ -232,7 +232,7 @@ func (nmt *NMemtables) Get(key string) ([]byte, bool, bool) {
 					return []byte{}, false, false
 				}
 
-				if (r == nmt.r) {
+				if (r == nmt.R) {
 					return elem.Transaction.Value, true, true
 				} else {
 					return elem.Transaction.Value, true, false
@@ -241,7 +241,7 @@ func (nmt *NMemtables) Get(key string) ([]byte, bool, bool) {
 		}
 
 		r = (r - 1 + nmt.N) % nmt.N
-		if (r == nmt.r) {  // vratili smo se na memtabelu od koje smo krenuli pretragu - prekidamo, nismo nasli podatak
+		if (r == nmt.R) {  // vratili smo se na memtabelu od koje smo krenuli pretragu - prekidamo, nismo nasli podatak
 			break
 		}
 	}
@@ -277,7 +277,7 @@ func (mt *Memtable) flush(lsm *Config.LSMTree) {
 func (mt *Memtable) GetSortedElems() ([]*Config.Entry) {
 
 	// arr := nmt.Arr
-	// memtable := arr[nmt.r]
+	// memtable := arr[nmt.R]
 
 	if mt.version == "skiplist" {
 		return mt.skiplist.AllElem()
