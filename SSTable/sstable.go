@@ -15,6 +15,8 @@ import (
 	"log"
 	"os"
 	"time"
+	"math"
+	"sort"
 )
 
 const (
@@ -703,7 +705,7 @@ func levelMerge(level int, lsm Config.LSMTree) {
 
 	//Sada treba mergovati tabele
 		// num - ne treba ovde, prebacila sam ga gore jer odatle isto mozemo naci broj svakako
-	levelMergeFiles(level, dataFiles, indexFiles, summaryFiles, bloomFiles, merkleFiles, lsm)
+	levelMergeFiles(level, dataFiles, indexFiles, summaryFiles, bloomFiles, merkleFiles, lsm,num)
 
 	
 	// oduzmi jednu iz levela sto smo prebacili dole
@@ -714,7 +716,7 @@ func levelMerge(level int, lsm Config.LSMTree) {
 
 
 	// ** T: provjeriti da li je okej uslov za level tiered?
-	if lsm.Levels[level + 1] == lsm.MaxSSTables && level != lsm.CountOfLevels { 
+	if lsm.Levels[level + 1] == int(float64(lsm.MaxSSTables) * math.Pow( float64(lsm.T) ,float64(level + 1))) && level != lsm.CountOfLevels { 
 		// proverava broj fajlova na sledećem nivou, i ne treba da pozove merge ako je na 3. nivou tj ako je nivo 2
 		levelMerge(level + 1, lsm)
 	}
@@ -751,7 +753,7 @@ func findOtherTables(level int, bottomIdx string, topIdx string, lsm Config.LSMT
 }
 
 
-func levelMergeFiles(level int, dataFiles []string, indexFiles []string, summaryFiles []string, bloomFiles []string, merkleFiles []string, lsm Config.LSMTree) {
+func levelMergeFiles(level int, dataFiles []string, indexFiles []string, summaryFiles []string, bloomFiles []string, merkleFiles []string, lsm Config.LSMTree, num int) {
 
 	//levelFiles su SStabele iz narednog nivoa + tabela iz prethodnog
 	levelFiles, err := openFiles(dataFiles)
@@ -849,12 +851,37 @@ func levelMergeFiles(level int, dataFiles []string, indexFiles []string, summary
 			log.Fatal(err)
 		}
 
+		//nisam sigurna da li ovo zapravo izbaci 
 		removeFileName(lsm, dataFiles[i])
 		removeFileName(lsm, indexFiles[i])
 		removeFileName(lsm, summaryFiles[i])
 		removeFileName(lsm, bloomFiles[i])
 		removeFileName(lsm, merkleFiles[i])
 	}
+
+	//msm da bi trebalo da stoji umesto dataFiles lsm.DataFilesNames itd ali treba pogledati
+	sort.Slice(lsm.DataFilesNames, func(i, j int) bool {
+		return compareFilenames(i, j, lsm.DataFilesNames)
+	})
+	sort.Slice(lsm.IndexFilesNames, func(i, j int) bool {
+		return compareFilenames(i, j, lsm.IndexFilesNames)
+	})
+	sort.Slice(lsm.SummaryFilesNames, func(i, j int) bool {
+		return compareFilenames(i, j, lsm.SummaryFilesNames)
+	})
+	sort.Slice(lsm.BloomFilterFilesNames, func(i, j int) bool {
+		return compareFilenames(i, j, lsm.BloomFilterFilesNames)
+	})
+	sort.Slice(lsm.MerkleTreeFilesNames, func(i, j int) bool {
+		return compareFilenames(i, j, lsm.MerkleTreeFilesNames)
+	})
+
+
+	renameFiles(lsm.DataFilesNames, dataFileName, num)
+	renameFiles(lsm.IndexFilesNames, indexFileName, num)
+	renameFiles(lsm.SummaryFilesNames, summaryFileName, num)
+	renameFiles(lsm.BloomFilterFilesNames, bloomFileName, num)
+	renameFiles(lsm.MerkleTreeFilesNames, merkleFileName, num)
 
 
 	//Da li treba rename ostalih fajlova??
@@ -886,4 +913,84 @@ func levelMergeFiles(level int, dataFiles []string, indexFiles []string, summary
 	// - onda trebamo sortirati sve prvo? pa onda rename uraditi?
 	// - za ovo 2. nisam sigurna tacno kako je predstavljeno, to je navodno taj LSM tree, a kako to sve izgleda tu?
 	// - kako se appenduje?
+}
+
+func compareFilenames(i, j int,fileNames []string) bool {
+	
+	//trazenje poslednjeg i pretposlednjeg broja u imenu
+	//npr ako stoji 3_11 , pretposlednji je 3, poslednji je 11
+	numI, subNumI := extractNumbers(fileNames[i])
+	numJ, subNumJ := extractNumbers(fileNames[j])
+
+	// Poređenje pretposlednjih brojeva
+	if subNumI != subNumJ {
+		return subNumI < subNumJ
+	}
+
+	// Ako su pretposlednji brojevi jednaki, poređenje poslednjih brojeva
+	return numI < numJ
+}
+
+func extractNumbers(fileName string) (int, int) {
+	// Razdvajanje naziva fajla na osnovu donje crte
+	parts := strings.Split(fileName, "_")
+
+	// Konverzija poslednjeg dela u broj, uzimajući u obzir ekstenziju
+	lastPartWithExt := parts[len(parts)-1]
+	lastPartWithoutExt := strings.TrimSuffix(lastPartWithExt, "")
+	lastNum, _ := strconv.Atoi(lastPartWithoutExt)
+
+	// Konverzija pretposlednjeg dela u broj
+	preLastPart := parts[len(parts)-2]
+	preLastNum, _ := strconv.Atoi(preLastPart)
+}
+
+func renameFiles(files []string, targetFile string, num int){
+
+	lastNum, preLastNum := extractNumbers(targetFile)
+
+	var firstIdx int = -1
+	var lastIdx int = -1
+
+	
+	//npr. ako je niz 2_2, 3_1, 3_2, 3_4, 3_5, 4_1, 4_6
+	//firstIdx = 3
+	//lastIdx = 5
+	for i, path := range files{
+		tempLastNum, tempPreLastNum := extractNumbers(path)
+
+		if tempPreLastNum < preLastNum{
+			continue
+		}
+
+		//ako je prosao svoj level, uzima indeks elementa kao indikator za kraj prethodnog levela
+		if tempPreLastNum > preLastNum{
+			lastIdx = i
+			break
+		}
+
+		//ako je dosao do ovde to znaci da je dosao do putanja trazenog levela
+
+		//pronasli smo indeks na kom se nalazi prvi element nakon targetFile u nizu putanja
+		if lastNum == tempLastNum{
+			firstIdx = i+1
+		}
+	}
+
+	for i:=firstIdx ; i<lastIdx ;i++{
+
+		path := files[i]
+		tempLastNum, tempPreLastNum := extractNumbers(path)
+		
+		tempLastNum-=num
+		newPath := strings.Replace(path, fmt.Sprintf("_%d.", lastNum), fmt.Sprintf("_%d.", tempLastNum), 1)
+
+		err := os.Rename(path, newPath)
+		if err != nil {
+			fmt.Println("Greška pri preimenovanju fajla:", err)
+			return
+		}
+	}
+
+
 }
