@@ -15,6 +15,37 @@ import (
 	"time"
 )
 
+// treba jos resiti kad segment sadrzi pola jedne a pola druge memtabele
+func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
+	//ucitavamo imena svih fajlova sa segmentima
+	segementsFiles, err := ScanWALFolder()
+	if err != nil {
+		return err
+	}
+
+	//redom ucitavamo fajlove sa segmentima
+	for _, fileName := range segementsFiles {
+		//procitamo entirje iz segmenta
+		entries, err := ReadEntriesFromFile("NASPprojekat/files/WAL/" + fileName)
+		if err != nil { //ako do nje dodje za slucaj da je doslo do greske
+			return err
+		}
+
+		//za svaki entry izvrsimo ponovo operaciju
+		for _, entry := range entries {
+			// ako je operacija brisanja
+			if entry.Tombstone {
+				mem.Delete(entry.Transaction.Key)
+			} else {
+				//ako je operacija dodavanja ili izmene
+				mem.Add(entry.Transaction.Key, entry.Transaction.Value)
+			}
+		}
+
+	}
+	return nil
+}
+
 //prilikom pokretanja wal-a, treba da se skenira folder sa segmentima i unutar wala da se kreira struktura sa offsetima segmenata
 //i putanjama do njih. Poslednji segment treba da se ucita u memorijsku strukturu i moze da se markira sa _END. Da li treba obezbediti trajnost
 //podataka u takvoj strukturi?
