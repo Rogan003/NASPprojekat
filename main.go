@@ -36,12 +36,15 @@ func main() {
 	lsm := Config.NewLMSTree(conf)
 
 	mt := Memtable.NMemtables{}
-	mt.Init(conf.MemtableStructure, int(conf.MemtableSize), conf.MemtableNumber, lsm)
 
 	tb := TokenBucket.TokenBucket{}
 	tb.Init(conf.TokenBucketSize, time.Minute)
-	mt.Add("2", make([]byte, 10))
-	mt.Arr[mt.R].Flush(lsm)
+
+	/*
+		mt.Init(conf.MemtableStructure, int(conf.MemtableSize), conf.MemtableNumber, lsm)
+		mt.Add("2", make([]byte, 10))
+		mt.Arr[mt.R].Flush(lsm)
+	*/
 
 	/*
 		PROVERA ZA KREIRANJE FAJLOVA SSTABLE
