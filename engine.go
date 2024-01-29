@@ -190,12 +190,10 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 			}
 		}
 
-		// pretraga elemenata u range (prvo verzija bez cuvanja elem, pa onda sa cuvanjem)
-
 		forward := true
 		works := true
-		//lastElemsTables := make([]string, pageSize)
-		//lastElemsPos := make([]int, pageSize)
+		lastElemsTables := make([]string, pageSize)
+		lastElemsPos := make([]int, pageSize)
 		lastIter := 0
 
 		for works {
@@ -203,100 +201,134 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 			vals := make([][]byte, pageSize)
 
 			if forward {
-				lastIter += pageSize
+				if lastIter == len(lastElemsTables) {
+					lastElemsTables = append(lastElemsTables, make([]string, pageSize)...)
+					lastElemsPos = append(lastElemsPos, make([]int, pageSize)...)
 
-				for i := 0; i < pageSize; i++ {
-					// ovde se magija desava, sve okej validne elem dodati u elems
-					// prolaziti i kroz memtable u pravilnom redosledu od najnovije do najstarije
-					// prolazak kroz sve elemente na pozicijama, vidimo najmanji i dodajmeo i inkrementiramo (pomeramo napred), ako je previse napred -1
-					// ovo je sve ako je forward
-					// back bez neke cache strukture, problem?
+					for in := 0; in < pageSize; in++ {
+						// ovde se magija desava, sve okej validne elem dodati u elems
+						// prolaziti i kroz memtable u pravilnom redosledu od najnovije do najstarije
+						// prolazak kroz sve elemente na pozicijama, vidimo najmanji i dodajmeo i inkrementiramo (pomeramo napred), ako je previse napred -1
+						// ovo je sve ako je forward
+						// back bez neke cache strukture, problem?
 
-					// pretraga za najmanjim kljucem koji nije obrisan i nije izmenjen
-					// KAKO PROVERITI DA NIJE IZMENJEN? Pregledati prethodni zabelezeni? Pregledati prethodni zabelezeni u lastElems itd...
-					keys[i] = "{"
+						// pretraga za najmanjim kljucem koji nije obrisan i nije izmenjen
+						// KAKO PROVERITI DA NIJE IZMENJEN? Pregledati prethodni zabelezeni? Pregledati prethodni zabelezeni u lastElems itd...
+						keys[in] = "{"
 
-					for i := memtable.R + memtable.N; i > memtable.R; i-- {
-						memElems := memtable.Arr[i%memtable.N].GetSortedElems()
+						for i := memtable.R + memtable.N; i > memtable.R; i-- {
+							memElems := memtable.Arr[i%memtable.N].GetSortedElems()
 
-						if len(memElems) == 0 {
-							break
+							if len(memElems) == 0 {
+								break
+							}
+
+							if mem_indexes[i%memtable.N] == -1 {
+								continue
+							}
+
+							for {
+								keyHelp := memElems[mem_indexes[i%memtable.N]].Transaction.Key
+
+								if keyHelp < keys[in] && keyHelp <= key2 && !memElems[mem_indexes[i%memtable.N]].Tombstone {
+									keys[in] = keyHelp
+									vals[in] = memElems[mem_indexes[i % memtable.N]].Transaction.Value
+									lastElemsTables[in] = "M" + string(i % memtable.N)
+									lastElemsPos[in] = mem_indexes[i % memtable.N]
+									break
+								} else if keyHelp > key2 {
+									mem_indexes[i%memtable.N] = -1
+									break
+								} else if keyHelp < keys[in] {
+									mem_indexes[i%memtable.N]++
+								}
+							}
 						}
 
-						if mem_indexes[i%memtable.N] == -1 {
-							continue
-						}
+						for index, value := range sstables {
+							if indexes[index] == -1 {
+								continue
+							}
 
-						for {
-							keyHelp := memElems[mem_indexes[i%memtable.N]].Transaction.Key
+							for {
+								keyHelp, valHelp := SSTable.ReadData(int64(indexes[index]), value) // u get se poziva nad ovim value?
+								// sta ako dodjemo do kraja fajla?
+								if string(keyHelp) < keys[in] && string(keyHelp) <= key2 && !bytes.Equal(keyHelp, []byte{}) {
+									keys[in] = string(keyHelp)
+									vals[in] = valHelp
+									lastElemsTables[in] = "S" + string(index)
+									lastElemsPos[in] = indexes[index]
+									break
+								} else if string(keyHelp) > key2 {
+									indexes[index] = -1
+									break
+								} else if string(keyHelp) < keys[in] {
+									file, err := os.OpenFile(value, os.O_RDWR, 0777)
+									if err != nil {
+										log.Fatal(err)
+									}
+									defer file.Close()
+									// pomeramo se na poziciju u dataFile gde je nas podatak
+									_, err = file.Seek(int64(indexes[index]), 0)
+									if err != nil {
+										log.Fatal(err)
+									}
+									// cita bajtove podatka DO key i value u info
+									// CRC (4B)   | Timestamp (8B) | Tombstone(1B) | Key Size (8B) | Value Size (8B)
+									info := make([]byte, SSTable.KEY_SIZE_START)
+									_, err = file.Read(info)
+									if err != nil {
+										panic(err)
+									}
 
-							if keyHelp < keys[i] && keyHelp <= key2 && !memElems[mem_indexes[i%memtable.N]].Tombstone {
-								keys[i] = keyHelp
-								vals[i] = memElems[mem_indexes[i%memtable.N]].Transaction.Value
-								break
-							} else if keyHelp > key2 {
-								mem_indexes[i%memtable.N] = -1
-								break
-							} else if keyHelp < keys[i] {
-								mem_indexes[i%memtable.N]++
+									info2 := make([]byte, SSTable.KEY_START-SSTable.KEY_SIZE_START)
+									_, err = file.Read(info2)
+									if err != nil {
+										panic(err)
+									}
+
+									key_size := binary.LittleEndian.Uint64(info2[:SSTable.KEY_SIZE_SIZE])
+									value_size := binary.LittleEndian.Uint64(info2[SSTable.KEY_SIZE_SIZE:])
+
+									indexes[index] += int(SSTable.KEY_START) + int(key_size) + int(value_size)
+								}
 							}
 						}
 					}
 
-					for index, value := range sstables {
-						if indexes[index] == -1 {
-							continue
-						}
-
-						for {
-							keyHelp, valHelp := SSTable.ReadData(int64(indexes[index]), value) // u get se poziva nad ovim value?
-							// sta ako dodjemo do kraja fajla?
-							if string(keyHelp) < keys[i] && string(keyHelp) <= key2 && !bytes.Equal(keyHelp, []byte{}) {
-								keys[i] = string(keyHelp)
-								vals[i] = valHelp
-								break
-							} else if string(keyHelp) > key2 {
-								indexes[index] = -1
-								break
-							} else if string(keyHelp) < keys[i] {
-								file, err := os.OpenFile(value, os.O_RDWR, 0777)
-								if err != nil {
-									log.Fatal(err)
-								}
-								defer file.Close()
-								// pomeramo se na poziciju u dataFile gde je nas podatak
-								_, err = file.Seek(int64(indexes[index]), 0)
-								if err != nil {
-									log.Fatal(err)
-								}
-								// cita bajtove podatka DO key i value u info
-								// CRC (4B)   | Timestamp (8B) | Tombstone(1B) | Key Size (8B) | Value Size (8B)
-								info := make([]byte, SSTable.KEY_SIZE_START)
-								_, err = file.Read(info)
-								if err != nil {
-									panic(err)
-								}
-
-								info2 := make([]byte, SSTable.KEY_START-SSTable.KEY_SIZE_START)
-								_, err = file.Read(info2)
-								if err != nil {
-									panic(err)
-								}
-
-								key_size := binary.LittleEndian.Uint64(info2[:SSTable.KEY_SIZE_SIZE])
-								value_size := binary.LittleEndian.Uint64(info2[SSTable.KEY_SIZE_SIZE:])
-
-								indexes[index] += int(SSTable.KEY_START) + int(key_size) + int(value_size)
-							}
+				} else {
+					for i := 0; i < pageSize; i++ {
+						if lastElemsTables[lastIter + i][0] == 'M' {
+							memElems := memtable.Arr[int(lastElemsTables[lastIter + i][1:])].GetSortedElems()
+	
+							keys[i] = memElems[lastElemsPos[lastIter + i]].Transaction.Key
+							vals[i] = memElems[lastElemsPos[lastIter + i]].Transaction.Value
+						} else {
+							keyHelp, valHelp := SSTable.ReadData(lastElemsPos[lastIter + i], sstables[int(lastElemsTables[lastIter + i][1:])])
+							
+							keys[i] = string(keyHelp)
+							vals[i] = valHelp
 						}
 					}
 				}
 
-			} else if lastIter > 0 {
+				lastIter += pageSize
+
+			} else if lastIter > pageSize {
 				lastIter -= pageSize
 
 				for i := 0; i < pageSize; i++ {
-					// ucitavanje sa lastElemsPos[lastIter + i]
+					if lastElemsTables[lastIter - pageSize + i][0] == 'M' {
+						memElems := memtable.Arr[int(lastElemsTables[lastIter - pageSize + i][1:])].GetSortedElems()
+
+						keys[i] = memElems[lastElemsPos[lastIter - pageSize + i]].Transaction.Key
+						vals[i] = memElems[lastElemsPos[lastIter - pageSize + i]].Transaction.Value
+					} else {
+						keyHelp, valHelp := SSTable.ReadData(lastElemsPos[lastIter - pageSize + i], sstables[int(lastElemsTables[lastIter - pageSize + i][1:])])
+						
+						keys[i] = string(keyHelp)
+						vals[i] = valHelp
+					}
 				}
 
 			} else {
@@ -304,14 +336,14 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 			}
 
 			for index, value := range keys {
-				fmt.Printf("%i. %s: %s\n", index+1, value, vals[index]) // kako ispisati niz bajtova? kao string?
+				fmt.Printf("%i. %s: %s\n", index+1, value, vals[index])
 			}
 
 			var option string = "0"
 
 			for true {
 				fmt.Printf("1. Napred\n2. Nazad\n3. Kraj\nOpcija: ")
-				fmt.Scanf("%s", &option) // ako se unese karakter greska? nesto oko ovoga?
+				fmt.Scanf("%s", &option)
 
 				if option == "1" {
 					forward = true
