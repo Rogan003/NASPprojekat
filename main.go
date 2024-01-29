@@ -71,6 +71,10 @@ func main() {
 		fmt.Println("5. Moj HLL")
 		fmt.Println("6. Moj CMS")
 		fmt.Println("7. Moj SimHash")
+		fmt.Println("8. Range Scan")
+		fmt.Println("9. Prefix Scan")
+		fmt.Println("10. Range Iter")
+		fmt.Println("11. Prefix Iter")
 		fmt.Println("x. Izlaz")
 		fmt.Print("Unesi broj opcije: ")
 
@@ -87,6 +91,12 @@ func main() {
 			fmt.Println("Unesite kljuc elementa: ")
 			scanner.Scan()
 			key := scanner.Text()
+
+			if len(key) > 4 && (key[0:3] == "bf_" || key[0:4] == "cms_" || key[0:4] == "hll_" || key[0:3] == "sh_" || key[0:3] == "tb_") {
+				fmt.Println("Uneti kljuc pocinje sa zabranjenim sistemskim prefiksom (karakteri do _ sa _)!")
+				continue
+			}
+
 			fmt.Println("Unesite vrednost elementa: ")
 			scanner.Scan()
 			value := scanner.Bytes()
@@ -102,6 +112,12 @@ func main() {
 			fmt.Println("Unesite kljuc elementa: ")
 			scanner.Scan()
 			key := scanner.Text()
+
+			if len(key) > 4 && (key[0:3] == "bf_" || key[0:4] == "cms_" || key[0:4] == "hll_" || key[0:3] == "sh_" || key[0:3] == "tb_") {
+				fmt.Println("Uneti kljuc pocinje sa zabranjenim sistemskim prefiksom (karakteri do _ sa _)!")
+				continue
+			}
+
 			elem, done := Get(&mt, cache, key, &tb, lsm)
 
 			if done {
@@ -114,6 +130,12 @@ func main() {
 			fmt.Println("Unesite kljuc elementa: ")
 			scanner.Scan()
 			key := scanner.Text()
+
+			if len(key) > 4 && (key[0:3] == "bf_" || key[0:4] == "cms_" || key[0:4] == "hll_" || key[0:3] == "sh_" || key[0:3] == "tb_") {
+				fmt.Println("Uneti kljuc pocinje sa zabranjenim sistemskim prefiksom (karakteri do _ sa _)!")
+				continue
+			}
+			
 			_, done := Delete(wal, &mt, cache, key, &tb, lsm)
 
 			if done {
@@ -593,6 +615,37 @@ func main() {
 			default:
 				fmt.Println("Nepostojeca opcija. Pokusajte ponovo.")
 			}
+
+		case 8:
+			fmt.Println("Unesite opseg za skeniranje: ")
+			val key1, key2 string
+			fmt.Printf("Unesite prvi kljuc: ")
+			fmt.Scanf("%s", &key1)
+			fmt.Printf("\nUnesite drugi kljuc: ")
+			fmt.Scanf("%s", &key2)
+			RangeScan(&mt, key1, key2, conf.PageSize)
+
+		case 9:
+			val key string
+			fmt.Printf("Unesite prefiks za skeniranje: ")
+			fmt.Scanf("%s", &key1)
+			PrefixScan(&mt, key, conf.PageSize)
+
+		case 10:
+			fmt.Println("Unesite opseg za iteriranje: ")
+			val key1, key2 string
+			fmt.Printf("Unesite prvi kljuc: ")
+			fmt.Scanf("%s", &key1)
+			fmt.Printf("\nUnesite drugi kljuc: ")
+			fmt.Scanf("%s", &key2)
+			RangeIter(&mt, key1, key2)
+
+		case 11:
+			val key string
+			fmt.Printf("Unesite prefiks za iteriranje: ")
+			fmt.Scanf("%s", &key1)
+			PrefixIter(&mt, key)
+
 		case 'x':
 			break
 

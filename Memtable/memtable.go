@@ -172,7 +172,7 @@ func (nmt *NMemtables) Delete(key string) (bool, int) {
 			}
 		} else {
 			if primaryMemtable {
-				return memtable.btree.Add(key, nil)
+				return memtable.btree.Add(key, nil), ind
 			} else {
 				// ne nalazi se u aktivnoj, nego u nekoj od proslih read-only tabela
 				// dodaj u primarni memtable pa onda izbrisi

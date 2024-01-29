@@ -22,6 +22,7 @@ type Config struct {
 	T                 int    `json:"t"`           //kolikoo se povecava svaki level
 	TokenBucketSize   int    `json:"token_bucket_maxsize"`
 	DegreeOfDilution  int    `json:"degree_of_dilution"` // stepen proredjenosti u summaryfile sstabla
+	PageSize		  int	 `json:"page_size"`
 }
 
 type LSMTree struct {

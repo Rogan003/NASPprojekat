@@ -100,6 +100,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 
 	if key1 > key2 {
 		fmt.Println("Greska! Opseg nije moguc!")
+
 	} else {
 		mem_indexes := make([]int, memtable.N)
 
@@ -196,6 +197,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 		lastElemsTables := make([]string, pageSize)
 		lastElemsPos := make([]int, pageSize)
 		lastIter := 0
+		lastElem := "{"
 
 		for works {
 			keys := make([]string, pageSize)
@@ -215,6 +217,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 
 						// pretraga za najmanjim kljucem koji nije obrisan i nije izmenjen
 						// KAKO PROVERITI DA NIJE IZMENJEN? Pregledati prethodni zabelezeni? Pregledati prethodni zabelezeni u lastElems itd...
+						// mozda odradjeno pomocu provere jel poslednji kljuc isti kao ovaj?
 						keys[in] = "{"
 
 						for i := memtable.R + memtable.N; i > memtable.R; i-- {
@@ -231,9 +234,10 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 							for {
 								keyHelp := memElems[mem_indexes[i%memtable.N]].Transaction.Key
 
-								if keyHelp < keys[in] && keyHelp <= key2 && !memElems[mem_indexes[i%memtable.N]].Tombstone {
+								if keyHelp != lastElem && keyHelp < keys[in] && keyHelp <= key2 && !memElems[mem_indexes[i%memtable.N]].Tombstone && !(keyHelp[0:3] == "bf_" || keyHelp[0:4] == "cms_" || keyHelp[0:4] == "hll_" || keyHelp[0:3] == "sh_" || keyHelp[0:3] == "tb_") {
 									keys[in] = keyHelp
 									vals[in] = memElems[mem_indexes[i % memtable.N]].Transaction.Value
+									lastElem = keyHelp
 									lastElemsTables[in] = "M" + string(i % memtable.N)
 									lastElemsPos[in] = mem_indexes[i % memtable.N]
 									break
@@ -254,9 +258,10 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 							for {
 								keyHelp, valHelp := SSTable.ReadData(int64(indexes[index]), value) // u get se poziva nad ovim value?
 								// sta ako dodjemo do kraja fajla?
-								if string(keyHelp) < keys[in] && string(keyHelp) <= key2 && !bytes.Equal(keyHelp, []byte{}) {
+								if keyHelp != lastElem && string(keyHelp) < keys[in] && string(keyHelp) <= key2 && !bytes.Equal(keyHelp, []byte{}) && !(keyHelp[0:3] == "bf_" || keyHelp[0:4] == "cms_" || keyHelp[0:4] == "hll_" || keyHelp[0:3] == "sh_" || keyHelp[0:3] == "tb_") {
 									keys[in] = string(keyHelp)
 									vals[in] = valHelp
+									lastElem = keyHelp
 									lastElemsTables[in] = "S" + string(index)
 									lastElemsPos[in] = indexes[index]
 									break

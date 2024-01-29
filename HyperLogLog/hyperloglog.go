@@ -6,6 +6,7 @@ import (
 	"hash/fnv"
 	"os"
 	"encoding/gob"
+	"bytes"
 	//"runtime"
 )
 
@@ -36,9 +37,11 @@ type HLL struct {
 
 func (hll *HLL)Init(precision uint8) *HLL{
 
-	hll.M := uint64(1 << precision)			//racunanje maksimalnog broja registara, stepenovanje se vrsi shiftovanjem
-	hll.Reg := make([]uint8, maxreg)			//niz registara velicine maxreg
-	hll.P := precision
+	hll.M = uint64(1 << precision)			//racunanje maksimalnog broja registara, stepenovanje se vrsi shiftovanjem
+	hll.Reg = make([]uint8, hll.M)			//niz registara velicine maxreg, ja sam izmenio da ne bude nepostojeci maxreg nego hll.M
+	hll.P = precision
+
+	return hll
 }
 
 func (hll *HLL) Add(elem []byte){
@@ -144,7 +147,7 @@ func (hll *HLL)ToBytes() ([]byte, error) {
 	return network.Bytes(), nil
 }
 
-func (hll *HLL)FromBytes() (b []byte) error{
+func (hll *HLL)FromBytes(b []byte) error {
 	network:= bytes.NewBuffer(b)
 	dec := gob.NewDecoder(network)
 
