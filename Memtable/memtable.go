@@ -154,12 +154,13 @@ func (nmt *NMemtables) AddAndDelete(key string, value []byte) {
 // funkcija za brisanje elementa sa kljucem iz memtable
 // brisanje je logicko
 // poziva se iz WAL-a ako je uspesno sve zapisano
-func (nmt *NMemtables) Delete(key string) bool {
+func (nmt *NMemtables) Delete(key string) (bool, int) {
 
 	data, found, primaryMemtable := nmt.Get(key)
 
 	if (found) {
 		arr := nmt.Arr
+		ind := nmt.R
 		memtable := arr[nmt.R]
 	
 		if memtable.version == "skiplist" {
@@ -168,26 +169,26 @@ func (nmt *NMemtables) Delete(key string) bool {
 	
 			if (primaryMemtable) {
 				// ako se nalazi u aktivnoj tabeli, samo obrisi
-				return memtable.skiplist.Delete(key)
+				return memtable.skiplist.Delete(key), ind
 			} else {
 				// ne nalazi se u aktivnoj, nego u nekoj od proslih read-only tabela
 				// dodaj u primarni memtable pa onda izbrisi
 				nmt.AddAndDelete(key, data)
-				return true
+				return true, ind
 			}
 		} else {
 			if (primaryMemtable) {
-				return memtable.btree.Add(key, nil)
+				return memtable.btree.Add(key, nil), ind
 			} else {
 				// ne nalazi se u aktivnoj, nego u nekoj od proslih read-only tabela
 				// dodaj u primarni memtable pa onda izbrisi
 				nmt.AddAndDelete(key, data)
-				return true
+				return true, ind
 			}
 		}
 	} else {
 		//fmt.Printf("Element sa kljucem %s ne postoji!\n", key)
-		return false
+		return false, -1
 	}
 	
 	
