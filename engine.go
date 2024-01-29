@@ -9,12 +9,12 @@ import (
 	"NASPprojekat/SSTable"
 	"NASPprojekat/TokenBucket"
 	"NASPprojekat/WriteAheadLog"
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"log"
 	"os"
-	"bytes"
 )
 
 func Get(memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *TokenBucket.TokenBucket, lsm *Config.LSMTree) ([]byte, bool) {
@@ -101,7 +101,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 		fmt.Println("Greska! Opseg nije moguc!")
 	} else {
 		mem_indexes := make([]int, memtable.N)
-		
+
 		for index, value := range memtable.Arr {
 			memElems := value.GetSortedElems()
 			mem_indexes[index] = -1
@@ -211,34 +211,34 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 					// prolazak kroz sve elemente na pozicijama, vidimo najmanji i dodajmeo i inkrementiramo (pomeramo napred), ako je previse napred -1
 					// ovo je sve ako je forward
 					// back bez neke cache strukture, problem?
-					
+
 					// pretraga za najmanjim kljucem koji nije obrisan i nije izmenjen
 					// KAKO PROVERITI DA NIJE IZMENJEN? Pregledati prethodni zabelezeni? Pregledati prethodni zabelezeni u lastElems itd...
 					keys[i] = "{"
 
 					for i := memtable.R + memtable.N; i > memtable.R; i-- {
-						memElems := memtable.Arr[i % memtable.N].GetSortedElems()
-						
+						memElems := memtable.Arr[i%memtable.N].GetSortedElems()
+
 						if len(memElems) == 0 {
 							break
 						}
-						
-						if mem_indexes[i % memtable.N] == -1 {
+
+						if mem_indexes[i%memtable.N] == -1 {
 							continue
 						}
 
 						for {
-							keyHelp := memElems[mem_indexes[i % memtable.N]].Transaction.Key
+							keyHelp := memElems[mem_indexes[i%memtable.N]].Transaction.Key
 
-							if keyHelp < keys[i] && keyHelp <= key2 && !memElems[mem_indexes[i % memtable.N]].Tombstone {
+							if keyHelp < keys[i] && keyHelp <= key2 && !memElems[mem_indexes[i%memtable.N]].Tombstone {
 								keys[i] = keyHelp
-								vals[i] = memElems[mem_indexes[i % memtable.N]].Transaction.Value
+								vals[i] = memElems[mem_indexes[i%memtable.N]].Transaction.Value
 								break
 							} else if keyHelp > key2 {
-								mem_indexes[i % memtable.N] = -1
+								mem_indexes[i%memtable.N] = -1
 								break
 							} else if keyHelp < keys[i] {
-								mem_indexes[i % memtable.N]++;
+								mem_indexes[i%memtable.N]++
 							}
 						}
 					}
@@ -276,13 +276,13 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 								if err != nil {
 									panic(err)
 								}
-								
+
 								info2 := make([]byte, SSTable.KEY_START-SSTable.KEY_SIZE_START)
 								_, err = file.Read(info2)
 								if err != nil {
 									panic(err)
 								}
-							
+
 								key_size := binary.LittleEndian.Uint64(info2[:SSTable.KEY_SIZE_SIZE])
 								value_size := binary.LittleEndian.Uint64(info2[SSTable.KEY_SIZE_SIZE:])
 
@@ -304,7 +304,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 			}
 
 			for index, value := range keys {
-				fmt.Printf("%i. %s: %s\n", index + 1, value, vals[index]) // kako ispisati niz bajtova? kao string?
+				fmt.Printf("%i. %s: %s\n", index+1, value, vals[index]) // kako ispisati niz bajtova? kao string?
 			}
 
 			var option string = "0"
@@ -472,49 +472,3 @@ func DecodeCMS(bytes []byte) (*CountMinSketch.CMS, bool) {
 
 	return &cms, false
 }
-
-/*
-func MenuCMS() {
-	fmt.Println("1)	Kreiranje nove instance")
-	fmt.Println("2) Brisanje postojeće instance")
-	fmt.Println("3) Dodavanje novog događaja u neku instancu")
-	fmt.Println("4) Provera učestalosti događaja u nekoj instanci")
-
-	for {
-		fmt.Print("Izaberite radnju: ")
-		var choice string
-		fmt.Scanln(&choice)
-
-		switch choice {
-		case "1":
-			fmt.Println("Kreiranje nove instance CMS-a")
-			fmt.Println("--------------")
-			fmt.Println("Unesite parametar sirine: ")
-			var choice string
-			fmt.Scanln(&choice)
-			cms = CountMinSketch.NewCMS(int)
-
-		case "2":
-			fmt.Println("Brisanje postojeće instance")
-			fmt.Println("--------------")
-
-		case "3":
-			fmt.Println("Dodavanje novog događaja u neku instancu.")
-			fmt.Println("--------------")
-		case "4":
-			fmt.Println("Provera učestalosti događaja u nekoj instanci")
-			fmt.Println("--------------")
-
-		default:
-			fmt.Println("Unesite validnu radnju.")
-		}
-	}
-}
-
-// Assuming t is a time.Timer
-//var t = time.NewTimer(60 * time.Second)
-
-// Define Wal, memtable, lru, Get, and Mem.WriteFileNames() accordingly
-
-
-*/
