@@ -5,6 +5,7 @@ import (
 	"NASPprojekat/Cache"
 	"NASPprojekat/Config"
 	"NASPprojekat/CountMinSketch"
+	"NASPprojekat/HyperLogLog"
 	"NASPprojekat/Memtable"
 	"NASPprojekat/SSTable"
 	"NASPprojekat/TokenBucket"
@@ -477,14 +478,14 @@ func DecodeBF(bytes []byte) (*BloomFilter.BloomFilter, bool) {
 	return &bf, false
 }
 
-func CreateHLL(precision uint8) ([]byte, bool){
-	hll :=  HyperLogLog.HLL{}
+func CreateHLL(precision uint8) ([]byte, bool) {
+	hll := HyperLogLog.HLL{}
 	hll.Init(precision)
 	return EncodeHLL(&hll)
 }
 
-func EncodeHLL(hll *HyperLogLog.HLL) ([]byte, bool){
-	bytes, err:= hll.ToBytes()
+func EncodeHLL(hll *HyperLogLog.HLL) ([]byte, bool) {
+	bytes, err := hll.ToBytes()
 	if err != nil {
 		return nil, true
 	}
@@ -492,7 +493,7 @@ func EncodeHLL(hll *HyperLogLog.HLL) ([]byte, bool){
 	return bytes, false
 }
 
-func DecodeHLL(bytes []byte)(*HyperLogLog.HLL, bool){
+func DecodeHLL(bytes []byte) (*HyperLogLog.HLL, bool) {
 	hll := HyperLogLog.HLL{}
 	err := hll.FromBytes(bytes)
 
