@@ -21,25 +21,64 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 	if err != nil {
 		return err
 	}
+	memIdx := 3 //PROMENITI ZA NAJSTARIJI MEM
+
+	// citamo od kog offseta treba krenuti citanje segmenta sa najmanjim indeksom
+	file, err := os.Open("files_WAL/memseg.txt")
+	if err != nil {
+		fmt.Println("Error opening memseg file:", err)
+		return err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+
+	// citanje linija iz memseg redom
+	offset := 0
+	lineCount := 0
+	for scanner.Scan() {
+		lineCount++
+		if lineCount == memIdx {
+			// linija sa nasim pocetnim segmentom za rekreiranje
+			currentLine := scanner.Text()
+			elements := strings.Split(currentLine, ",")
+			firstSegData := strings.Split(elements[0], " ")
+			offsetStart, err := strconv.Atoi(firstSegData[1])
+			offset = offsetStart
+			if err != nil {
+				fmt.Println("Error:", err)
+				return err
+			}
+			break
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		fmt.Println("Error reading file:", err)
+		return err
+	}
 
 	//redom ucitavamo fajlove sa segmentima
 	for _, fileName := range segementsFiles {
-		//procitamo entirje iz segmenta
-		entries, err := ReadEntriesFromFile("files_WAL/" + fileName)
-		if err != nil { //ako do nje dodje za slucaj da je doslo do greske
-			return err
-		}
+		for {
+			entry, next, jump := readEntry(fileName, offset)
+			//ako smo zavrsili sa citanjem svih entrya izadji iz fje
+			if entry == nil {
+				return nil
+			}
+			offset = jump
 
-		//za svaki entry izvrsimo ponovo operaciju
-		for _, entry := range entries {
-			// ako je operacija brisanja
 			if entry.Tombstone {
-				index := mem.Delete(entry.Transaction.Key)
-				wal.currenMemIndex = index
+				//ako je operacija brisanja
+				mem.Delete(entry.Transaction.Key)
 			} else {
 				//ako je operacija dodavanja ili izmene
 				index := mem.Add(entry.Transaction.Key, entry.Transaction.Value)
 				wal.currenMemIndex = int64(index)
+			}
+			//ako su procitani svi entry iz ovog segmenta idi na sledeci
+			if next {
+				break
 			}
 		}
 
@@ -47,12 +86,12 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 	return nil
 }
 
-//prilikom pokretanja wal-a, treba da se skenira folder sa segmentima i unutar wala da se kreira struktura sa offsetima segmenata
-//i putanjama do njih. Poslednji segment treba da se ucita u memorijsku strukturu i moze da se markira sa _END. Da li treba obezbediti trajnost
-//podataka u takvoj strukturi?
-
-func ScanWALFolder() ([]string, error) {
-	path := "files_WAL" //putanja do foldera sa segmentima
+// prilikom pokretanja wal-a, treba da se skenira folder sa segmentima i unutar wala da se kreira struktura sa offsetima segmenata
+// i putanjama do njih. Poslednji segment treba da se ucita u memorijsku strukturu i moze da se markira sa _END. Da li treba obezbediti trajnost
+// podataka u takvoj strukturi?
+// skenira sva imena fajlova sa segmentima wala i pravi sortiran niz imena po indeksima segmenata
+func (wal *WAL) ScanWALFolder() ([]string, error) {
+	path := "files_WAL/" //putanja do foldera sa segmentima
 
 	files, err := ioutil.ReadDir(path) //ucitavanje svega sto je u folderu,  vraca listu fajlova ili gresku
 	if err != nil {                    //ako do nje dodje za slucaj da je doslo do greske
@@ -79,6 +118,25 @@ func ScanWALFolder() ([]string, error) {
 
 		return numI < numJ
 	})
+	//ako ne postoji nijedan segment napravi ga
+	if len(segments) == 0 {
+		//pravljenje novog segmenta
+		file, err := os.Create("files_WAL/segment1.log")
+		if err != nil {
+			fmt.Println("Error:", err)
+			return nil, err
+		}
+		file.Close()
+		segments = append(segments, "files_WAL/segment1.log")
+		//pravi novu tabelu
+		fileMS, err := os.Create(filepath.Join(path, "memseg.txt"))
+		if err != nil {
+			fmt.Println("Error:", err)
+			return nil, err
+		}
+		wal.segmentsTable = fileMS
+		wal.currentMemIndex = 0
+	}
 
 	return segments, nil
 }
@@ -355,25 +413,24 @@ func ReadEntry(path string, offset int) (Config.Entry, int, bool) {
 
 func (wal *WAL) DeleteSegments() error {
 	//brise fajlove ispod lowWaterMarka
-
-	path := "files_WAL"
+	path := "files_WAL/"
 	files, err := ioutil.ReadDir(path)
 	if err != nil {
 		return err
 	}
-
+	//brisanje fajla ako je index tog segmenta ispod lowWaterMarka
 	for _, file := range files {
 
-		filePath := filepath.Join(path, file.Name())
-		num, _ := strconv.Atoi(strings.TrimPrefix(filepath.Base(file.Name()), "segment"))
+		idxStr := strings.TrimSuffix(strings.TrimPrefix(file.Name(), "segment"), ".log")
+		idx, _ := strconv.Atoi(idxStr)
 
-		if num < wal.lowWaterMark {
+		if idx <= wal.lowWaterMark {
 
-			err = os.Remove(filePath)
+			err = os.Remove(path + file.Name())
 			if err != nil {
-				fmt.Printf("Greška prilikom brisanja fajla %s: %s\n", filePath, err)
+				fmt.Printf("Greška prilikom brisanja fajla %s: %s\n", path+file.Name(), err)
 			} else {
-				fmt.Printf("Fajl %s uspešno obrisan.\n", filePath)
+				fmt.Printf("Fajl %s uspešno obrisan.\n", path+file.Name())
 			}
 		}
 	}
@@ -398,59 +455,13 @@ func (wal *WAL) DeleteWAL() {
 // fja koja iz svih fajlova segmenata saznaje koji je poslednji, po indeksu u imenu fajla, setuje lastIndex u tom wal i postavlja mu lastSegment
 // slicno kao sto si radila scanWAL prodji kroz fajlove i nadji lastindex
 
-// promeniti za lastindex da bude samo ime segmenta ili otovreni fajl lastsegmenta
+// otvara last segment i sprema wal za pisanje
 func (wal *WAL) OpenWAL() error {
-
-	path := "files_WAL"
-
-	files, err := ioutil.ReadDir(path)
+	//citamo sve segmente, sortirane za nas WAL
+	segments, err := ScanWALFolder()
 	if err != nil {
 		return err
 	}
-
-	var segments []string
-
-	for _, file := range files { //_ jer nam ne treba indeks
-		if file.IsDir() { //ako je direktorijum ignorisemo
-			continue
-		}
-		if strings.HasSuffix(file.Name(), ".txt") {
-			wal.segmentsTable, err = os.OpenFile(filepath.Join(path, file.Name()), os.O_RDWR|os.O_APPEND|os.O_CREATE, 0644)
-			if err != nil {
-				return err
-			}
-			//wal.currenMemIndex = -1
-		}
-
-		if strings.HasSuffix(file.Name(), ".log") && strings.HasPrefix(file.Name(), "segment") {
-			segmentPath := filepath.Join(path, file.Name())
-			segments = append(segments, segmentPath)
-		}
-	}
-
-	if len(segments) == 0 {
-		//treba dodati pravljenje novog aktivnog
-
-		//pravi novu tabelu
-		file, err := os.Create(filepath.Join(path, "memseg.txt"))
-		if err != nil {
-			fmt.Println("Error:", err)
-			return err
-		}
-		wal.segmentsTable = file
-		wal.currentMemIndex = 0
-		return nil
-		//UMESTO OVOG SE KREIRA PRVI SEGMENT-AKTIVNI SEGMENT I SEGMENTTABELA
-		//return errors.New("Nema segmenta u WAL direktorijumu")
-	}
-
-	sort.Slice(segments, func(i, j int) bool {
-
-		numI, _ := strconv.Atoi(strings.TrimPrefix(filepath.Base(segments[i]), "segment"))
-		numJ, _ := strconv.Atoi(strings.TrimPrefix(filepath.Base(segments[j]), "segment"))
-
-		return numI < numJ
-	})
 
 	//otvaramo fajl poslednjeg segmenta
 	lastSegmentPath := segments[len(segments)-1]
@@ -479,6 +490,7 @@ func (wal *WAL) AddEntry(entry *Config.Entry) error {
 	if err != nil {
 		return err
 	}
+
 	//ako je presao na sledeci segment ucitaj ga kao poslednji
 	if next {
 		idxStr := strings.TrimSuffix(strings.TrimPrefix(wal.lastSegment.Name(), "segment"), ".log")
@@ -492,6 +504,13 @@ func (wal *WAL) AddEntry(entry *Config.Entry) error {
 		//defer lastSegmentFile.Close()
 		//otvaranje novog last segmenta
 		wal.lastSegment = lastSegmentFile
+		fileInfo, err := os.Stat(lastSegmentPath)
+		if err != nil {
+			fmt.Println("Error getting file information:", err)
+			return err
+		}
+		//pamtimo koliko je zauzet trneutno
+		wal.CurrentSize = fileInfo.Size()
 	}
 
 	return nil
