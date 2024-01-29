@@ -138,17 +138,17 @@ func ToEntry(data []byte) Entry {
 
 	entry := Entry{}
 
-	entry.Crc = binary.LittleEndian.Uint32(data[:4]) //ucitavaju se prva 4 bajta
-	data = data[4:]                                  //pomeramo se za 4 bajta
+	entry.Crc = binary.LittleEndian.Uint32(data[:CRC_SIZE]) //ucitavaju se prva 4 bajta
+	data = data[CRC_SIZE:]                                  //pomeramo se za 4 bajta
 
-	entry.Timestamp = binary.LittleEndian.Uint64(data[:8])
-	data = data[8:]
+	entry.Timestamp = binary.LittleEndian.Uint64(data[:TIMESTAMP_SIZE])
+	data = data[TIMESTAMP_SIZE:]
 
 	entry.Tombstone = data[0] != 0 //true ako je 1, false ako je 0
-	data = data[1:]
+	data = data[TOMBSTONE_SIZE:]
 
-	keySize := binary.LittleEndian.Uint32(data[:4])
-	data = data[8:] //pomeramo se za 8 zbog key size i value size
+	keySize := binary.LittleEndian.Uint64(data[:KEY_SIZE_SIZE])
+	data = data[KEY_SIZE_SIZE+VALUE_SIZE_SIZE:] //pomeramo se za 16 zbog key size i value size
 
 	entry.Transaction.Key = string(data[:keySize])
 	data = data[keySize:]
