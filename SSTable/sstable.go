@@ -695,7 +695,16 @@ func levelMerge(level int, lsm Config.LSMTree) {
 
 
 	//nizovi putanja SSTable-ova kojima odgovaraju indeksi
-	dataFiles, indexFiles, summaryFiles, bloomFiles, merkleFiles, _ := findOtherTables(level + 1, bottomIdx, topIdx, lsm)
+	dataFiles, indexFiles, summaryFiles, bloomFiles, merkleFiles, entriesAdd := findOtherTables(level + 1, bottomIdx, topIdx, lsm)
+	
+
+	// ---------------------------------------------------------------------------------
+	// splitovali smo sve sstable koje se preklapaju u opsegu do ovde
+	// one koje ne odgovaraju smo vec "prepisali" na ista mjesta
+	// a ostale entryje sa odgovarajucim kljucevima smo pokupili i stavili u "entriesAdd"
+	// -> sada trebam skontati kako dodati sve ove Entryje na vec izdvojene entryje
+	// -> ajde da vidimo
+
 	num := len(dataFiles)
 
 	dataFiles = append(dataFiles, dataFile)
@@ -706,8 +715,7 @@ func levelMerge(level int, lsm Config.LSMTree) {
 		
 
 	//Sada treba mergovati tabele
-		// num - ne treba ovde, prebacila sam ga gore jer odatle isto mozemo naci broj svakako
-	levelMergeFiles(level, dataFiles, indexFiles, summaryFiles, bloomFiles, merkleFiles, lsm, num)
+	levelMergeFiles(level, dataFiles, indexFiles, summaryFiles, bloomFiles, merkleFiles, lsm, num, entriesAdd)
 
 	
 	// oduzmi jednu iz levela sto smo prebacili dole
@@ -935,7 +943,7 @@ func GetSplitEntries(dataFile string, borderKey string, lower bool) ([]*Config.E
 }
 
 
-func levelMergeFiles(level int, dataFiles []string, indexFiles []string, summaryFiles []string, bloomFiles []string, merkleFiles []string, lsm Config.LSMTree, num int) {
+func levelMergeFiles(level int, dataFiles []string, indexFiles []string, summaryFiles []string, bloomFiles []string, merkleFiles []string, lsm Config.LSMTree, num int, entriesAdd []*Config.Entry) {
 
 	//levelFiles su SStabele iz narednog nivoa + tabela iz prethodnog
 	levelFiles, err := openFiles(dataFiles)
@@ -944,6 +952,15 @@ func levelMergeFiles(level int, dataFiles []string, indexFiles []string, summary
 	}
 
 	var entries []*Config.Entry
+
+	// na pocetku entries = entriesAdd, tj. sadrzi sve prethodne izdvojene entryje
+	// koji su se preklapali u nekim sstabelama sa nasim opsegom
+		// ako je entriesAdd = nil, sve okej i dalje
+	
+	// jedini problem koji moze biti: da li je okej samo na radnom mjesta da ih appendujemo?
+	// da li redoslijed entryja uopste utice na algoritam? -> to treba da se provjeri
+	entries = entriesAdd
+
 	var sortedAllEntries []*Config.Entry
 	//u entries cuvamo trenutne entie na kojim smo iz svakog sstablea sa ovog nivoa
 
