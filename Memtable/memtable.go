@@ -5,6 +5,7 @@ import (
 	"NASPprojekat/Config"
 	"NASPprojekat/SSTable"
 	"NASPprojekat/SkipList"
+	"bufio"
 	"fmt"
 	"os"
 	"strconv"
@@ -267,6 +268,55 @@ func (mt *Memtable) flush(lsm *Config.LSMTree) {
 	}
 
 	mt.curCap = 0
+
+	//postavljanje da za taj memtable jos nismo koristili segmente
+	memIdx := 3 //KAKO DOBITI INDEX MEMTABLE KOJA JE FLASHOVANA
+	filePath := "files_WAL/memseg.txt"
+
+	// citamo sadrzaj memseg fajla
+	file, err := os.Open(filePath)
+	if err != nil {
+		fmt.Println("Error opening file:", err)
+		return
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	var lines []string
+
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+
+	if err := scanner.Err(); err != nil {
+		fmt.Println("Error reading file:", err)
+		return
+	}
+
+	// Menjam liniju da bude prazna za odrejdeni memtable koji smo flushovali
+	if len(lines) >= memIdx+1 {
+		lines[memIdx] = ""
+	}
+
+	// zapisujem izmenjen sadrzaj
+	file, err = os.Create(filePath)
+	if err != nil {
+		fmt.Println("Error creating file:", err)
+		return
+	}
+	defer file.Close()
+
+	writer := bufio.NewWriter(file)
+	for _, line := range lines {
+		fmt.Fprintln(writer, line)
+	}
+
+	if err := writer.Flush(); err != nil {
+		fmt.Println("Error writing to file:", err)
+		return
+	}
+
+	fmt.Println("Uspesno obrisani segmenti za flushovani memtable")
 }
 
 func (mt *Memtable) GetSortedElems() []*Config.Entry {
