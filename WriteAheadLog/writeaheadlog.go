@@ -178,7 +178,7 @@ func (wal *WAL) DeleteWAL() {
 // promeniti za lastindex da bude samo ime segmenta ili otovreni fajl lastsegmenta
 func (wal *WAL) OpenWAL() error {
 
-	path := "NASPprojekat/files/WAL"
+	path := "files_WAL/"
 
 	files, err := ioutil.ReadDir(path)
 	if err != nil {
@@ -210,43 +210,48 @@ func (wal *WAL) OpenWAL() error {
 		return numI < numJ
 	})
 
-	//OVO PROMENITI
-	last := segments[len(segments)-1]
-	entries, err := ReadEntriesFromFile(last)
+	//otvaramo fajl poslednjeg segmenta
+	lastSegmentPath := segments[len(segments)-1]
+	lastSegmentFile, err := os.OpenFile(lastSegmentPath, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0644) //0644 - vlasnik moze da cita i pise, ostali mogu samo da citaju
 	if err != nil {
 		return err
 	}
-	lastSegment := NewSegment(last, int64(len(segments)-1), int64(len(entries)), entries)
-	wal.lastSegment = *lastSegment
-	wal.lastIndex = int64(len(segments) - 1)
+	//defer lastSegmentFile.Close()
+	wal.lastSegment = lastSegmentFile
+
+	fileInfo, err := os.Stat(lastSegmentPath)
+	if err != nil {
+		fmt.Println("Error getting file information:", err)
+		return err
+	}
+	//pamtimo koliko je zauzet trneutno
+	wal.CurrentSize = fileInfo.Size()
 
 	return nil
 }
 
 // dodaje novi entri u aktivni segment, ako je pun segment, pravi novi i cuva stari
-
-// treba promeniti da samo nad entry zove writeInFile i ako je doslo do prelaza na sledeci pri upisu onda promeniti last index
 func (wal *WAL) AddEntry(entry *Config.Entry) error {
 	//dodaje entri u poslednji segment
-	//ako ne moze zeljeni entry da se upise jer nema dovoljno prostora
-	entryBytes := entry.ToByte()
-	if wal.lastSegment.size+int64(len(entryBytes)) > wal.segmentSize {
-		//pise entirje iz segmenta u njegov fajl
-		for _, e := range wal.lastSegment.entries {
-			entryBytes := e.ToByte()
-			err := WriteInFile(entryBytes, wal.path+wal.lastSegment.fileName)
-			if err != nil {
-				return err
-			}
-		}
-		//pravi novi aktivni segment i na njega dodaje entry
-		wal.lastIndex++
-		newPath := "segment" + strconv.FormatInt(wal.lastIndex, 10) + ".log"
-		wal.lastSegment = *NewSegment(newPath, wal.lastIndex, 0, []*Config.Entry{})
-		wal.lastSegment.AppendEntry(entry)
-	} else {
-		wal.lastSegment.AppendEntry(entry)
+	err, next := WriteInFile(entry)
+	if err != nil {
+		return err
 	}
+	//ako je presao na sledeci segment ucitaj ga kao poslednji
+	if next {
+		idxStr := strings.TrimSuffix(strings.TrimPrefix(wal.lastSegment.Name(), "segment"), ".log")
+		currentIndex, _ := strconv.Atoi(idxStr)
+		currentIndex += 1
+		lastSegmentPath := "files_WAL/segment" + strconv.FormatInt(int64(currentIndex), 10) + ".log"
+		lastSegmentFile, err := os.OpenFile(lastSegmentPath, os.O_RDWR|os.O_APPEND, 0644) //0644 - vlasnik moze da cita i pise, ostali mogu samo da citaju
+		if err != nil {
+			return err
+		}
+		//defer lastSegmentFile.Close()
+		//otvaranje novog last segmenta
+		wal.lastSegment = lastSegmentFile
+	}
+
 	return nil
 
 }
