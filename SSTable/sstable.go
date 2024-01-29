@@ -4,6 +4,7 @@ import (
 	"NASPprojekat/BloomFilter"
 	"NASPprojekat/Config"
 	"hash/crc32"
+
 	//"io/ioutil"
 	"strconv"
 	"strings"
@@ -13,10 +14,10 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"os"
-	"time"
 	"math"
+	"os"
 	"sort"
+	"time"
 )
 
 const (
@@ -355,15 +356,14 @@ func NodeToBytes(node Config.Entry) []byte { //pretvara node u bajtove
 	return data
 }
 
-
 func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, SummaryFileName string, BloomFileName string) {
-	indexFile, err := os.OpenFile(IndexFileName, os.O_RDWR|os.O_APPEND, 0777)
+	indexFile, err := os.OpenFile(IndexFileName, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0777)
 	if err != nil {
 		panic(err)
 	}
 	defer indexFile.Close()
 
-	summaryFile, err := os.OpenFile(SummaryFileName, os.O_RDWR|os.O_APPEND, 0777)
+	summaryFile, err := os.OpenFile(SummaryFileName, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0777)
 	if err != nil {
 		panic(err)
 	}
@@ -382,7 +382,7 @@ func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, 
 	// pravi se bloom filter
 	make_filter(nodes, len(nodes), BloomFileName)
 
-	file, err := os.OpenFile(DataFileName, os.O_RDWR|os.O_APPEND, 0777)
+	file, err := os.OpenFile(DataFileName, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0777)
 	if err != nil {
 		panic(err)
 	}
@@ -419,11 +419,11 @@ func SizeTieredCompaction(lsm Config.LSMTree) {
 
 func merge(level int, lsm Config.LSMTree) {
 	br := lsm.Levels[level] + 1
-	dataFile, _ := os.Create("SSTable/files/dataFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".txt")
-	indexFile, _ := os.Create("SSTable/files/indexFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".txt")
-	summaryFile, _ := os.Create("SSTable/files/summaryFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".txt")
-	bloomFile, _ := os.Create("SSTable/files/bloomFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".txt")
-	merkleFile, _ := os.Create("SSTable/files/merkleFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".txt")
+	dataFile, _ := os.Create("files_SSTable/dataFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".gob")
+	indexFile, _ := os.Create("files_SSTable/indexFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".gob")
+	summaryFile, _ := os.Create("files_SSTable/summaryFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".gob")
+	bloomFile, _ := os.Create("files_SSTable/bloomFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".gob")
+	merkleFile, _ := os.Create("files_SSTable/merkleFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".gob")
 
 	lsm.DataFilesNames = append(lsm.DataFilesNames, dataFile.Name())
 	mergeFiles(level, dataFile, indexFile, summaryFile, bloomFile, merkleFile, lsm)
@@ -592,7 +592,7 @@ func mergeFiles(level int, dataFile *os.File, indexFile *os.File, summaryFile *o
 	//ako imamo iste kljuceve onda nadji najnoviji i njega dodaj u skiplist a ostale prekosci
 
 	//uzimamo imena svih data fajlova ovog nivoa
-	levelSubstring := "SSTable/files/dataFile_" + strconv.Itoa(level) + "_"
+	levelSubstring := "files_SSTable/dataFile_" + strconv.Itoa(level) + "_"
 	levelFileNames := levelFileNames(lsm.DataFilesNames, levelSubstring)
 	//otvaranje data fajlova na ovom nivou
 	levelFiles, err := openFiles(levelFileNames)
@@ -628,36 +628,34 @@ func mergeFiles(level int, dataFile *os.File, indexFile *os.File, summaryFile *o
 	MakeData(sortedAllEntries, dataFile.Name(), indexFile.Name(), summaryFile.Name(), bloomFile.Name())
 
 	for i := 1; i <= lsm.MaxSSTables; i++ {
-		err = os.Remove("SSTable/files/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + "txt")
+		err = os.Remove("files_SSTable/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + "gob")
 		if err != nil {
 			log.Fatal(err)
 		}
-		err = os.Remove("SSTable/files/indexFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + "txt")
+		err = os.Remove("files_SSTable/indexFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + "gob")
 		if err != nil {
 			log.Fatal(err)
 		}
-		err = os.Remove("SSTable/files/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + "txt")
+		err = os.Remove("files_SSTable/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + "gob")
 		if err != nil {
 			log.Fatal(err)
 		}
-		err = os.Remove("SSTable/files/bloomFilterFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + "txt")
+		err = os.Remove("files_SSTable/bloomFilterFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + "gob")
 		if err != nil {
 			log.Fatal(err)
 		}
-		err = os.Remove("SSTable/files/merkleTreeFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + "txt")
+		err = os.Remove("files_SSTable/merkleTreeFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + "gob")
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		removeFileName(lsm, "SSTable/files/dataFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+"txt")
-		removeFileName(lsm, "SSTable/files/indexFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+"txt")
-		removeFileName(lsm, "SSTable/files/summaryFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+"txt")
-		removeFileName(lsm, "SSTable/files/bloomFilterFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+"txt")
-		removeFileName(lsm, "SSTable/files/merkleTreeFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+"txt")
+		removeFileName(lsm, "files_SSTable/dataFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+"gob")
+		removeFileName(lsm, "files_SSTable/indexFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+"gob")
+		removeFileName(lsm, "files_SSTable/summaryFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+"gob")
+		removeFileName(lsm, "files_SSTable/bloomFilterFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+"gob")
+		removeFileName(lsm, "files_SSTable/merkleTreeFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+"gob")
 	}
 }
-
-
 
 //---------------------------LEVEL TIERED COMPACTION--------------------------------
 // kod level tiered kompakcije svaki nivo (run) je T puta veci od prethodnog. T je uglavnom 10. Kriterijum za kompakciju ce biti broj tabela po run-u.
@@ -679,11 +677,11 @@ func levelMerge(level int, lsm Config.LSMTree) {
 	//za file na visem nivou-uzimamo prvu tabelu jer eto??
 	br := lsm.Levels[level]
 
-	dataFile := "SSTable/files/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".txt"
-	indexFile := "SSTable/files/indexFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".txt"
-	summaryFile := "SSTable/files/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".txt"
-	bloomFile := "SSTable/files/bloomFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".txt"
-	merkleFile := "SSTable/files/merkleFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".txt"
+	dataFile := "files_SSTable/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".gob"
+	indexFile := "files_SSTable/indexFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".gob"
+	summaryFile := "files_SSTable/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".gob"
+	bloomFile := "files_SSTable/bloomFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".gob"
+	merkleFile := "files_SSTable/merkleFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".gob"
 
 	//trazimo opseg indeksa
 	sumarry, _ := os.OpenFile(summaryFile, os.O_RDWR, 0777)
@@ -693,10 +691,8 @@ func levelMerge(level int, lsm Config.LSMTree) {
 	bottomIdx := SummaryContent.FirstKey
 	topIdx := SummaryContent.LastKey
 
-
 	//nizovi putanja SSTable-ova kojima odgovaraju indeksi
-	dataFiles, indexFiles, summaryFiles, bloomFiles, merkleFiles, entriesAdd := findOtherTables(level + 1, bottomIdx, topIdx, lsm)
-	
+	dataFiles, indexFiles, summaryFiles, bloomFiles, merkleFiles, entriesAdd := findOtherTables(level+1, bottomIdx, topIdx, lsm)
 
 	// ---------------------------------------------------------------------------------
 	// splitovali smo sve sstable koje se preklapaju u opsegu do ovde
@@ -712,27 +708,22 @@ func levelMerge(level int, lsm Config.LSMTree) {
 	summaryFiles = append(summaryFiles, summaryFile)
 	bloomFiles = append(bloomFiles, bloomFile)
 	merkleFiles = append(merkleFiles, merkleFile)
-		
 
 	//Sada treba mergovati tabele
 	levelMergeFiles(level, dataFiles, indexFiles, summaryFiles, bloomFiles, merkleFiles, lsm, num, entriesAdd)
 
-	
 	// oduzmi jednu iz levela sto smo prebacili dole
 	lsm.Levels[level]--
 	// (dodaj tu jednu iz levela na [level + 1], i oduzmi num merge-ovanih)
-	lsm.Levels[level + 1] += 1     // dodaj spojenu koju smo prebacili tu
-	lsm.Levels[level + 1] -= num   // oduzmi sve koje smo spojili sa tog nivoa
-
+	lsm.Levels[level+1] += 1   // dodaj spojenu koju smo prebacili tu
+	lsm.Levels[level+1] -= num // oduzmi sve koje smo spojili sa tog nivoa
 
 	// ** T: provjeriti da li je okej uslov za level tiered?
-	if lsm.Levels[level + 1] == int(float64(lsm.MaxSSTables) * math.Pow( float64(lsm.T) ,float64(level + 1))) && level != lsm.CountOfLevels { 
+	if lsm.Levels[level+1] == int(float64(lsm.MaxSSTables)*math.Pow(float64(lsm.T), float64(level+1))) && level != lsm.CountOfLevels {
 		// proverava broj fajlova na sledećem nivou, i ne treba da pozove merge ako je na 3. nivou tj ako je nivo 2
-		levelMerge(level + 1, lsm)
+		levelMerge(level+1, lsm)
 	}
 }
-
-
 
 func findOtherTables(level int, bottomIdx string, topIdx string, lsm Config.LSMTree) ([]string, []string, []string, []string, []string, []*Config.Entry) {
 
@@ -742,11 +733,10 @@ func findOtherTables(level int, bottomIdx string, topIdx string, lsm Config.LSMT
 	var bloomFiles []string
 	var merkleFiles []string
 
-	var entriesAdd []*Config.Entry   // za pocetak je nil
-
+	var entriesAdd []*Config.Entry // za pocetak je nil
 
 	for i := 1; i <= lsm.Levels[level]; i++ {
-		summaryFile := "SSTable/files/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt"
+		summaryFile := "files_SSTable/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".gob"
 
 		sumarry, _ := os.OpenFile(summaryFile, os.O_RDWR, 0777)
 		SummaryContent := LoadSummary(sumarry)
@@ -754,11 +744,11 @@ func findOtherTables(level int, bottomIdx string, topIdx string, lsm Config.LSMT
 		FirstKey := SummaryContent.FirstKey
 		LastKey := SummaryContent.LastKey
 
-		var dataFile = "SSTable/files/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt"
-		var indexFile = "SSTable/files/indexFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt"
-		//var summaryFile = "SSTable/files/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt"   // vec ima gore deklarisano
-		var bloomFile = "SSTable/files/bloomFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt"
-		var merkleFile = "SSTable/files/merkleFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".txt"
+		var dataFile = "files_SSTable/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".gob"
+		var indexFile = "files_SSTable/indexFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".gob"
+		//var summaryFile = "files_SSTable/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".gob"   // vec ima gore deklarisano
+		var bloomFile = "files_SSTable/bloomFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".gob"
+		var merkleFile = "files_SSTable/merkleFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".gob"
 
 		if FirstKey >= bottomIdx && FirstKey <= topIdx && LastKey >= bottomIdx && LastKey <= topIdx {
 			dataFiles = append(dataFiles, dataFile)
@@ -766,16 +756,16 @@ func findOtherTables(level int, bottomIdx string, topIdx string, lsm Config.LSMT
 			summaryFiles = append(summaryFiles, summaryFile)
 			bloomFiles = append(bloomFiles, bloomFile)
 			merkleFiles = append(merkleFiles, merkleFile)
-		} else {  
+		} else {
 
 			// NPR. ukupan prvi opseg = [30 - 80] ---> [bottomIdx - topIdx]
 
-			// u ovoj sstabeli je npr. [60 - 95] ---> [FirstKey - LastKey] 
+			// u ovoj sstabeli je npr. [60 - 95] ---> [FirstKey - LastKey]
 			// prvi se nalazi u opsegu
 			if FirstKey >= bottomIdx && FirstKey <= topIdx {
 				// k1, k2       k2, k3
 				// 60  80		 80 95
-				k1 := FirstKey   
+				k1 := FirstKey
 				k2 := topIdx
 				k3 := LastKey
 
@@ -783,19 +773,18 @@ func findOtherTables(level int, bottomIdx string, topIdx string, lsm Config.LSMT
 				// ona vrati entriesRewrite, entriesAdd
 				// (entriesRewrite - entry za rewrite samo)							 //  80 - 95
 				// (entriesAdd     - entry za dodati u novu, veliku sstaeblu)   //  60 - 80
-					// saljemo "false" jer nije "lower" (uporedjujemo sa "višim" kljucem iz opsega - topIdx ( == 80 u ovom slucaju))
-			   entriesAdd = splitSSTable(k1, k2, k3, false, dataFile, indexFile, summaryFile, bloomFile, merkleFile, lsm)
+				// saljemo "false" jer nije "lower" (uporedjujemo sa "višim" kljucem iz opsega - topIdx ( == 80 u ovom slucaju))
+				entriesAdd = splitSSTable(k1, k2, k3, false, dataFile, indexFile, summaryFile, bloomFile, merkleFile, lsm)
 			}
-
 
 			// NPR. ukupan prvi opseg = [30 - 80] ---> [bottomIdx - topIdx]
 
-			// u ovoj sstabeli je npr. [1 - 40] ---> [FirstKey - LastKey] 
+			// u ovoj sstabeli je npr. [1 - 40] ---> [FirstKey - LastKey]
 			// drugi se nalazi u opsegu
 			if LastKey >= bottomIdx && LastKey <= topIdx {
 				// k1, k2       k2, k3
 				// 1   30		 30, 40
-				k1 := FirstKey   
+				k1 := FirstKey
 				k2 := bottomIdx
 				k3 := LastKey
 
@@ -803,29 +792,26 @@ func findOtherTables(level int, bottomIdx string, topIdx string, lsm Config.LSMT
 				// ona vrati entriesRewrite, entriesAdd
 				// (entriesRewrite - entry za rewrite samo)							  //  1 - 30
 				// (entriesAdd     - entry za dodati u novu, veliku sstaeblu)    // 30 - 40
-					// saljemo "true" jer je "lower" (uporedjujemo sa "nižim" kljucem iz opsega - topIdx ( == 30 u ovom slucaju))
-			   entriesAdd = splitSSTable(k1, k2, k3, true, dataFile, indexFile, summaryFile, bloomFile, merkleFile, lsm)
-				
+				// saljemo "true" jer je "lower" (uporedjujemo sa "nižim" kljucem iz opsega - topIdx ( == 30 u ovom slucaju))
+				entriesAdd = splitSSTable(k1, k2, k3, true, dataFile, indexFile, summaryFile, bloomFile, merkleFile, lsm)
+
 			}
 		}
 	}
 
-			// ***** TREBA VRATITI PRAZAN entriesAdd ako nema preklapanja!! (nil)
+	// ***** TREBA VRATITI PRAZAN entriesAdd ako nema preklapanja!! (nil)
 	return dataFiles, indexFiles, summaryFiles, bloomFiles, merkleFiles, entriesAdd
 }
 
-
-
-func splitSSTable(k1 string, k2 string, k3 string, lower bool, dataFile string, indexFile string, summaryFile string, bloomFile string, merkleFile string,  lsm Config.LSMTree) ([]*Config.Entry) {
+func splitSSTable(k1 string, k2 string, k3 string, lower bool, dataFile string, indexFile string, summaryFile string, bloomFile string, merkleFile string, lsm Config.LSMTree) []*Config.Entry {
 	// k1 = 1               1 - 30
 	// k2 = 30             30 - 40
 	// k3 = 40
-	// otvaramo samo taj jedan fajl koji treba rewrite  // onaj od   1 - 40 
+	// otvaramo samo taj jedan fajl koji treba rewrite  // onaj od   1 - 40
 
 	entriesRewrite, entriesAdd := GetSplitEntries(dataFile, k2, lower)
 	// sada napravimo nove splitovane SSTabele od ovih entrija koje smo izdvojili
 	// koji ne idu u veliku SSTabelu (ovi od  1 - 30) ,  (od 30 - 40 bi trebali ici u veliki SSTable)
-
 
 	// prije return treba UPISATI ove REWRITE ENTRIES (to su dijelovi kkljuceva koji nisu u izabranom opsegu)
 	err := os.Remove(dataFile)
@@ -856,7 +842,6 @@ func splitSSTable(k1 string, k2 string, k3 string, lower bool, dataFile string, 
 	removeFileName(lsm, bloomFile)
 	removeFileName(lsm, merkleFile)
 
-
 	//pravljenje novog sstablea od svih sstableova ovog nivoa koji su sada spojeni
 	//fali merkle???
 	MakeData(entriesRewrite, dataFile, indexFile, summaryFile, bloomFile)
@@ -864,15 +849,14 @@ func splitSSTable(k1 string, k2 string, k3 string, lower bool, dataFile string, 
 	return entriesAdd
 }
 
-
 // vraca sve entrije, ali splitovane u dva dijela prema kljucu, zbog preklapanja opsega
-	// filename  - naziv fajla nad kojim radimo
-	// borderKey - kljuc nakon koga splitujemo
-	// lower     - true: firstKey NE UPADA u opseg,   false: firstKey UPADA u opseg
-func GetSplitEntries(dataFile string, borderKey string, lower bool) ([]*Config.Entry, []*Config.Entry)  {
+// filename  - naziv fajla nad kojim radimo
+// borderKey - kljuc nakon koga splitujemo
+// lower     - true: firstKey NE UPADA u opseg,   false: firstKey UPADA u opseg
+func GetSplitEntries(dataFile string, borderKey string, lower bool) ([]*Config.Entry, []*Config.Entry) {
 
-	var entriesRewrite []*Config.Entry   // svi procitani entry koji ce se rewrite u novu malu SSTabelu
-	var entriesAdd     []*Config.Entry   // svi procitani entry koji ce se spojiti sa velikom tabelom
+	var entriesRewrite []*Config.Entry // svi procitani entry koji ce se rewrite u novu malu SSTabelu
+	var entriesAdd []*Config.Entry     // svi procitani entry koji ce se spojiti sa velikom tabelom
 
 	file, err := os.OpenFile(dataFile, os.O_RDWR, 0777)
 	if err != nil {
@@ -886,12 +870,12 @@ func GetSplitEntries(dataFile string, borderKey string, lower bool) ([]*Config.E
 		info := make([]byte, KEY_SIZE_START)
 		_, err = file.Read(info)
 		if err != nil {
-			break  // kraj fajla?
+			break // kraj fajla?
 		}
 
 		tombstone2 := binary.LittleEndian.Uint64(info[TOMBSTONE_START:KEY_SIZE_START])
 		tombstone := true
-		if (tombstone2 == 0) {
+		if tombstone2 == 0 {
 			tombstone = false
 		}
 
@@ -912,36 +896,35 @@ func GetSplitEntries(dataFile string, borderKey string, lower bool) ([]*Config.E
 			panic(err)
 		}
 
-		entry := Config.Entry {
-			// **** OVO CRC I TIMESTAMP PROVJERITI OBAEVEZNO JEL DOBRO CITA UOPSTE??? 
+		entry := Config.Entry{
+			// **** OVO CRC I TIMESTAMP PROVJERITI OBAEVEZNO JEL DOBRO CITA UOPSTE???
 			//      (posto nije postojalo u funckiji iz koje sam prepisala ovo sve)
-			Crc:       	 binary.LittleEndian.Uint32(info[CRC_START : CRC_START+CRC_SIZE]),
-			Timestamp:   binary.LittleEndian.Uint64(info[TIMESTAMP_START : TIMESTAMP_START+TIMESTAMP_SIZE]),
-			Tombstone:   tombstone, 
-			Transaction: Config.Transaction {
-				Key:    string(data[:key_size]),
-				Value:  data[key_size:],
+			Crc:       binary.LittleEndian.Uint32(info[CRC_START : CRC_START+CRC_SIZE]),
+			Timestamp: binary.LittleEndian.Uint64(info[TIMESTAMP_START : TIMESTAMP_START+TIMESTAMP_SIZE]),
+			Tombstone: tombstone,
+			Transaction: Config.Transaction{
+				Key:   string(data[:key_size]),
+				Value: data[key_size:],
 			},
 		}
 
-		if (lower) {   // manji kljuc od border kljuca ide u rewrite 
-			if (entry.Transaction.Key >= borderKey) {
-				entriesAdd = append(entriesAdd, &entry)           // 30 - 40
+		if lower { // manji kljuc od border kljuca ide u rewrite
+			if entry.Transaction.Key >= borderKey {
+				entriesAdd = append(entriesAdd, &entry) // 30 - 40
 			} else {
-				entriesRewrite = append(entriesRewrite, &entry)   // 1 - 30
+				entriesRewrite = append(entriesRewrite, &entry) // 1 - 30
 			}
-		} else {       // veci kljuc od border kljuca ide u rewrite 
-			if (entry.Transaction.Key <= borderKey) {
-				entriesAdd = append(entriesAdd, &entry)           // 60 - 80
+		} else { // veci kljuc od border kljuca ide u rewrite
+			if entry.Transaction.Key <= borderKey {
+				entriesAdd = append(entriesAdd, &entry) // 60 - 80
 			} else {
-				entriesRewrite = append(entriesRewrite, &entry)   // 80 - 96
+				entriesRewrite = append(entriesRewrite, &entry) // 80 - 96
 			}
 		}
 	}
 
 	return entriesRewrite, entriesAdd
 }
-
 
 func levelMergeFiles(level int, dataFiles []string, indexFiles []string, summaryFiles []string, bloomFiles []string, merkleFiles []string, lsm Config.LSMTree, num int, entriesAdd []*Config.Entry) {
 
@@ -955,8 +938,8 @@ func levelMergeFiles(level int, dataFiles []string, indexFiles []string, summary
 
 	// na pocetku entries = entriesAdd, tj. sadrzi sve prethodne izdvojene entryje
 	// koji su se preklapali u nekim sstabelama sa nasim opsegom
-		// ako je entriesAdd = nil, sve okej i dalje
-	
+	// ako je entriesAdd = nil, sve okej i dalje
+
 	// jedini problem koji moze biti: da li je okej samo na radnom mjesta da ih appendujemo?
 	// da li redoslijed entryja uopste utice na algoritam? -> to treba da se provjeri
 	entries = entriesAdd
@@ -989,7 +972,6 @@ func levelMergeFiles(level int, dataFiles []string, indexFiles []string, summary
 	summaryFileName := summaryFiles[0]
 	bloomFileName := bloomFiles[0]
 	merkleFileName := merkleFiles[0]
-	
 
 	// uklanjamo sve vezano za pocetnu odabranu SStabelu, jer
 	// cemo kasnije na ove putanje postaviti sve za nasu novu, spojenu, veliku SSTabelu
@@ -1021,11 +1003,9 @@ func levelMergeFiles(level int, dataFiles []string, indexFiles []string, summary
 	removeFileName(lsm, bloomFileName)
 	removeFileName(lsm, merkleFileName)
 
-
 	//pravljenje novog sstablea od svih sstableova ovog nivoa koji su sada spojeni
 	//fali merkle???
 	MakeData(sortedAllEntries, dataFileName, indexFileName, summaryFileName, bloomFileName)
-
 
 	// brisemo sve fajlove za ostale SSTabele, jer su spojene u veliku i ne trebaju nam vise
 	for i := 1; i < len(dataFiles); i++ {
@@ -1050,7 +1030,7 @@ func levelMergeFiles(level int, dataFiles []string, indexFiles []string, summary
 			log.Fatal(err)
 		}
 
-		//nisam sigurna da li ovo zapravo izbaci 
+		//nisam sigurna da li ovo zapravo izbaci
 		removeFileName(lsm, dataFiles[i])
 		removeFileName(lsm, indexFiles[i])
 		removeFileName(lsm, summaryFiles[i])
@@ -1075,47 +1055,43 @@ func levelMergeFiles(level int, dataFiles []string, indexFiles []string, summary
 		return compareFilenames(i, j, lsm.MerkleTreeFilesNames)
 	})
 
-
 	renameFiles(lsm.DataFilesNames, dataFileName, num)
 	renameFiles(lsm.IndexFilesNames, indexFileName, num)
 	renameFiles(lsm.SummaryFilesNames, summaryFileName, num)
 	renameFiles(lsm.BloomFilterFilesNames, bloomFileName, num)
 	renameFiles(lsm.MerkleTreeFilesNames, merkleFileName, num)
 
-
 	//Da li treba rename ostalih fajlova??
 	// pretpostavljam da sada kada se napravi nova SSTabela velika (spojena od vise)
 
 	// recimo da gledamo ovako da ima
-	//  L2  |   2_1.txt   > 2_2.txt     2_3.txt    2_4.txt     
+	//  L2  |   2_1.txt   > 2_2.txt     2_3.txt    2_4.txt
 	//  L3  |   3_1.txt   > 3_2.txt   > 3_3.txt    3_4.txt    3_5.txt    3_6.txt
 
 	// spajamo 2_2, 3_2 i 3_3
 	// dobijamo novu SSTabelu sa pathName: 3_2.txt (tako smo izabrali, da path bude prva u narednom nivou)
 
-
 	// dobijamo sledece:
-	//  L2  |   2_1.txt    2_3.txt    2_4.txt   
+	//  L2  |   2_1.txt    2_3.txt    2_4.txt
 	//  L3  |   3_1.txt   *3_2.txt    3_4.txt    3_5.txt    3_6.txt
 
 	// gdje je *3_2.txt nova spojena SSTabela
 
-
-// PAR PITANJA: 
+	// PAR PITANJA:
 	// 1. Da li treba rename preostale?
 	// - 99% da treba, jer nekima pristupamo preko i = 1; i < n; i++, pa cemo propustiti neke
 
 	// 2. Sta ako se *3_2.txt ustv appenduje na kraj, pa izgleda ovako:
-	//  L2  |   2_1.txt    2_3.txt    2_4.txt   
-	//  L3  |   3_1.txt    3_4.txt    3_5.txt    3_6.txt    *3_2.txt 
-	 
+	//  L2  |   2_1.txt    2_3.txt    2_4.txt
+	//  L3  |   3_1.txt    3_4.txt    3_5.txt    3_6.txt    *3_2.txt
+
 	// - onda trebamo sortirati sve prvo? pa onda rename uraditi?
 	// - za ovo 2. nisam sigurna tacno kako je predstavljeno, to je navodno taj LSM tree, a kako to sve izgleda tu?
 	// - kako se appenduje?
 }
 
-func compareFilenames(i, j int,fileNames []string) bool {
-	
+func compareFilenames(i, j int, fileNames []string) bool {
+
 	//trazenje poslednjeg i pretposlednjeg broja u imenu
 	//npr ako stoji 3_11 , pretposlednji je 3, poslednji je 11
 	numI, subNumI := extractNumbers(fileNames[i])
@@ -1146,26 +1122,25 @@ func extractNumbers(fileName string) (int, int) {
 	return lastNum, preLastNum
 }
 
-func renameFiles(files []string, targetFile string, num int){
+func renameFiles(files []string, targetFile string, num int) {
 
 	lastNum, preLastNum := extractNumbers(targetFile)
 
 	var firstIdx int = -1
 	var lastIdx int = -1
 
-	
 	//npr. ako je niz 2_2, 3_1, 3_2, 3_4, 3_5, 4_1, 4_6
 	//firstIdx = 3
 	//lastIdx = 5
-	for i, path := range files{
+	for i, path := range files {
 		tempLastNum, tempPreLastNum := extractNumbers(path)
 
-		if tempPreLastNum < preLastNum{
+		if tempPreLastNum < preLastNum {
 			continue
 		}
 
 		//ako je prosao svoj level, uzima indeks elementa kao indikator za kraj prethodnog levela
-		if tempPreLastNum > preLastNum{
+		if tempPreLastNum > preLastNum {
 			lastIdx = i
 			break
 		}
@@ -1173,17 +1148,17 @@ func renameFiles(files []string, targetFile string, num int){
 		//ako je dosao do ovde to znaci da je dosao do putanja trazenog levela
 
 		//pronasli smo indeks na kom se nalazi prvi element nakon targetFile u nizu putanja
-		if lastNum == tempLastNum{
-			firstIdx = i+1
+		if lastNum == tempLastNum {
+			firstIdx = i + 1
 		}
 	}
 
-	for i:=firstIdx ; i<lastIdx ;i++{
+	for i := firstIdx; i < lastIdx; i++ {
 
 		path := files[i]
 		tempLastNum, _ := extractNumbers(path)
-		
-		tempLastNum-=num
+
+		tempLastNum -= num
 		newPath := strings.Replace(path, fmt.Sprintf("_%d.", lastNum), fmt.Sprintf("_%d.", tempLastNum), 1)
 
 		err := os.Rename(path, newPath)
