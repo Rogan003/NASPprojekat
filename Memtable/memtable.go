@@ -86,9 +86,10 @@ func (nmt *NMemtables) Init(vers string, mCap int, num int, lsm *Config.LSMTree)
 // funkcija i za dodavanje i za izmenu elementa sa kljucem
 // u zavisnosti od verzije i prisutnosti elementa dodaje elem ili ga menja u odredjenoj strukturi
 // poziva se iz WAL-a, ako je uspesno odradjeno dodavanje/izmena
-func (nmt *NMemtables) Add(key string, value []byte) {
+func (nmt *NMemtables) Add(key string, value []byte) int {
 
 	arr := nmt.Arr         // arr memtabli
+	ind := nmt.R
 	memtable := arr[nmt.R] // prva "aktivna" memtabla
 
 	var ok bool = false
@@ -110,6 +111,8 @@ func (nmt *NMemtables) Add(key string, value []byte) {
 		}
 		nmt.R = (nmt.R + 1) % nmt.N
 	}
+
+	return ind
 }
 
 
