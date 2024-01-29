@@ -20,7 +20,7 @@ import (
 	"NASPprojekat/WriteAheadLog"
 
 	//"NASPprojekat/SSTable"
-	//"NASPProjekat/engine.go"
+	//"NASPprojekat/engine.go"
 	"NASPprojekat/TokenBucket"
 )
 
@@ -40,6 +40,14 @@ func main() {
 
 	tb := TokenBucket.TokenBucket{}
 	tb.Init(conf.TokenBucketSize, time.Minute)
+	mt.Add("2", make([]byte, 10))
+	mt.Arr[mt.R].Flush(lsm)
+
+	/*
+		PROVERA ZA KREIRANJE FAJLOVA SSTABLE
+			mt.Add("2", make([]byte, 10))
+			mt.Arr[mt.R].Flush(lsm)
+	*/
 
 	wal, err := WriteAheadLog.NewWAL("files/WAL", 60000000000, 5) // ne znam ove parametre kako i sta?
 	// inace ovo je putanja do foldera gde bi WAL segmenti mogli biti smesteni, ovaj ogroman broj je kao sat vremena za duration, i eto
@@ -261,7 +269,7 @@ func main() {
 			}
 
 		case 5:
-			for{
+			for {
 				fmt.Println("1. Kreiraj HLL")
 				fmt.Println("2. Dodaj u HLL")
 				fmt.Println("3. Kardinalnost")
@@ -284,7 +292,7 @@ func main() {
 					key_real := "hll_" + key
 					_, done := Get(&mt, cache, key_real, &tb, lsm)
 
-					if done{
+					if done {
 						fmt.Println("Greska! HLL sa datim kljucem vec postoji! ")
 						continue
 					}
@@ -292,25 +300,25 @@ func main() {
 					fmt.Println("Unesite preciznost :")
 					var precision int
 					_, err := fmt.Scanf("%d", &precision)
-					if err != nil{
+					if err != nil {
 						fmt.Println("Greska pri unosu! ")
 						continue
 					}
 
-					bytes, isOk := CreateHLL(precision)
+					bytes, isOk := CreateHLL(uint8(precision))
 
-					if isOk{
+					if isOk {
 						done = false
-					}else{
+					} else {
 						done = Put(wal, &mt, cache, key_real, bytes, &tb)
 					}
 
 					if done {
 						fmt.Printf("Uspesno dodat kljuc hll %s!\n", key)
-					}else{
+					} else {
 						fmt.Printf("GRESKA! Neuspesno dodavanje kljuca hll %s!\n", key)
 					}
-				
+
 				case 2:
 					fmt.Println("Unesite kljuc hll: ")
 					scanner.Scan()
@@ -318,10 +326,10 @@ func main() {
 					key_real := "hll_" + key
 					elem, done := Get(&mt, cache, key_real, &tb, lsm)
 
-					if done{
+					if done {
 						hll, err := DecodeHLL(elem)
 
-						if err{
+						if err {
 							fmt.Printf("GRESKA! Neuspesno dobavljanje kljuca hll %s!\n", key)
 							continue
 						}
@@ -332,7 +340,7 @@ func main() {
 
 						hll.Add(value)
 
-						bytes, err:= EncodeHLL(hll)
+						bytes, err := EncodeHLL(hll)
 
 						var done bool
 
@@ -342,13 +350,12 @@ func main() {
 							done = Put(wal, &mt, cache, key_real, bytes, &tb)
 						}
 
-
 						if done {
 							fmt.Printf("Uspesno dodat element %s u hll!\n", value)
 						} else {
 							fmt.Printf("GRESKA! Neuspesno dodavanje elementa %s u hll!\n", value)
 						}
-					}else{
+					} else {
 						fmt.Printf("GRESKA! Neuspesno dobavljanje kljuca %s!\n", key)
 					}
 
@@ -359,10 +366,10 @@ func main() {
 					key_real := "hll_" + key
 					elem, done := Get(&mt, cache, key_real, &tb, lsm)
 
-					if done{
+					if done {
 						hll, err := DecodeHLL(elem)
 
-						if err{
+						if err {
 							fmt.Printf("GRESKA! Neuspesno dobavljanje kljuca hll %s!\n", key)
 							continue
 						}
@@ -370,10 +377,10 @@ func main() {
 						estimation := hll.Estimate()
 						fmt.Printf("Kardinalnost je %f.\n", estimation)
 
-					}else{
+					} else {
 						fmt.Printf("GRESKA! Neuspesno dobavljanje kljuca %s!\n", key)
 					}
-				
+
 				case 4:
 					fmt.Println("Unesite kljuc hll: ")
 					scanner.Scan()

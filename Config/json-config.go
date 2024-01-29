@@ -61,7 +61,7 @@ func ConfigInst() (Config, error) {
 
 func NewLMSTree(Config Config) *LSMTree {
 	l := make([]int, Config.LevelCount)
-	file := make([]string, Config.LevelNumber*Config.LevelNumber)
+	file := make([]string, Config.LevelNumber*Config.LevelCount)
 	return &LSMTree{
 		Levels:                l,
 		CountOfLevels:         Config.LevelCount,
@@ -71,7 +71,7 @@ func NewLMSTree(Config Config) *LSMTree {
 		SummaryFilesNames:     file,
 		BloomFilterFilesNames: file,
 		MerkleTreeFilesNames:  file,
-		T:					   Config.T,
+		T:                     Config.T,
 	}
 }
 
