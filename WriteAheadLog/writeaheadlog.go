@@ -86,6 +86,7 @@ func ScanWALFolder() ([]string, error) {
 //provaliti kako da znam u koji segment da upisem
 //funkcija samo radi cisto upisivanje jednog entry-ja
 
+// WriteInFile treba da doda entry i ako dodje do prelaza u sledeci segment, njegov deo upise u sledeci segment i vraca err,trye/false da ki je presao na sledeci entry
 func WriteInFile(entry []byte, path string) error {
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644) //0644 - vlasnik moze da cita i pise, ostali mogu samo da citaju
 	if err != nil {
@@ -104,6 +105,8 @@ func WriteInFile(entry []byte, path string) error {
 //treba mi putanja do poslednjeg segmenta
 //provaliti kako dobiti poslednji segment
 
+// vraca entry, offset, true/false da li je presao
+// prima putanju do fajal ili fajl i offset
 func ReadEntriesFromFile(path string) ([]*Config.Entry, error) {
 
 	file, err := os.Open(path)
@@ -171,6 +174,8 @@ func (wal *WAL) DeleteWAL() {
 
 // fja koja iz svih fajlova segmenata saznaje koji je poslednji, po indeksu u imenu fajla, setuje lastIndex u tom wal i postavlja mu lastSegment
 // slicno kao sto si radila scanWAL prodji kroz fajlove i nadji lastindex
+
+// promeniti za lastindex da bude samo ime segmenta ili otovreni fajl lastsegmenta
 func (wal *WAL) OpenWAL() error {
 
 	path := "NASPprojekat/files/WAL"
@@ -205,6 +210,7 @@ func (wal *WAL) OpenWAL() error {
 		return numI < numJ
 	})
 
+	//OVO PROMENITI
 	last := segments[len(segments)-1]
 	entries, err := ReadEntriesFromFile(last)
 	if err != nil {
@@ -218,6 +224,8 @@ func (wal *WAL) OpenWAL() error {
 }
 
 // dodaje novi entri u aktivni segment, ako je pun segment, pravi novi i cuva stari
+
+// treba promeniti da samo nad entry zove writeInFile i ako je doslo do prelaza na sledeci pri upisu onda promeniti last index
 func (wal *WAL) AddEntry(entry *Config.Entry) error {
 	//dodaje entri u poslednji segment
 	//ako ne moze zeljeni entry da se upise jer nema dovoljno prostora
