@@ -34,17 +34,11 @@ type HLL struct {
 	Reg []uint8
 }
 
-func Init(precision uint8) *HLL{
+func (hll *HLL)Init(precision uint8) *HLL{
 
-	maxreg := uint64(1 << precision)			//racunanje maksimalnog broja registara, stepenovanje se vrsi shiftovanjem
-	registri := make([]uint8, maxreg)			//niz registara velicine maxreg
-
-	return &HLL{
-		M:maxreg,
-		P:precision,
-		Reg:registri,
-
-	}
+	hll.M := uint64(1 << precision)			//racunanje maksimalnog broja registara, stepenovanje se vrsi shiftovanjem
+	hll.Reg := make([]uint8, maxreg)			//niz registara velicine maxreg
+	hll.P := precision
 }
 
 func (hll *HLL) Add(elem []byte){
@@ -138,20 +132,26 @@ func (hll *HLL) Deserialize(path string){
 	
 }
 
-// func main(){
-// 	hll :=Init(10)
-// 	//fmt.Println(hll.p,",",hll.m)
-// 	element1 := []byte("vanja")
-// 	element2 := []byte("vanja")
-// 	element3 := []byte("kostic")
-// 	element4 := []byte("sv292022")
-// 	element5 := []byte("asdfghjkl")
-// 	hll.Add(element1)
-// 	hll.Add(element3)
-// 	hll.Add(element2)
-// 	hll.Add(element4)
-// 	hll.Add(element5)
+func (hll *HLL)ToBytes() ([]byte, error) {
+	var network bytes.Buffer
+	enc := gob.NewEncoder(&network)
 
-// 	estimation := hll.Estimate()
-// 	fmt.Printf("Procenjena kardinalnost: %f\n", estimation)
-// }
+	err := enc.Encode(*hll)
+	if err != nil {
+		return nil, err
+	}
+
+	return network.Bytes(), nil
+}
+
+func (hll *HLL)FromBytes() (b []byte) error{
+	network:= bytes.NewBuffer(b)
+	dec := gob.NewDecoder(network)
+
+	err := dec.Decode(&hll)
+
+	if err != nil{
+		return err
+	}
+	return nil
+}

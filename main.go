@@ -261,23 +261,134 @@ func main() {
 			}
 
 		case 5:
-			fmt.Println("1. Kreiraj HLL")
-			fmt.Println("2. Dodaj u HLL")
-			fmt.Println("3. Kardinalnost")
-			fmt.Println("4. Obrisi HLL")
-			fmt.Println("x. Vrati se")
-			fmt.Println("Unesite opciju: ")
-			scannerhll := bufio.NewScanner(os.Stdin)
-			scannerhll.Scan()
-			optionhll := scannerhll.Text()
-			if optionhll == "x" {
-				continue
-			}
+			for{
+				fmt.Println("1. Kreiraj HLL")
+				fmt.Println("2. Dodaj u HLL")
+				fmt.Println("3. Kardinalnost")
+				fmt.Println("4. Obrisi HLL")
+				fmt.Println("x. Vrati se")
+				fmt.Println("Unesite opciju: ")
+				scannerhll := bufio.NewScanner(os.Stdin)
+				scannerhll.Scan()
+				optionhll := scannerhll.Text()
+				if optionhll == "x" {
+					continue
+				}
 
-			optionhllInt, _ := strconv.Atoi(optionhll)
-			switch optionhllInt {
-			case 1:
+				optionhllInt, _ := strconv.Atoi(optionhll)
+				switch optionhllInt {
+				case 1:
+					fmt.Println("Unesite kljuc hll: ")
+					scanner.Scan()
+					key := scanner.Text()
+					key_real := "hll_" + key
+					_, done := Get(&mt, cache, key_real, &tb, lsm)
 
+					if done{
+						fmt.Println("Greska! HLL sa datim kljucem vec postoji! ")
+						continue
+					}
+
+					fmt.Println("Unesite preciznost :")
+					var precision int
+					_, err := fmt.Scanf("%d", &precision)
+					if err != nil{
+						fmt.Println("Greska pri unosu! ")
+						continue
+					}
+
+					bytes, isOk := CreateHLL(precision)
+
+					if isOk{
+						done = false
+					}else{
+						done = Put(wal, &mt, cache, key_real, bytes, &tb)
+					}
+
+					if done {
+						fmt.Printf("Uspesno dodat kljuc hll %s!\n", key)
+					}else{
+						fmt.Printf("GRESKA! Neuspesno dodavanje kljuca hll %s!\n", key)
+					}
+				
+				case 2:
+					fmt.Println("Unesite kljuc hll: ")
+					scanner.Scan()
+					key := scanner.Text()
+					key_real := "hll_" + key
+					elem, done := Get(&mt, cache, key_real, &tb, lsm)
+
+					if done{
+						hll, err := DecodeHLL(elem)
+
+						if err{
+							fmt.Printf("GRESKA! Neuspesno dobavljanje kljuca hll %s!\n", key)
+							continue
+						}
+
+						fmt.Println("Unesite element koji zelite dodati u hll: ")
+						scanner.Scan()
+						value := scanner.Bytes()
+
+						hll.Add(value)
+
+						bytes, err:= EncodeHLL(hll)
+
+						var done bool
+
+						if err {
+							done = false
+						} else {
+							done = Put(wal, &mt, cache, key_real, bytes, &tb)
+						}
+
+
+						if done {
+							fmt.Printf("Uspesno dodat element %s u hll!\n", value)
+						} else {
+							fmt.Printf("GRESKA! Neuspesno dodavanje elementa %s u hll!\n", value)
+						}
+					}else{
+						fmt.Printf("GRESKA! Neuspesno dobavljanje kljuca %s!\n", key)
+					}
+
+				case 3:
+					fmt.Println("Unesite kljuc hll: ")
+					scanner.Scan()
+					key := scanner.Text()
+					key_real := "hll_" + key
+					elem, done := Get(&mt, cache, key_real, &tb, lsm)
+
+					if done{
+						hll, err := DecodeHLL(elem)
+
+						if err{
+							fmt.Printf("GRESKA! Neuspesno dobavljanje kljuca hll %s!\n", key)
+							continue
+						}
+
+						estimation := hll.Estimate()
+						fmt.Printf("Kardinalnost je %f.\n", estimation)
+
+					}else{
+						fmt.Printf("GRESKA! Neuspesno dobavljanje kljuca %s!\n", key)
+					}
+				
+				case 4:
+					fmt.Println("Unesite kljuc hll: ")
+					scanner.Scan()
+					key := scanner.Text()
+					key_real := "hll_" + key
+					_, done := Delete(wal, &mt, cache, key_real, &tb, lsm)
+
+					if done {
+						fmt.Printf("Uspesno obrisan element pod kljucem %s!\n", key)
+					} else {
+						fmt.Printf("GRESKA! Neuspesno brisanje kljuca %s!\n", key)
+					}
+				default:
+					fmt.Println("Nepostojeca opcija. Pokusajte ponovo.")
+				}
 			}
 
 		case 6:

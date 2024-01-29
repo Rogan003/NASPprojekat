@@ -445,6 +445,33 @@ func DecodeBF(bytes []byte) (*BloomFilter.BloomFilter, bool) {
 	return &bf, false
 }
 
+func CreateHLL(precision uint8) ([]byte, bool){
+	hll :=  HyperLogLog.HLL{}
+	hll.Init(precision)
+	return EncodeHLL(&hll)
+}
+
+func EncodeHLL(hll *HyperLogLog.HLL) ([]byte, bool){
+	bytes, err:= hll.ToBytes()
+	if err != nil {
+		return nil, true
+	}
+
+	return bytes, false
+}
+
+func DecodeHLL(bytes []byte)(*HyperLogLog.HLL, bool){
+	hll := HyperLogLog.HLL{}
+	err := hll.FromBytes(bytes)
+
+	if err != nil {
+		fmt.Println(err)
+		return nil, true
+	}
+
+	return &hll, false
+}
+
 func CreateCMS(width float64, depth float64) ([]byte, bool) {
 	cms := CountMinSketch.CMS{}
 	cms.NewCMS(depth, width)
