@@ -102,31 +102,253 @@ func WriteInFile(entry []byte, path string) error {
 	return nil
 }
 
+func getNextSegmentPath(path string) (string, error) {
+	
+	_, fileName := filepath.Split(path)
+
+	dirPath := strings.TrimSuffix(path, fileName)
+
+	segmentNumberStr := strings.TrimSuffix(strings.TrimPrefix(fileName, "segment"), ".log")
+
+	segmentNumber, err := strconv.Atoi(segmentNumberStr)
+	if err != nil {
+		return "", err
+	}
+
+	segmentNumber++
+
+	newFileName := fmt.Sprintf("segment%d.log", segmentNumber)
+	newPath := filepath.Join(dirPath, newFileName)
+
+	return newPath, nil
+}
+
+func isInSegments(targetPathpath string, segmnets []string) bool {
+	for _, path := range segments {
+		if path == targetPath {
+			return true
+		}
+	}
+	return false
+}
 //treba mi putanja do poslednjeg segmenta
 //provaliti kako dobiti poslednji segment
 
 // vraca entry, offset, true/false da li je presao
 // prima putanju do fajal ili fajl i offset
-func ReadEntriesFromFile(path string) ([]*Config.Entry, error) {
 
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
+func ReadEntry(path string, offset int) (Config.Entry, int, bool) {
+
+	segementsFiles, err := ScanWALFolder()
+	if err!= nil{
+		log.Fatal(err)
+		return Entry{}, 0, false 
 	}
+	file, err :=os.OpenFile(path, os.O_RDONLY, 0644)
+
+	//da li treba vratiti gresku?
+	if err != nil{
+		log.Fatal(err)
+		return Entry{}, 0, false 
+	}
+
 	defer file.Close()
 
-	var entries []*Config.Entry //kolekcija entrija koja se vraca
+	mmapFile, mmapErr := mmap.Open(file.Fd(), 0, 0, mmap.READ)
+	if mmapErr != nil {
+		fmt.Println("Greška prilikom mmap:", mmapErr)
+		return Entry{}, 0, false
+	}
+	defer mmapFile.Close()
+	//mozda treba defer.mmapFile.Unmap() ????
 
-	scanner := bufio.NewScanner(file) //za kretanje red po red
+	buffer := mmapFile[offset:]							//u buffer ide sve sto je ostalo od trenutnog fajla
+	var entry Config.Entry{}
+	var shifted bool
+	var newoffset int
+	var buffer2 []byte									//baffer2 je za bajtove drugog fajl - inicijalizovace se ako postoji sledeci fajl				
+	nextPath,err = getNextSegmentPath(path)				//trazimo sledeci fajl i ako postoji otvaramo ga
 
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		entry := Config.ToEntry([]byte(line)) //konvertovanje u entry
-		entries = append(entries, &entry)     //dodavanje u kolekciju
+	if isInSegments(nextPath, segementsFiles){
+		if err!=nil{
+			log.Fatal(err)
+			return Entry{}, 0, false 
+		}
+	
+		file2, err :=os.OpenFile(nextPath, os.O_RDONLY, 0644)	
+	
+		if err != nil{
+			log.Fatal(err)
+			return Entry{}, 0, false 
+		}
+	
+		defer file2.Close()
+	
+		mmapFile2, mmapErr := mmap.Open(file2.Fd(), 0, 0, mmap.READ)
+		if mmapErr != nil {
+			fmt.Println("Greška prilikom mmap:", mmapErr)
+			return Entry{}, 0, false
+		}
+		defer mmapFile2.Close()
+	
+		buffer2 := mmapFile2[0:]
 	}
 
-	return entries, nil
+	
+	if len(buffer) < 4{
+		crc := buffer 
+		bytesLeft := buffer2[:(4-len(buffer))]
+
+		entry.Crc = binary.LittleEndian.Uint32(append(crc,bytesLeft...))
+		buffer2 = buffer2[(4-len(buffer)):]
+
+		entry.Timestamp = binary.LittleEndian.Uint64(buffer2[:8])
+		buffer2 = buffer2[8:]
+
+		entry.Tombstone = (buffer2[0] != 0)
+		buffer2 = buffer2[1:]
+		
+		keySize := binary.LittleEndian.Uint64(buffer2[:8])
+		buffer2 = buffer2[8:]
+
+		valueSize := binary.LittleEndian.Uint64(buffer2[:8])
+		buffer2 = buffer2[8:]
+
+		entry.Transaction.Key = string(buffer2[:keySize])
+		buffer2 = buffer2[keySize:]
+
+		entry.Transaction.Value = buffer2[:valueSize]
+		shifted = true
+		newoffset = (4-len(buffer)) + 8 + 1 + 8 + 8 + keySize + valueSize
+
+	}else{
+		entry.Crc = binary.LittleEndian.Uint32(buffer[:4])
+		buffer = buffer[4:]
+
+		if len(buffer) < 8{
+			timestamp := buffer
+			bytesLeft := buffer2[:(8-len(buffer))]
+
+			entry.Timestamp = binary.LittleEndian.Uint64(append(timestamp,bytesLeft...))
+			buffer2 = buffer2[(8-len(buffer)):]
+			
+			entry.Tombstone = (buffer2[0] != 0)
+			buffer2 = buffer2[1:]
+			
+			keySize := binary.LittleEndian.Uint64(buffer2[:8])
+			buffer2 = buffer2[8:]
+
+			valueSize := binary.LittleEndian.Uint64(buffer2[:8])
+			buffer2 = buffer2[8:]
+
+			entry.Transaction.Key = string(buffer2[:keySize])
+			buffer2 = buffer2[keySize:]
+
+			entry.Transaction.Value = buffer2[:valueSize]
+			shifted = true
+			newoffset = (8-len(buffer)) + 1 + 8 + 8 + keySize + valueSize
+
+		}else{
+			entry.Timestamp = binary.LittleEndian.Uint64(buffer[:8])
+			buffer = buffer[8:]
+
+			if len(buffer) == 0{
+
+				entry.Tombstone = (buffer2[0] != 0)
+				buffer2 = buffer2[1:]
+				
+				keySize := binary.LittleEndian.Uint64(buffer2[:8])
+				buffer2 = buffer2[8:]
+
+				valueSize := binary.LittleEndian.Uint64(buffer2[:8])
+				buffer2 = buffer2[8:]
+
+				entry.Transaction.Key = string(buffer2[:keySize])
+				buffer2 = buffer2[keySize:]
+
+				entry.Transaction.Value = buffer2[:valueSize]
+				shifted = true
+				newoffset = 1 + 8 + 8 + keySize + valueSize
+			}else{
+
+				entry.Tombstone = (buffer[0] != 0)
+				buffer = buffer[1:]
+
+				if len(buffer) < 8 {
+					help := buffer
+					bytesLeft := buffer2[:(8-len(buffer))]
+
+					keySize := binary.LittleEndian.Uint64(append(help,bytesLeft...))
+					buffer2 = buffer2[(8-len(buffer)):]
+
+					valueSize := binary.LittleEndian.Uint64(buffer2[:8])
+					buffer2 = buffer2[8:]
+
+					entry.Transaction.Key = string(buffer2[:keySize])
+					buffer2 = buffer2[keySize:]
+
+					entry.Transaction.Value = buffer2[:valueSize]
+					shifted = true
+					newoffset = (8-len(buffer)) + 8 + keySize + valueSize
+				}
+			}else{
+				keySize := binary.LittleEndian.Uint64(buffer[:8])
+				buffer = buffer[8:]
+
+				if len(buffer) < 8 {
+					help := buffer
+					bytesLeft := buffer2[:(8-len(buffer))]
+
+					valueSize := binary.LittleEndian.Uint64(append(help,bytesLeft...))
+					buffer2 = buffer2[(8-len(buffer)):]
+
+					entry.Transaction.Key = string(buffer2[:keySize])
+					buffer2 = buffer2[keySize:]
+
+					entry.Transaction.Value = buffer2[:valueSize]
+					shifted = true
+					newoffset = (8-len(buffer)) + keySize + valueSize
+				}else{
+					valueSize := binary.LittleEndian.Uint64(buffer2[:8])
+					buffer2 = buffer2[8:]
+					
+					if len(buffer) < keySize{
+						key := buffer
+						bytesLeft := buffer2[:(keySize - len(buffer))]
+
+						keyBytes := append(value, bytesLeft...)
+						entry.Transaction.Key = string(keyBytes)
+						buffer2 = buffer2[(keySize - len(buffer)):]
+
+						entry.Transaction.Value = buffer2[:valueSize]
+						newoffset = valueSize + (keySize - len(buffer))
+						shifted = true
+
+					}else{
+
+						entry.Transaction.Key = string(buffer[:keySize])
+						buffer = buffer[keySize:]
+
+						if len(buffer) < valueSize{
+							value := buffer			//ovde se sada nalazi deo value-a, sada treba ostatak value-a da uzmemo iz drugog fajla
+							bytesLeft := buffer2[:(valueSize - len(buffer))] 
+
+							valueBytes := append(value, bytesLeft...)
+							entry.Transaction.Value = valueBytes
+							newoffset = valueSize - len(buffer)
+							shifted = true
+						}else{
+							shifted = false
+							newoffset = offset + 4 + 8 + 1 + 8 + 8 + valueSize + keySize
+						}
+					}
+				}
+			}
+		}
+	
+	}
+
+	return entry, newoffset, shifted
 
 }
 
