@@ -6,14 +6,15 @@ import (
 )
 
 type WAL struct {
-	path         string        //putanja do fajla sa walom
-	lastSegment  *os.File      //pokazivac na aktivni segment
-	duration     time.Duration //na koji period ce se zvati brisanje
-	lowWaterMark int           //do kog indeksa se brisu segmenti
-	lastIndex    int64         //indeks poslednjeg segmenta u walu
-	segmentSize  int64         //maksimalni broj bajtova u segmentu
-	CurrentSize  int64         //broj popunjenih bajtova u segmentu
-
+	path            string        //putanja do fajla sa walom
+	lastSegment     *os.File      //pokazivac na aktivni segment
+	duration        time.Duration //na koji period ce se zvati brisanje
+	lowWaterMark    int           //do kog indeksa se brisu segmenti
+	lastIndex       int64         //indeks poslednjeg segmenta u walu
+	segmentSize     int64         //maksimalni broj bajtova u segmentu
+	CurrentSize     int64         //broj popunjenih bajtova u segmentu
+	currentMemIndex int64         //pamti indeex trenutno aktivnog memtablea
+	segmentsTable   *os.File      //pokazivac na tabelu segmenta
 }
 
 // Funkcije za WAL

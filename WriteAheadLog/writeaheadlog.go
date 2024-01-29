@@ -4,7 +4,6 @@ import (
 	"NASPprojekat/Config"
 	"NASPprojekat/Memtable"
 	"bufio"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -26,7 +25,7 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 	//redom ucitavamo fajlove sa segmentima
 	for _, fileName := range segementsFiles {
 		//procitamo entirje iz segmenta
-		entries, err := ReadEntriesFromFile("NASPprojekat/files/WAL/" + fileName)
+		entries, err := ReadEntriesFromFile("files_WAL/" + fileName)
 		if err != nil { //ako do nje dodje za slucaj da je doslo do greske
 			return err
 		}
@@ -35,10 +34,12 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 		for _, entry := range entries {
 			// ako je operacija brisanja
 			if entry.Tombstone {
-				mem.Delete(entry.Transaction.Key)
+				index := mem.Delete(entry.Transaction.Key)
+				wal.currenMemIndex = index
 			} else {
 				//ako je operacija dodavanja ili izmene
-				mem.Add(entry.Transaction.Key, entry.Transaction.Value)
+				index := mem.Add(entry.Transaction.Key, entry.Transaction.Value)
+				wal.currenMemIndex = int64(index)
 			}
 		}
 
@@ -51,7 +52,7 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 //podataka u takvoj strukturi?
 
 func ScanWALFolder() ([]string, error) {
-	path := "NASPprojekat/files/WAL" //putanja do foldera sa segmentima
+	path := "files_WAL" //putanja do foldera sa segmentima
 
 	files, err := ioutil.ReadDir(path) //ucitavanje svega sto je u folderu,  vraca listu fajlova ili gresku
 	if err != nil {                    //ako do nje dodje za slucaj da je doslo do greske
@@ -355,7 +356,7 @@ func ReadEntry(path string, offset int) (Config.Entry, int, bool) {
 func (wal *WAL) DeleteSegments() error {
 	//brise fajlove ispod lowWaterMarka
 
-	path := "NASPprojekat/files/WAL"
+	path := "files_WAL"
 	files, err := ioutil.ReadDir(path)
 	if err != nil {
 		return err
@@ -400,7 +401,7 @@ func (wal *WAL) DeleteWAL() {
 // promeniti za lastindex da bude samo ime segmenta ili otovreni fajl lastsegmenta
 func (wal *WAL) OpenWAL() error {
 
-	path := "files_WAL/"
+	path := "files_WAL"
 
 	files, err := ioutil.ReadDir(path)
 	if err != nil {
@@ -413,6 +414,13 @@ func (wal *WAL) OpenWAL() error {
 		if file.IsDir() { //ako je direktorijum ignorisemo
 			continue
 		}
+		if strings.HasSuffix(file.Name(), ".txt") {
+			wal.segmentsTable, err = os.OpenFile(filepath.Join(path, file.Name()), os.O_RDWR|os.O_APPEND|os.O_CREATE, 0644)
+			if err != nil {
+				return err
+			}
+			//wal.currenMemIndex = -1
+		}
 
 		if strings.HasSuffix(file.Name(), ".log") && strings.HasPrefix(file.Name(), "segment") {
 			segmentPath := filepath.Join(path, file.Name())
@@ -421,7 +429,19 @@ func (wal *WAL) OpenWAL() error {
 	}
 
 	if len(segments) == 0 {
-		return errors.New("Nema segmenta u WAL direktorijumu")
+		//treba dodati pravljenje novog aktivnog
+
+		//pravi novu tabelu
+		file, err := os.Create(filepath.Join(path, "memseg.txt"))
+		if err != nil {
+			fmt.Println("Error:", err)
+			return err
+		}
+		wal.segmentsTable = file
+		wal.currentMemIndex = 0
+		return nil
+		//UMESTO OVOG SE KREIRA PRVI SEGMENT-AKTIVNI SEGMENT I SEGMENTTABELA
+		//return errors.New("Nema segmenta u WAL direktorijumu")
 	}
 
 	sort.Slice(segments, func(i, j int) bool {
@@ -477,28 +497,102 @@ func (wal *WAL) AddEntry(entry *Config.Entry) error {
 	return nil
 
 }
-func (wal *WAL) AddTransaction(Tombstone bool, transaction Config.Transaction) (error, uint64) { // pravi entry od transakcije i cuva ga
+func (wal *WAL) AddTransaction(Tombstone bool, transaction Config.Transaction) (error, *Config.Entry) { // pravi entry od transakcije i cuva ga
 	entry := Config.NewEntry(Tombstone, transaction)
 	err := wal.AddEntry(entry)
 	if err != nil {
-		return err, 0
+		return err, nil
 	}
-	return nil, entry.Timestamp
+	return nil, entry
 }
-func Put(wal *WAL, mem *Memtable.NMemtables, key string, value []byte) bool { //dodaje transakciju dodavanja u wal pa dodaje u memtable
-	transaction := Config.NewTransaction(key, value)
-	err, _ := wal.AddTransaction(false, *transaction)
+
+// vraca ime prethodnog aktivnog segmenta
+func getSegBefore(segment string) string {
+	idxStr := strings.TrimSuffix(strings.TrimPrefix(segment, "segment"), ".log")
+	currentIndex, _ := strconv.Atoi(idxStr)
+	currentIndex--
+	strNumber := fmt.Sprintf("%d", currentIndex)
+	return "segment" + strNumber + ".log"
+}
+
+// doslo je do smene memtableova - upisuje su
+func (wal *WAL) updateMemSeg(entry *Config.Entry, memIndex int) {
+	//trazim koliko je bajtova posledji unet entry dugacak
+	newEntryBytes := entry.ToByte()
+	numberOfBytes := len(newEntryBytes)
+	var lines []string
+	scanner := bufio.NewScanner(wal.segmentsTable)
+	var counter = 0
+	for scanner.Scan() {
+		line := scanner.Text()
+		//treba da u memseg.txt da za stari memtable pise u kom segmentu mu je zavrsetak i do kog bajta
+		if counter == int(wal.currentMemIndex) {
+			if wal.CurrentSize <= int64(numberOfBytes) {
+				strNumber := fmt.Sprintf("%d", wal.segmentSize+wal.CurrentSize-int64(numberOfBytes))
+				line += "," + getSegBefore(wal.lastSegment.Name()) + " " + strNumber + ".txt"
+			} else {
+				strNumber := fmt.Sprintf("%d", wal.CurrentSize-int64(numberOfBytes))
+				line += "," + wal.lastSegment.Name() + " " + strNumber + ".txt"
+			}
+			//treba da u memseg.txt da za novi memtable pise u kom segmentu mu je pocetak i od kog bajta
+		} else if counter == int(memIndex) {
+			if wal.CurrentSize == int64(numberOfBytes) {
+				strNumber := fmt.Sprintf("%d", 0)
+				line = wal.lastSegment.Name() + " " + strNumber + ".txt"
+			} else if wal.CurrentSize > int64(numberOfBytes) {
+				strNumber := fmt.Sprintf("%d", wal.CurrentSize-int64(numberOfBytes))
+				line = wal.lastSegment.Name() + " " + strNumber + ".txt"
+			} else {
+				strNumber := fmt.Sprintf("%d", wal.segmentSize+wal.CurrentSize-int64(numberOfBytes))
+				line = getSegBefore(wal.lastSegment.Name()) + " " + strNumber + ".txt"
+			}
+		}
+		counter++
+		lines = append(lines, line)
+	}
+
+	newFile, err := os.Create(wal.segmentsTable.Name())
 	if err != nil {
-		return false
+		panic(err)
 	}
-	mem.Add(key, value)
-	return true
+	wal.segmentsTable = newFile
+
+	writer := bufio.NewWriter(wal.segmentsTable)
+	for _, line := range lines {
+		_, err := fmt.Fprintln(writer, line)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	if err := writer.Flush(); err != nil {
+		panic(err)
+	}
+
+	wal.currentMemIndex = int64(memIndex)
 }
+
 func Delete(wal *WAL, mem *Memtable.NMemtables, key string) { //dodaje transakciju brisanja u wal pa brise iz memtable
 	transaction := Config.NewTransaction(key, []byte{})
-	err, _ := wal.AddTransaction(true, *transaction)
+	err, entry := wal.AddTransaction(true, *transaction)
 	if err != nil {
 		return
 	}
-	mem.Delete(key)
+	memIndex := mem.Delete(key)
+	if wal.currentMemIndex != int64(memIndex) {
+		wal.updateMemSeg(entry, memIndex)
+	}
+}
+
+func Put(wal *WAL, mem *Memtable.NMemtables, key string, value []byte) bool { //dodaje transakciju dodavanja u wal pa dodaje u memtable
+	transaction := Config.NewTransaction(key, value)
+	err, entry := wal.AddTransaction(false, *transaction)
+	if err != nil {
+		return false
+	}
+	memIndex := mem.Add(key, value)
+	if wal.currentMemIndex != int64(memIndex) {
+		wal.updateMemSeg(entry, memIndex)
+	}
+	return true
 }
