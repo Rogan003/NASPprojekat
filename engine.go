@@ -21,7 +21,7 @@ func Get(memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *T
 
 	ok := tb.ConsumeToken()
 	if !ok {
-		fmt.Println("\nGreska! Previse obavljenih requestova u odredjenom vremenskom rasponu!\n")
+		fmt.Print("\nGreska! Previse obavljenih requestova u odredjenom vremenskom rasponu!\n")
 		return nil, false
 	}
 
@@ -347,7 +347,7 @@ func Put(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.LRU
 
 	ok := tb.ConsumeToken()
 	if !ok {
-		fmt.Println("\nGreska! Previse obavljenih requestova u odredjenom vremenskom rasponu!\n")
+		fmt.Print("\nGreska! Previse obavljenih requestova u odredjenom vremenskom rasponu!\n")
 		return false
 	}
 
@@ -375,7 +375,7 @@ func Delete(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.
 
 	ok := tb.ConsumeToken()
 	if !ok {
-		fmt.Println("\nGreska! Previse obavljenih requestova u odredjenom vremenskom rasponu!\n")
+		fmt.Print("\nGreska! Previse obavljenih requestova u odredjenom vremenskom rasponu!\n")
 		return nil, false
 	}
 
