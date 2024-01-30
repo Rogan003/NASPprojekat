@@ -24,8 +24,6 @@ import (
 	"NASPprojekat/TokenBucket"
 )
 
-var elem1 = []byte("Stringic")
-
 func main() {
 	conf, err := Config.ConfigInst()
 
@@ -36,7 +34,8 @@ func main() {
 	lsm := Config.NewLMSTree(conf)
 
 	mt := Memtable.NMemtables{}
-
+	mt.Init(conf.MemtableStructure, int(conf.MemtableSize), conf.MemtableNumber, lsm)
+	
 	tb := TokenBucket.TokenBucket{}
 	tb.Init(conf.TokenBucketSize, time.Minute)
 
@@ -52,13 +51,28 @@ func main() {
 			mt.Arr[mt.R].Flush(lsm)
 	*/
 
-	wal, err := WriteAheadLog.NewWAL("files/WAL", 60000000000, 5) // ne znam ove parametre kako i sta?
+	wal, err := WriteAheadLog.NewWAL("files_WAL/", nil, 60000000000, 5, conf.WalSize) // ne znam ove parametre kako i sta?
 	// inace ovo je putanja do foldera gde bi WAL segmenti mogli biti smesteni, ovaj ogroman broj je kao sat vremena za duration, i eto
-	// low watermark lupih 5, ne znam gde treba conf.WalSize???
+	// low watermark lupih 5, ne znam gde treba conf.WalSize??? ja sam ga lupio da bude segment size?
 
 	if err != nil {
+		fmt.Println("Greska pri ucitavanju sistema!")
 		return
 	}
+
+	err = wal.OpenWAL()
+
+	if err != nil {
+		fmt.Println("Greska pri ucitavanju sistema!")
+		return
+	}
+
+	// err = wal.RemakeWAL(&mt)
+
+	// if err != nil {
+	// 	fmt.Println("Greska pri ucitavanju sistema!")
+	// 	return
+	// }
 
 	cache := Cache.NewLRUCache(int(conf.CacheCapacity))
 
@@ -86,7 +100,7 @@ func main() {
 		}
 		optionInt, _ := strconv.Atoi(option)
 
-		switch optionInt { // DODATI PROVERE REZERVISANIH KLJUCEVA SVUDA, ONI NE SMEJU INACE BITI KORISCENI
+		switch optionInt {
 		case 1:
 			fmt.Println("Unesite kljuc elementa: ")
 			scanner.Scan()
@@ -135,7 +149,7 @@ func main() {
 				fmt.Println("Uneti kljuc pocinje sa zabranjenim sistemskim prefiksom (karakteri do _ sa _)!")
 				continue
 			}
-			
+
 			_, done := Delete(wal, &mt, cache, key, &tb, lsm)
 
 			if done {
@@ -618,7 +632,7 @@ func main() {
 
 		case 8:
 			fmt.Println("Unesite opseg za skeniranje: ")
-			val key1, key2 string
+			var key1, key2 string
 			fmt.Printf("Unesite prvi kljuc: ")
 			fmt.Scanf("%s", &key1)
 			fmt.Printf("\nUnesite drugi kljuc: ")
@@ -626,14 +640,14 @@ func main() {
 			RangeScan(&mt, key1, key2, conf.PageSize)
 
 		case 9:
-			val key string
+			var key string
 			fmt.Printf("Unesite prefiks za skeniranje: ")
-			fmt.Scanf("%s", &key1)
+			fmt.Scanf("%s", &key)
 			PrefixScan(&mt, key, conf.PageSize)
 
 		case 10:
 			fmt.Println("Unesite opseg za iteriranje: ")
-			val key1, key2 string
+			var key1, key2 string
 			fmt.Printf("Unesite prvi kljuc: ")
 			fmt.Scanf("%s", &key1)
 			fmt.Printf("\nUnesite drugi kljuc: ")
@@ -641,9 +655,9 @@ func main() {
 			RangeIter(&mt, key1, key2)
 
 		case 11:
-			val key string
+			var key string
 			fmt.Printf("Unesite prefiks za iteriranje: ")
-			fmt.Scanf("%s", &key1)
+			fmt.Scanf("%s", &key)
 			PrefixIter(&mt, key)
 
 		case 'x':

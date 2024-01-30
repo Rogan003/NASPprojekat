@@ -12,7 +12,7 @@ import (
 )
 
 type Config struct {
-	WalSize           uint64 `json:"wal_size"`
+	WalSize           int64 `json:"wal_size"`
 	MemtableSize      uint64 `json:"memtable_size"`
 	MemtableStructure string `json:"memtable_structure"`
 	MemtableNumber    int    `json:"memtable_number"`

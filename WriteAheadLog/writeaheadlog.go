@@ -15,6 +15,7 @@ import (
 	"log"
 	"github.com/edsrzf/mmap-go"
 	"encoding/binary"
+	"reflect"
 )
 
 // treba jos resiti kad segment sadrzi pola jedne a pola druge memtabele
@@ -24,8 +25,8 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 	if err != nil {
 		return err
 	}
-	memIdx := 3 //PROMENITI ZA NAJSTARIJI MEM
-
+	memIdx := 0 //PROMENITI ZA NAJSTARIJI MEM, pretpostavljam da treba 0? posto je memtabla inicijalno prazna?
+	
 	// citamo od kog offseta treba krenuti citanje segmenta sa najmanjim indeksom
 	file, err := os.Open("files_WAL/memseg.txt")
 	if err != nil {
@@ -35,7 +36,7 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
-
+	
 	// citanje linija iz memseg redom
 	offset := 0
 	lineCount := 0
@@ -55,7 +56,7 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 			break
 		}
 	}
-
+	
 	if err := scanner.Err(); err != nil {
 		fmt.Println("Error reading file:", err)
 		return err
@@ -66,10 +67,10 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 		for {
 			entry, next, jump := wal.readEntry(fileName, offset)
 			//ako smo zavrsili sa citanjem svih entrya izadji iz fje
-			if entry == nil {
+			if reflect.DeepEqual(entry, Config.Entry{}) {
 				return nil
 			}
-			offset = jump
+			offset = next
 
 			if entry.Tombstone {
 				//ako je operacija brisanja
@@ -77,10 +78,10 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 			} else {
 				//ako je operacija dodavanja ili izmene
 				index := mem.Add(entry.Transaction.Key, entry.Transaction.Value)
-				wal.currenMemIndex = int64(index)
+				wal.currentMemIndex = int64(index)
 			}
 			//ako su procitani svi entry iz ovog segmenta idi na sledeci
-			if next {
+			if jump {
 				break
 			}
 		}
@@ -160,7 +161,16 @@ func (wal *WAL)WriteInFile(entry *Config.Entry, path string) (error,bool) {
 	// 	return err, false 
 	// }
 
-	file, err :=os.OpenFile(path, os.O_APPEND|os.O_CREATE, 0644)
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
+	
+	fi, err2 := file.Stat()
+	if err2 != nil {
+		return err2, false
+	}
+
+	if fi.Size() == 0 {
+		file.Truncate(1)
+	}
 
 	if err != nil{
 		log.Fatal(err)
@@ -169,7 +179,7 @@ func (wal *WAL)WriteInFile(entry *Config.Entry, path string) (error,bool) {
 
 	defer file.Close()
 
-	mmapFile, err := mmap.Map(file, mmap.RDWR, 0 )
+	mmapFile, err := mmap.Map(file, mmap.RDWR, 0)
 
 	if err != nil{
 		log.Fatal(err)
@@ -199,11 +209,22 @@ func (wal *WAL)WriteInFile(entry *Config.Entry, path string) (error,bool) {
 
 		nextPath,err := getNextSegmentPath(path)
 		if err != nil {
+			fmt.Println("hey")
 			log.Fatal(err)
 			return err, false
 		}
 		
-		file2, err :=os.OpenFile(nextPath, os.O_APPEND|os.O_CREATE, 0644)	
+
+		file2, err := os.OpenFile(nextPath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
+	
+		fi, err2 := file.Stat()
+		if err2 != nil {
+			return err2, false
+		}
+	
+		if fi.Size() == 0 {
+			file2.Truncate(1)
+		}
 	
 		if err != nil{
 			log.Fatal(err)
@@ -283,7 +304,16 @@ func (wal *WAL)readEntry(path string, offset int) (Config.Entry, int, bool) {
 		log.Fatal(err)
 		return Config.Entry{}, 0, false 
 	}
-	file, err :=os.OpenFile(path, os.O_RDONLY, 0644)
+	file, err := os.OpenFile(path, os.O_RDWR, 0644) // promenio sam os.O_RDONLY
+	
+	fi, err2 := file.Stat()
+	if err2 != nil {
+		return Config.Entry{}, 0, false
+	}
+	
+	if fi.Size() == 0 {
+		file.Truncate(1)
+	}
 
 	//da li treba vratiti gresku?
 	if err != nil{
@@ -293,7 +323,7 @@ func (wal *WAL)readEntry(path string, offset int) (Config.Entry, int, bool) {
 
 	defer file.Close()
 
-	mmapFile, err := mmap.Map(file, mmap.RDWR, 0)
+	mmapFile, err := mmap.Map(file, mmap.RDWR, 0) // pogresan argument?
 	if err != nil {
 		log.Fatal(err)
 		return Config.Entry{}, 0, false
@@ -318,9 +348,18 @@ func (wal *WAL)readEntry(path string, offset int) (Config.Entry, int, bool) {
 			log.Fatal(err)
 			return Config.Entry{}, 0, false 
 		}
+		
+		file2, err := os.OpenFile(nextPath, os.O_RDWR, 0644) // promenio sam os.O_RDONLY
 	
-		file2, err :=os.OpenFile(nextPath, os.O_RDONLY, 0644)	
+		fi, err2 := file.Stat()
+		if err2 != nil {
+			return Config.Entry{}, 0, false
+		}
 	
+		if fi.Size() == 0 {
+			file2.Truncate(1)
+		}
+
 		if err != nil{
 			log.Fatal(err)
 			return Config.Entry{}, 0, false 
@@ -570,7 +609,7 @@ func (wal *WAL) OpenWAL() error {
 // dodaje novi entri u aktivni segment, ako je pun segment, pravi novi i cuva stari
 func (wal *WAL) AddEntry(entry *Config.Entry) error {
 	//dodaje entri u poslednji segment
-	err, next := wal.WriteInFile(entry)
+	err, next := wal.WriteInFile(entry, wal.lastSegment.Name()) // mozda treba drugaciji parametar?
 	if err != nil {
 		return err
 	}
@@ -681,7 +720,7 @@ func Delete(wal *WAL, mem *Memtable.NMemtables, key string) { //dodaje transakci
 	if err != nil {
 		return
 	}
-	memIndex := mem.Delete(key)
+	_, memIndex := mem.Delete(key)
 	if wal.currentMemIndex != int64(memIndex) {
 		wal.updateMemSeg(entry, memIndex)
 	}

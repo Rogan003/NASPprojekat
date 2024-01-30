@@ -43,12 +43,13 @@ func (wal *WAL) SegmentSize() int64 {
 }
 
 // konstruktori
-func NewWAL(path string, lastSeg *os.File, duration time.Duration, lowWaterMark int) (*WAL, error) {
+func NewWAL(path string, lastSeg *os.File, duration time.Duration, lowWaterMark int, segSize int64) (*WAL, error) {
 	return &WAL{
 		path:         path,
 		lastSegment:  lastSeg,
 		duration:     duration,
 		lowWaterMark: lowWaterMark,
+		segmentSize:  segSize,
 		lastIndex:    0,
 	}, nil
 }

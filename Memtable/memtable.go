@@ -105,7 +105,7 @@ func (nmt *NMemtables) Add(key string, value []byte) int {
 	if memtable.curCap == memtable.maxCap {
 		if (nmt.R-nmt.l == nmt.N-1) || (nmt.R < nmt.l) {
 			memtableLast := arr[nmt.l]  // izbrisala sam proveru da li je memtable empty
-			memtableLast.flush(nmt.lsm) // valjda nece trebati (testiracu)
+			memtableLast.flush(nmt.lsm, nmt.l) // valjda nece trebati (testiracu)
 			nmt.l = (nmt.l + 1) % nmt.N
 		}
 		nmt.R = (nmt.R + 1) % nmt.N
@@ -139,7 +139,7 @@ func (nmt *NMemtables) AddAndDelete(key string, value []byte) {
 	if memtable.curCap == memtable.maxCap {
 		if (nmt.R-nmt.l == nmt.N-1) || (nmt.R < nmt.l) {
 			memtableLast := arr[nmt.l]  // izbrisala sam proveru da li je memtable empty
-			memtableLast.flush(nmt.lsm) // valjda nece trebati (testiracu)
+			memtableLast.flush(nmt.lsm, nmt.l) // valjda nece trebati (testiracu)
 			nmt.l = (nmt.l + 1) % nmt.N
 		}
 		nmt.R = (nmt.R + 1) % nmt.N
@@ -248,7 +248,7 @@ func (nmt *NMemtables) Get(key string) ([]byte, bool, bool) {
 }
 
 // funkcija koja radi flush na disk (sstable)
-func (mt *Memtable) flush(lsm *Config.LSMTree) {
+func (mt *Memtable) flush(lsm *Config.LSMTree, index int) {
 	/*
 		for _, value := range mt.GetSortedElems() {
 			fmt.Printf("%s %d %t %s\n", value.Transaction.Key, value.Transaction.Value, value.Tombstone, value.ToByte())
@@ -270,7 +270,7 @@ func (mt *Memtable) flush(lsm *Config.LSMTree) {
 	mt.curCap = 0
 
 	//postavljanje da za taj memtable jos nismo koristili segmente
-	memIdx := 3 //KAKO DOBITI INDEX MEMTABLE KOJA JE FLASHOVANA
+	memIdx := index //KAKO DOBITI INDEX MEMTABLE KOJA JE FLASHOVANA
 	filePath := "files_WAL/memseg.txt"
 
 	// citamo sadrzaj memseg fajla

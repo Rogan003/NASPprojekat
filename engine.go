@@ -16,6 +16,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strconv"
 )
 
 func Get(memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *TokenBucket.TokenBucket, lsm *Config.LSMTree) ([]byte, bool) {
@@ -258,10 +259,10 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 							for {
 								keyHelp, valHelp := SSTable.ReadData(int64(indexes[index]), value) // u get se poziva nad ovim value?
 								// sta ako dodjemo do kraja fajla?
-								if keyHelp != lastElem && string(keyHelp) < keys[in] && string(keyHelp) <= key2 && !bytes.Equal(keyHelp, []byte{}) && !(keyHelp[0:3] == "bf_" || keyHelp[0:4] == "cms_" || keyHelp[0:4] == "hll_" || keyHelp[0:3] == "sh_" || keyHelp[0:3] == "tb_") {
+								if string(keyHelp) != lastElem && string(keyHelp) < keys[in] && string(keyHelp) <= key2 && !bytes.Equal(keyHelp, []byte{}) && !(string(keyHelp)[0:3] == "bf_" || string(keyHelp)[0:4] == "cms_" || string(keyHelp)[0:4] == "hll_" || string(keyHelp)[0:3] == "sh_" || string(keyHelp)[0:3] == "tb_") {
 									keys[in] = string(keyHelp)
 									vals[in] = valHelp
-									lastElem = keyHelp
+									lastElem = string(keyHelp)
 									lastElemsTables[in] = "S" + string(index)
 									lastElemsPos[in] = indexes[index]
 									break
@@ -305,12 +306,14 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 				} else {
 					for i := 0; i < pageSize; i++ {
 						if lastElemsTables[lastIter + i][0] == 'M' {
-							memElems := memtable.Arr[int(lastElemsTables[lastIter + i][1:])].GetSortedElems()
+							pos, _ := strconv.Atoi(lastElemsTables[lastIter + i][1:])
+							memElems := memtable.Arr[pos].GetSortedElems()
 	
 							keys[i] = memElems[lastElemsPos[lastIter + i]].Transaction.Key
 							vals[i] = memElems[lastElemsPos[lastIter + i]].Transaction.Value
 						} else {
-							keyHelp, valHelp := SSTable.ReadData(lastElemsPos[lastIter + i], sstables[int(lastElemsTables[lastIter + i][1:])])
+							pos, _ := strconv.Atoi(lastElemsTables[lastIter + i][1:])
+							keyHelp, valHelp := SSTable.ReadData(int64(lastElemsPos[lastIter + i]), sstables[pos])
 							
 							keys[i] = string(keyHelp)
 							vals[i] = valHelp
@@ -325,12 +328,14 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 
 				for i := 0; i < pageSize; i++ {
 					if lastElemsTables[lastIter - pageSize + i][0] == 'M' {
-						memElems := memtable.Arr[int(lastElemsTables[lastIter - pageSize + i][1:])].GetSortedElems()
+						pos, _ := strconv.Atoi(lastElemsTables[lastIter - pageSize + i][1:])
+						memElems := memtable.Arr[pos].GetSortedElems()
 
 						keys[i] = memElems[lastElemsPos[lastIter - pageSize + i]].Transaction.Key
 						vals[i] = memElems[lastElemsPos[lastIter - pageSize + i]].Transaction.Value
 					} else {
-						keyHelp, valHelp := SSTable.ReadData(lastElemsPos[lastIter - pageSize + i], sstables[int(lastElemsTables[lastIter - pageSize + i][1:])])
+						pos, _ := strconv.Atoi(lastElemsTables[lastIter - pageSize + i][1:])
+						keyHelp, valHelp := SSTable.ReadData(int64(lastElemsPos[lastIter - pageSize + i]), sstables[pos])
 						
 						keys[i] = string(keyHelp)
 						vals[i] = valHelp
