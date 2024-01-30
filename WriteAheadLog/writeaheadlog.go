@@ -12,12 +12,15 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"log"
+	"github.com/edsrzf/mmap-go"
+	"encoding/binary"
 )
 
 // treba jos resiti kad segment sadrzi pola jedne a pola druge memtabele
 func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 	//ucitavamo imena svih fajlova sa segmentima
-	segementsFiles, err := ScanWALFolder()
+	segementsFiles, err := wal.ScanWALFolder()
 	if err != nil {
 		return err
 	}
@@ -61,7 +64,7 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 	//redom ucitavamo fajlove sa segmentima
 	for _, fileName := range segementsFiles {
 		for {
-			entry, next, jump := readEntry(fileName, offset)
+			entry, next, jump := wal.readEntry(fileName, offset)
 			//ako smo zavrsili sa citanjem svih entrya izadji iz fje
 			if entry == nil {
 				return nil
@@ -146,19 +149,96 @@ func (wal *WAL) ScanWALFolder() ([]string, error) {
 //funkcija samo radi cisto upisivanje jednog entry-ja
 
 // WriteInFile treba da doda entry i ako dodje do prelaza u sledeci segment, njegov deo upise u sledeci segment i vraca err,trye/false da ki je presao na sledeci entry
-func WriteInFile(entry []byte, path string) error {
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644) //0644 - vlasnik moze da cita i pise, ostali mogu samo da citaju
-	if err != nil {
-		return err
-	}
-	defer file.Close() //zatvaranje u slucaju greske
+func (wal *WAL)WriteInFile(entry *Config.Entry, path string) (error,bool) {
 
-	_, err = file.Write(entry)
-	if err != nil {
-		return err
+
+	var shifted bool
+
+	// segementsFiles, err := wal.ScanWALFolder()
+	// if err!= nil{
+	// 	log.Fatal(err)
+	// 	return err, false 
+	// }
+
+	file, err :=os.OpenFile(path, os.O_APPEND|os.O_CREATE, 0644)
+
+	if err != nil{
+		log.Fatal(err)
+		return err, false
 	}
 
-	return nil
+	defer file.Close()
+
+	mmapFile, err := mmap.Map(file, mmap.RDWR, 0 )
+
+	if err != nil{
+		log.Fatal(err)
+		return err, false
+	}
+	defer mmapFile.Unmap()
+
+	entryBytes := entry.ToByte()
+
+	fileInfo, err := file.Stat()
+	//remainingCapacity := Config.MaxSegmentSize - fileInfo.Size()
+	remainingCapacity := wal.segmentSize - fileInfo.Size()
+
+	if len(entryBytes) <= int(remainingCapacity){
+		mmapFile = append(mmapFile, entryBytes...)
+		shifted = false
+
+		err = mmapFile.Flush()
+		if err != nil {
+			log.Fatal(err)
+			return err, false
+		}
+	}else{
+
+		firstPart := entryBytes[:remainingCapacity]
+		secondPart := entryBytes[remainingCapacity:]
+
+		nextPath,err := getNextSegmentPath(path)
+		if err != nil {
+			log.Fatal(err)
+			return err, false
+		}
+		
+		file2, err :=os.OpenFile(nextPath, os.O_APPEND|os.O_CREATE, 0644)	
+	
+		if err != nil{
+			log.Fatal(err)
+			return err, false
+		}
+	
+		defer file2.Close()
+
+		mmapFile2, err := mmap.Map(file2, mmap.RDWR, 0 )
+
+		if err != nil{
+			log.Fatal(err)
+			return err, false
+		}
+		defer mmapFile2.Unmap()
+
+		mmapFile = append(mmapFile, firstPart...)
+		mmapFile2 = append(mmapFile2, secondPart...)
+		shifted = true
+		err = mmapFile.Flush()
+		if err != nil {
+			log.Fatal(err)
+			return err, false
+		}
+
+		err = mmapFile2.Flush()
+		if err != nil {
+			log.Fatal(err)
+			return err, false
+		}
+	}
+	
+	
+	return nil, shifted
+
 }
 
 func getNextSegmentPath(path string) (string, error) {
@@ -182,7 +262,7 @@ func getNextSegmentPath(path string) (string, error) {
 	return newPath, nil
 }
 
-func isInSegments(targetPathpath string, segmnets []string) bool {
+func isInSegments(targetPath string, segments []string) bool {
 	for _, path := range segments {
 		if path == targetPath {
 			return true
@@ -196,61 +276,66 @@ func isInSegments(targetPathpath string, segmnets []string) bool {
 // vraca entry, offset, true/false da li je presao
 // prima putanju do fajal ili fajl i offset
 
-func ReadEntry(path string, offset int) (Config.Entry, int, bool) {
+func (wal *WAL)readEntry(path string, offset int) (Config.Entry, int, bool) {
 
-	segementsFiles, err := ScanWALFolder()
+	segementsFiles, err := wal.ScanWALFolder()
 	if err!= nil{
 		log.Fatal(err)
-		return Entry{}, 0, false 
+		return Config.Entry{}, 0, false 
 	}
 	file, err :=os.OpenFile(path, os.O_RDONLY, 0644)
 
 	//da li treba vratiti gresku?
 	if err != nil{
 		log.Fatal(err)
-		return Entry{}, 0, false 
+		return Config.Entry{}, 0, false 
 	}
 
 	defer file.Close()
 
-	mmapFile, mmapErr := mmap.Open(file.Fd(), 0, 0, mmap.READ)
-	if mmapErr != nil {
-		fmt.Println("Greška prilikom mmap:", mmapErr)
-		return Entry{}, 0, false
+	mmapFile, err := mmap.Map(file, mmap.RDWR, 0)
+	if err != nil {
+		log.Fatal(err)
+		return Config.Entry{}, 0, false
 	}
-	defer mmapFile.Close()
+	defer mmapFile.Unmap()
 	//mozda treba defer.mmapFile.Unmap() ????
 
 	buffer := mmapFile[offset:]							//u buffer ide sve sto je ostalo od trenutnog fajla
-	var entry Config.Entry{}
+	var entry Config.Entry
+	//var entry Config.Entry{}
 	var shifted bool
 	var newoffset int
 	var buffer2 []byte									//baffer2 je za bajtove drugog fajl - inicijalizovace se ako postoji sledeci fajl				
-	nextPath,err = getNextSegmentPath(path)				//trazimo sledeci fajl i ako postoji otvaramo ga
+	nextPath,err := getNextSegmentPath(path)				//trazimo sledeci fajl i ako postoji otvaramo ga
+	if err!=nil{
+		log.Fatal(err)
+		return Config.Entry{}, 0, false 
+	}
 
 	if isInSegments(nextPath, segementsFiles){
 		if err!=nil{
 			log.Fatal(err)
-			return Entry{}, 0, false 
+			return Config.Entry{}, 0, false 
 		}
 	
 		file2, err :=os.OpenFile(nextPath, os.O_RDONLY, 0644)	
 	
 		if err != nil{
 			log.Fatal(err)
-			return Entry{}, 0, false 
+			return Config.Entry{}, 0, false 
 		}
 	
 		defer file2.Close()
 	
-		mmapFile2, mmapErr := mmap.Open(file2.Fd(), 0, 0, mmap.READ)
-		if mmapErr != nil {
-			fmt.Println("Greška prilikom mmap:", mmapErr)
-			return Entry{}, 0, false
+		mmapFile2, err := mmap.Map(file2, mmap.RDWR, 0)
+		if err != nil {
+			log.Fatal(err)
+			return Config.Entry{}, 0, false
 		}
-		defer mmapFile2.Close()
+		defer mmapFile2.Unmap()
 	
-		buffer2 := mmapFile2[0:]
+		buffer2 = mmapFile2[0:]
 	}
 
 	
@@ -278,7 +363,7 @@ func ReadEntry(path string, offset int) (Config.Entry, int, bool) {
 
 		entry.Transaction.Value = buffer2[:valueSize]
 		shifted = true
-		newoffset = (4-len(buffer)) + 8 + 1 + 8 + 8 + keySize + valueSize
+		newoffset = (4-len(buffer)) + 8 + 1 + 8 + 8 + int(keySize) + int(valueSize)
 
 	}else{
 		entry.Crc = binary.LittleEndian.Uint32(buffer[:4])
@@ -305,7 +390,7 @@ func ReadEntry(path string, offset int) (Config.Entry, int, bool) {
 
 			entry.Transaction.Value = buffer2[:valueSize]
 			shifted = true
-			newoffset = (8-len(buffer)) + 1 + 8 + 8 + keySize + valueSize
+			newoffset = (8-len(buffer)) + 1 + 8 + 8 + int(keySize) + int(valueSize)
 
 		}else{
 			entry.Timestamp = binary.LittleEndian.Uint64(buffer[:8])
@@ -327,7 +412,7 @@ func ReadEntry(path string, offset int) (Config.Entry, int, bool) {
 
 				entry.Transaction.Value = buffer2[:valueSize]
 				shifted = true
-				newoffset = 1 + 8 + 8 + keySize + valueSize
+				newoffset = 1 + 8 + 8 + int(keySize) + int(valueSize)
 			}else{
 
 				entry.Tombstone = (buffer[0] != 0)
@@ -348,67 +433,66 @@ func ReadEntry(path string, offset int) (Config.Entry, int, bool) {
 
 					entry.Transaction.Value = buffer2[:valueSize]
 					shifted = true
-					newoffset = (8-len(buffer)) + 8 + keySize + valueSize
-				}
-			}else{
-				keySize := binary.LittleEndian.Uint64(buffer[:8])
-				buffer = buffer[8:]
-
-				if len(buffer) < 8 {
-					help := buffer
-					bytesLeft := buffer2[:(8-len(buffer))]
-
-					valueSize := binary.LittleEndian.Uint64(append(help,bytesLeft...))
-					buffer2 = buffer2[(8-len(buffer)):]
-
-					entry.Transaction.Key = string(buffer2[:keySize])
-					buffer2 = buffer2[keySize:]
-
-					entry.Transaction.Value = buffer2[:valueSize]
-					shifted = true
-					newoffset = (8-len(buffer)) + keySize + valueSize
+					newoffset = (8-len(buffer)) + 8 + int(keySize) + int(valueSize)
 				}else{
-					valueSize := binary.LittleEndian.Uint64(buffer2[:8])
-					buffer2 = buffer2[8:]
-					
-					if len(buffer) < keySize{
-						key := buffer
-						bytesLeft := buffer2[:(keySize - len(buffer))]
+					keySize := binary.LittleEndian.Uint64(buffer[:8])
+					buffer = buffer[8:]
 
-						keyBytes := append(value, bytesLeft...)
-						entry.Transaction.Key = string(keyBytes)
-						buffer2 = buffer2[(keySize - len(buffer)):]
+					if len(buffer) < 8 {
+						help := buffer
+						bytesLeft := buffer2[:(8-len(buffer))]
+
+						valueSize := binary.LittleEndian.Uint64(append(help,bytesLeft...))
+						buffer2 = buffer2[(8-len(buffer)):]
+
+						entry.Transaction.Key = string(buffer2[:keySize])
+						buffer2 = buffer2[keySize:]
 
 						entry.Transaction.Value = buffer2[:valueSize]
-						newoffset = valueSize + (keySize - len(buffer))
 						shifted = true
-
+						newoffset = (8-len(buffer)) + int(keySize) + int(valueSize)
 					}else{
+						valueSize := binary.LittleEndian.Uint64(buffer2[:8])
+						buffer2 = buffer2[8:]
+						
+						if len(buffer) < int(keySize){
+							key := buffer
+							bytesLeft := buffer2[:(int(keySize) - len(buffer))]
 
-						entry.Transaction.Key = string(buffer[:keySize])
-						buffer = buffer[keySize:]
+							keyBytes := append(key, bytesLeft...)
+							entry.Transaction.Key = string(keyBytes)
+							buffer2 = buffer2[(int(keySize) - len(buffer)):]
 
-						if len(buffer) < valueSize{
-							value := buffer			//ovde se sada nalazi deo value-a, sada treba ostatak value-a da uzmemo iz drugog fajla
-							bytesLeft := buffer2[:(valueSize - len(buffer))] 
-
-							valueBytes := append(value, bytesLeft...)
-							entry.Transaction.Value = valueBytes
-							newoffset = valueSize - len(buffer)
+							entry.Transaction.Value = buffer2[:int(valueSize)]
+							newoffset = int(valueSize) + (int(keySize) - len(buffer))
 							shifted = true
+
 						}else{
-							shifted = false
-							newoffset = offset + 4 + 8 + 1 + 8 + 8 + valueSize + keySize
+
+							entry.Transaction.Key = string(buffer[:int(keySize)])
+							buffer = buffer[int(keySize):]
+
+							if len(buffer) < int(valueSize){
+								value := buffer			//ovde se sada nalazi deo value-a, sada treba ostatak value-a da uzmemo iz drugog fajla
+								bytesLeft := buffer2[:(int(valueSize) - len(buffer))] 
+
+								valueBytes := append(value, bytesLeft...)
+								entry.Transaction.Value = valueBytes
+								newoffset = int(valueSize) - len(buffer)
+								shifted = true
+							}else{
+								
+								shifted = false
+								newoffset = offset + 4 + 8 + 1 + 8 + 8 + int(valueSize) + int(keySize)
+							}
 						}
 					}
 				}
 			}
 		}
-	
 	}
-
+	
 	return entry, newoffset, shifted
-
 }
 
 func (wal *WAL) DeleteSegments() error {
@@ -458,7 +542,7 @@ func (wal *WAL) DeleteWAL() {
 // otvara last segment i sprema wal za pisanje
 func (wal *WAL) OpenWAL() error {
 	//citamo sve segmente, sortirane za nas WAL
-	segments, err := ScanWALFolder()
+	segments, err := wal.ScanWALFolder()
 	if err != nil {
 		return err
 	}
@@ -486,7 +570,7 @@ func (wal *WAL) OpenWAL() error {
 // dodaje novi entri u aktivni segment, ako je pun segment, pravi novi i cuva stari
 func (wal *WAL) AddEntry(entry *Config.Entry) error {
 	//dodaje entri u poslednji segment
-	err, next := WriteInFile(entry)
+	err, next := wal.WriteInFile(entry)
 	if err != nil {
 		return err
 	}
