@@ -12,7 +12,7 @@ import (
 )
 
 type Config struct {
-	WalSize           int64 `json:"wal_size"`
+	WalSize           int64  `json:"wal_size"`
 	MemtableSize      uint64 `json:"memtable_size"`
 	MemtableStructure string `json:"memtable_structure"`
 	MemtableNumber    int    `json:"memtable_number"`
@@ -23,6 +23,7 @@ type Config struct {
 	TokenBucketSize   int    `json:"token_bucket_maxsize"`
 	DegreeOfDilution  int    `json:"degree_of_dilution"` // stepen proredjenosti u summaryfile sstabla
 	PageSize		  int	 `json:"page_size"`
+	Compression		  bool	 `json:"compression"`
 }
 
 type LSMTree struct {

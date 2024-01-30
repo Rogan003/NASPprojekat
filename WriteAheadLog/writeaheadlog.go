@@ -160,7 +160,7 @@ func (wal *WAL)WriteInFile(entry *Config.Entry, path string) (error,bool) {
 	// 	log.Fatal(err)
 	// 	return err, false 
 	// }
-
+	
 	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
 	
 	fi, err2 := file.Stat()
@@ -178,7 +178,7 @@ func (wal *WAL)WriteInFile(entry *Config.Entry, path string) (error,bool) {
 	}
 
 	defer file.Close()
-
+	
 	mmapFile, err := mmap.Map(file, mmap.RDWR, 0)
 
 	if err != nil{
@@ -197,24 +197,16 @@ func (wal *WAL)WriteInFile(entry *Config.Entry, path string) (error,bool) {
 		mmapFile = append(mmapFile, entryBytes...)
 		shifted = false
 
-		err = mmapFile.Flush()
-		if err != nil {
-			log.Fatal(err)
-			return err, false
-		}
 	}else{
 
 		firstPart := entryBytes[:remainingCapacity]
 		secondPart := entryBytes[remainingCapacity:]
-
 		nextPath,err := getNextSegmentPath(path)
 		if err != nil {
-			fmt.Println("hey")
 			log.Fatal(err)
 			return err, false
 		}
 		
-
 		file2, err := os.OpenFile(nextPath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
 	
 		fi, err2 := file.Stat()
@@ -234,7 +226,7 @@ func (wal *WAL)WriteInFile(entry *Config.Entry, path string) (error,bool) {
 		defer file2.Close()
 
 		mmapFile2, err := mmap.Map(file2, mmap.RDWR, 0 )
-
+		
 		if err != nil{
 			log.Fatal(err)
 			return err, false
@@ -244,17 +236,7 @@ func (wal *WAL)WriteInFile(entry *Config.Entry, path string) (error,bool) {
 		mmapFile = append(mmapFile, firstPart...)
 		mmapFile2 = append(mmapFile2, secondPart...)
 		shifted = true
-		err = mmapFile.Flush()
-		if err != nil {
-			log.Fatal(err)
-			return err, false
-		}
 
-		err = mmapFile2.Flush()
-		if err != nil {
-			log.Fatal(err)
-			return err, false
-		}
 	}
 	
 	
