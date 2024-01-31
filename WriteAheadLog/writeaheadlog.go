@@ -679,6 +679,13 @@ func (wal *WAL) updateMemSeg(entry *Config.Entry, memIndex int) {
 	newEntryBytes := entry.ToByte()
 	numberOfBytes := len(newEntryBytes)
 	var lines []string
+
+	_, err := wal.segmentsTable.Seek(0, 0)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+
 	scanner := bufio.NewScanner(wal.segmentsTable)
 	var counter = 0
 	for scanner.Scan() {
@@ -687,28 +694,29 @@ func (wal *WAL) updateMemSeg(entry *Config.Entry, memIndex int) {
 		if counter == int(wal.currentMemIndex) {
 			if wal.CurrentSize == int64(numberOfBytes) {
 				strNumber := fmt.Sprintf("%d", 0)
-				line = wal.lastSegment.Name() + " " + strNumber + ".txt"
+				line = wal.lastSegment.Name() + " " + strNumber
 			} else if wal.CurrentSize < int64(numberOfBytes) {
 				strNumber := fmt.Sprintf("%d", wal.segmentSize+wal.CurrentSize-int64(numberOfBytes))
-				line += "," + getSegBefore(wal.lastSegment.Name()) + " " + strNumber + ".txt"
+				line += "," + getSegBefore(wal.lastSegment.Name()) + " " + strNumber
 			} else {
 				strNumber := fmt.Sprintf("%d", wal.CurrentSize-int64(numberOfBytes))
-				line += "," + wal.lastSegment.Name() + " " + strNumber + ".txt"
+				line += "," + wal.lastSegment.Name() + " " + strNumber
 			}
 			//treba da u memseg.txt da za novi memtable pise u kom segmentu mu je pocetak i od kog bajta
 		} else if counter == int(memIndex) {
 			if wal.CurrentSize == int64(numberOfBytes) {
 				strNumber := fmt.Sprintf("%d", 0)
-				line = wal.lastSegment.Name() + " " + strNumber + ".txt"
+				line = wal.lastSegment.Name() + " " + strNumber
 			} else if wal.CurrentSize > int64(numberOfBytes) {
 				strNumber := fmt.Sprintf("%d", wal.CurrentSize-int64(numberOfBytes))
-				line = wal.lastSegment.Name() + " " + strNumber + ".txt"
+				line = wal.lastSegment.Name() + " " + strNumber
 			} else {
 				strNumber := fmt.Sprintf("%d", wal.segmentSize+wal.CurrentSize-int64(numberOfBytes))
-				line = getSegBefore(wal.lastSegment.Name()) + " " + strNumber + ".txt"
+				line = getSegBefore(wal.lastSegment.Name()) + " " + strNumber
 			}
 		}
 		counter++
+		println(line)
 		lines = append(lines, line)
 	}
 
