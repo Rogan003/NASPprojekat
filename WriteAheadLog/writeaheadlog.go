@@ -660,7 +660,7 @@ func (wal *WAL) AddEntry(entry *Config.Entry) error {
 
 	//ako je presao na sledeci segment ucitaj ga kao poslednji
 	if next {
-		idxStr := strings.TrimSuffix(strings.TrimPrefix(wal.lastSegment.Name(), "segment"), ".log")
+		idxStr := strings.TrimSuffix(strings.TrimPrefix(wal.lastSegment.Name(), "segment-"), ".log")
 		currentIndex, _ := strconv.Atoi(idxStr)
 		currentIndex += 1
 		lastSegmentPath := "files_WAL/segment" + strconv.FormatInt(int64(currentIndex), 10) + ".log"
@@ -694,7 +694,7 @@ func (wal *WAL) AddTransaction(Tombstone bool, transaction Config.Transaction) (
 
 // vraca ime prethodnog aktivnog segmenta
 func getSegBefore(segment string) string {
-	idxStr := strings.TrimSuffix(strings.TrimPrefix(segment, "segment"), ".log")
+	idxStr := strings.TrimSuffix(strings.TrimPrefix(segment, "segment-"), ".log")
 	currentIndex, _ := strconv.Atoi(idxStr)
 	currentIndex--
 	strNumber := fmt.Sprintf("%d", currentIndex)
