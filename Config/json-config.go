@@ -22,8 +22,8 @@ type Config struct {
 	T                 int    `json:"t"`           //kolikoo se povecava svaki level
 	TokenBucketSize   int    `json:"token_bucket_maxsize"`
 	DegreeOfDilution  int    `json:"degree_of_dilution"` // stepen proredjenosti u summaryfile sstabla
-	PageSize		  int	 `json:"page_size"`
-	Compression		  bool	 `json:"compression"`
+	PageSize          int    `json:"page_size"`
+	Compression       bool   `json:"compression"`
 }
 
 type LSMTree struct {
@@ -230,6 +230,5 @@ func saveDictionary(dict *map[string]int) error {
 		fmt.Println("Error writing to file:", err)
 		return err
 	}
-	
 	return nil
 }
