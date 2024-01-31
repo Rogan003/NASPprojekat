@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"time"
+	"strings"
 )
 
 type Config struct {
@@ -63,16 +64,55 @@ func ConfigInst() (Config, error) {
 
 func NewLMSTree(Config Config) *LSMTree {
 	l := make([]int, Config.LevelCount)
-	file := make([]string, Config.LevelNumber*Config.LevelCount)
+	dataFile := make([]string, 0)
+	indexFile := make([]string, 0)
+	summaryFile := make([]string, 0)
+	filterFile := make([]string, 0)
+	merkleFile := make([]string, 0)
+
+	files, err := ioutil.ReadDir("files_SSTable") //ucitavanje svega sto je u folderu, vraca listu fajlova ili gresku
+	if err != nil {		//ako do nje dodje za slucaj da je doslo do greske
+		fmt.Println("Greska pri citanju direktorijuma sa SSTabelama!")
+		return nil
+	}
+
+	for _, file := range files { //_ jer nam ne treba indeks
+		if file.IsDir() { //ako je direktorijum ignorisemo
+			continue
+		}
+
+		if strings.HasSuffix(file.Name(), ".db") && strings.HasPrefix(file.Name(), "bloomFilterFile") {
+			path := "files_SSTable/" + file.Name() 
+			filterFile = append(filterFile, path)
+
+		} else if strings.HasSuffix(file.Name(), ".db") && strings.HasPrefix(file.Name(), "dataFile") {
+			path := "files_SSTable/" + file.Name() 
+			dataFile = append(dataFile, path)
+
+		} else if strings.HasSuffix(file.Name(), ".db") && strings.HasPrefix(file.Name(), "indexFile") {
+			path := "files_SSTable/" + file.Name() 
+			indexFile = append(indexFile, path)
+
+		} else if strings.HasSuffix(file.Name(), ".db") && strings.HasPrefix(file.Name(), "summaryFile") {
+			path := "files_SSTable/" + file.Name() 
+			summaryFile = append(summaryFile, path)
+
+		} else if strings.HasSuffix(file.Name(), ".db") && strings.HasPrefix(file.Name(), "merkleTreeFile") {
+			path := "files_SSTable/" + file.Name() 
+			merkleFile = append(merkleFile, path)
+			
+		}
+	}
+
 	return &LSMTree{
 		Levels:                l,
 		CountOfLevels:         Config.LevelCount,
 		MaxSSTables:           Config.LevelNumber,
-		DataFilesNames:        file,
-		IndexFilesNames:       file,
-		SummaryFilesNames:     file,
-		BloomFilterFilesNames: file,
-		MerkleTreeFilesNames:  file,
+		DataFilesNames:        dataFile,
+		IndexFilesNames:       indexFile,
+		SummaryFilesNames:     summaryFile,
+		BloomFilterFilesNames: filterFile,
+		MerkleTreeFilesNames:  merkleFile,
 		T:                     Config.T,
 	}
 }

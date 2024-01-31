@@ -17,6 +17,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"reflect"
 )
 
 func Get(memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *TokenBucket.TokenBucket, lsm *Config.LSMTree) ([]byte, bool) {
@@ -48,12 +49,12 @@ func Get(memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *T
 		indexFileName := fileBF[0:14] + "indexFile" + fileBF[22:]
 		foundValue := SSTable.Get(key, summaryFileName, indexFileName, fileBF)
 
-		if foundValue == nil { // slucaj kada je bf dao false positive
+		if reflect.DeepEqual(foundValue, []byte{}) {
 			return nil, false
 		}
 
 		cache.Insert(key, foundValue) // dodavanje u cache
-		return foundValue, true
+		return foundValue, true // foundValue prazno nesto bukvalno nista sad prvi put kad sam gledao?
 	}
 	return nil, false
 
@@ -72,10 +73,10 @@ func convertToBytes(value interface{}) ([]byte, error) {
 // trazenje elementa sa nekim kljucem u svim bloomfilterima
 func SearchTroughBloomFilters(key string, lsm *Config.LSMTree) (bool, string) {
 	bf := BloomFilter.BloomFilter{}
-	// dodaj putanje u bloomFilterFilesNames...
+	// kada se ponovo pokrene ne prepoznaje da postoji bilo sta u nizu
 	for i := 0; i < len(lsm.BloomFilterFilesNames); i++ {
 		err := bf.Deserialize(lsm.BloomFilterFilesNames[i])
-		if err != nil {
+		if err != nil && err != io.EOF {
 			return false, ""
 		}
 		found := bf.Check_elem([]byte(key))
@@ -448,6 +449,10 @@ func Delete(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.
 		summaryFileName := fileBF[0:14] + "summaryFile" + fileBF[22:]
 		indexFileName := fileBF[0:14] + "indexFile" + fileBF[22:]
 		foundValue := SSTable.Get(key, summaryFileName, indexFileName, fileBF)
+
+		if reflect.DeepEqual(foundValue, []byte{}) {
+			return nil, false
+		}
 
 		memtable.AddAndDelete(key, foundValue)
 		// *** da li treba dodati pa obrisati u memtable, ako je tombstone pronadjenog u sstable = true?

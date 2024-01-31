@@ -803,9 +803,9 @@ func Put(wal *WAL, mem *Memtable.NMemtables, key string, value []byte) bool { //
 	if lwm != -1 {
 		wal.lowWaterMark = lwm
 	}
-	if wal.currentMemIndex != int64(memIndex) {
+	if wal.currentMemIndex != int64(memIndex) { // treba da se desava samo nakon flush-a, a ne nakon svakog prelaska na novu memtabelu
 		wal.updateMemSeg(entry, memIndex)
-		wal.DeleteSegments()
+		//wal.DeleteSegments()
 	}
 	print("low water mark ")
 	println(wal.lowWaterMark)
