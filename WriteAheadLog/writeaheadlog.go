@@ -722,22 +722,26 @@ func (wal *WAL) updateMemSeg(entry *Config.Entry, memIndex int) {
 		if counter == int(wal.currentMemIndex) {
 			if wal.CurrentSize == int64(numberOfBytes) {
 				strNumber := fmt.Sprintf("%d", 0)
-				line = wal.lastSegment.Name() + " " + strNumber
+				name := strings.TrimPrefix(wal.lastSegment.Name(), "segment-")
+				line = "segment" + name + " " + strNumber
 			} else if wal.CurrentSize < int64(numberOfBytes) {
 				strNumber := fmt.Sprintf("%d", wal.segmentSize+wal.CurrentSize-int64(numberOfBytes))
 				line += "," + getSegBefore(wal.lastSegment.Name()) + " " + strNumber
 			} else {
+				name := strings.TrimPrefix(wal.lastSegment.Name(), "segment-")
 				strNumber := fmt.Sprintf("%d", wal.CurrentSize-int64(numberOfBytes))
-				line += "," + wal.lastSegment.Name() + " " + strNumber
+				line += "," + "segment" + name + " " + strNumber
 			}
 			//treba da u memseg.txt da za novi memtable pise u kom segmentu mu je pocetak i od kog bajta
 		} else if counter == int(memIndex) {
 			if wal.CurrentSize == int64(numberOfBytes) {
+				name := strings.TrimPrefix(wal.lastSegment.Name(), "segment-")
 				strNumber := fmt.Sprintf("%d", 0)
-				line = wal.lastSegment.Name() + " " + strNumber
+				line = "segment" + name + " " + strNumber
 			} else if wal.CurrentSize > int64(numberOfBytes) {
+				name := strings.TrimPrefix(wal.lastSegment.Name(), "segment-")
 				strNumber := fmt.Sprintf("%d", wal.CurrentSize-int64(numberOfBytes))
-				line = wal.lastSegment.Name() + " " + strNumber
+				line = "segment" + name + " " + strNumber
 			} else {
 				strNumber := fmt.Sprintf("%d", wal.segmentSize+wal.CurrentSize-int64(numberOfBytes))
 				line = getSegBefore(wal.lastSegment.Name()) + " " + strNumber
