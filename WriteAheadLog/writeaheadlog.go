@@ -345,7 +345,7 @@ func (wal *WAL) readEntry(path string, offset int) (Config.Entry, int, bool) {
 
 		file2, err := os.OpenFile(nextPath, os.O_RDWR, 0644) // promenio sam os.O_RDONLY
 
-		fi, err2 := file.Stat()
+		fi, err2 := file2.Stat()
 		if err2 != nil {
 			return Config.Entry{}, 0, false
 		}
@@ -600,13 +600,13 @@ func (wal *WAL) OpenWAL(mem *Memtable.NMemtables) error {
 		wal.segmentsTable = fileMS
 		var lines []string
 		var counter = 1
-		lines = append(lines, "segment1.log 0")
+		lines = append(lines, "1 0")
 		for {
 			if counter == mem.N-1 {
 				break
 			}
 			counter++
-			lines = append(lines, "")
+			lines = append(lines, " ")
 		}
 
 		writer := bufio.NewWriter(wal.segmentsTable)
@@ -671,14 +671,15 @@ func (wal *WAL) AddEntry(entry *Config.Entry) error {
 		//defer lastSegmentFile.Close()
 		//otvaranje novog last segmenta
 		wal.lastSegment = lastSegmentFile
-		fileInfo, err := os.Stat(lastSegmentPath)
-		if err != nil {
-			fmt.Println("Error getting file information:", err)
-			return err
-		}
-		//pamtimo koliko je zauzet trneutno
-		wal.CurrentSize = fileInfo.Size()
 	}
+	fileInfo, err := os.Stat(wal.lastSegment.Name())
+	if err != nil {
+		fmt.Println("Error getting file information:", err)
+		return err
+	}
+	//pamtimo koliko je zauzet trneutno
+	wal.CurrentSize = fileInfo.Size()
+	println(wal.CurrentSize)
 
 	return nil
 
@@ -693,12 +694,10 @@ func (wal *WAL) AddTransaction(Tombstone bool, transaction Config.Transaction) (
 }
 
 // vraca ime prethodnog aktivnog segmenta
-func getSegBefore(segment string) string {
-	idxStr := strings.TrimSuffix(strings.TrimPrefix(segment, "segment-"), ".log")
+func getIndexFromSegment(segment string) int {
+	idxStr := strings.TrimSuffix(strings.TrimPrefix(segment, "files_WAL/segment"), ".log")
 	currentIndex, _ := strconv.Atoi(idxStr)
-	currentIndex--
-	strNumber := fmt.Sprintf("%d", currentIndex)
-	return "segment" + strNumber + ".log"
+	return currentIndex
 }
 
 // doslo je do smene memtableova - upisuje su
@@ -716,39 +715,48 @@ func (wal *WAL) updateMemSeg(entry *Config.Entry, memIndex int) {
 
 	scanner := bufio.NewScanner(wal.segmentsTable)
 	var counter = 0
+	println("counter:")
 	for scanner.Scan() {
+		println(counter)
 		line := scanner.Text()
 		//treba da u memseg.txt da za stari memtable pise u kom segmentu mu je zavrsetak i do kog bajta
 		if counter == int(wal.currentMemIndex) {
 			if wal.CurrentSize == int64(numberOfBytes) {
 				strNumber := fmt.Sprintf("%d", 0)
-				name := strings.TrimPrefix(wal.lastSegment.Name(), "segment-")
-				line = "segment" + name + " " + strNumber
+				idx := fmt.Sprintf("%d", getIndexFromSegment(wal.lastSegment.Name()))
+				println("uso 1")
+				line += "," + idx + " " + strNumber
 			} else if wal.CurrentSize < int64(numberOfBytes) {
 				strNumber := fmt.Sprintf("%d", wal.segmentSize+wal.CurrentSize-int64(numberOfBytes))
-				line += "," + getSegBefore(wal.lastSegment.Name()) + " " + strNumber
+				idx := fmt.Sprintf("%d", getIndexFromSegment(wal.lastSegment.Name())-1)
+				println("uso 2")
+				line += "," + idx + " " + strNumber
 			} else {
-				name := strings.TrimPrefix(wal.lastSegment.Name(), "segment-")
 				strNumber := fmt.Sprintf("%d", wal.CurrentSize-int64(numberOfBytes))
-				line += "," + "segment" + name + " " + strNumber
+				idx := fmt.Sprintf("%d", getIndexFromSegment(wal.lastSegment.Name()))
+				println("uso 3")
+				line += "," + idx + " " + strNumber
 			}
 			//treba da u memseg.txt da za novi memtable pise u kom segmentu mu je pocetak i od kog bajta
 		} else if counter == int(memIndex) {
 			if wal.CurrentSize == int64(numberOfBytes) {
-				name := strings.TrimPrefix(wal.lastSegment.Name(), "segment-")
+				println("us 1")
+				idx := fmt.Sprintf("%d", getIndexFromSegment(wal.lastSegment.Name()))
 				strNumber := fmt.Sprintf("%d", 0)
-				line = "segment" + name + " " + strNumber
+				line = idx + " " + strNumber
 			} else if wal.CurrentSize > int64(numberOfBytes) {
-				name := strings.TrimPrefix(wal.lastSegment.Name(), "segment-")
+				println("us 2")
+				idx := fmt.Sprintf("%d", getIndexFromSegment(wal.lastSegment.Name()))
 				strNumber := fmt.Sprintf("%d", wal.CurrentSize-int64(numberOfBytes))
-				line = "segment" + name + " " + strNumber
+				line = idx + " " + strNumber
 			} else {
+				println("us 3")
 				strNumber := fmt.Sprintf("%d", wal.segmentSize+wal.CurrentSize-int64(numberOfBytes))
-				line = getSegBefore(wal.lastSegment.Name()) + " " + strNumber
+				idx := fmt.Sprintf("%d", getIndexFromSegment(wal.lastSegment.Name())-1)
+				line = idx + " " + strNumber
 			}
 		}
 		counter++
-		println(line)
 		lines = append(lines, line)
 	}
 
@@ -799,6 +807,8 @@ func Put(wal *WAL, mem *Memtable.NMemtables, key string, value []byte) bool { //
 		wal.lowWaterMark = lwm
 	}
 	if wal.currentMemIndex != int64(memIndex) {
+		println(wal.currentMemIndex)
+		println(memIndex)
 		wal.updateMemSeg(entry, memIndex)
 	}
 	return true
