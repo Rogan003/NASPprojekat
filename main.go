@@ -31,6 +31,14 @@ func main() {
 		return
 	}
 
+	var dict map[string]int
+
+	err = Config.ReadDictionary(&dict)
+
+	if err != nil {
+		return
+	}
+
 	lsm := Config.NewLMSTree(conf)
 
 	mt := Memtable.NMemtables{}
@@ -51,7 +59,7 @@ func main() {
 			mt.Arr[mt.R].Flush(lsm)
 	*/
 
-	wal, err := WriteAheadLog.NewWAL("files_WAL/", nil, 60000000000, 5, conf.WalSize) // ne znam ove parametre kako i sta?
+	wal, err := WriteAheadLog.NewWAL("files_WAL/", 60000000000, conf.WalSize) // ne znam ove parametre kako i sta?
 	// inace ovo je putanja do foldera gde bi WAL segmenti mogli biti smesteni, ovaj ogroman broj je kao sat vremena za duration, i eto
 	// low watermark lupih 5, ne znam gde treba conf.WalSize??? ja sam ga lupio da bude segment size?
 
@@ -60,7 +68,7 @@ func main() {
 		return
 	}
 
-	err = wal.OpenWAL()
+	err = wal.OpenWAL(&mt)
 
 	if err != nil {
 		fmt.Println("Greska pri ucitavanju sistema!")
@@ -666,6 +674,12 @@ func main() {
 		default:
 			fmt.Println("Nepostojeca opcija. Pokusajte ponovo.")
 		}
+	}
+
+	err = Config.SaveDictionary(&dict)
+
+	if err != nil {
+		return
 	}
 }
 
