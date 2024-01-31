@@ -147,6 +147,11 @@ func (wal *WAL) WriteInFile(entry *Config.Entry, path string) (error, bool) {
 
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0644)
 
+	if err != nil {
+		log.Fatal(err)
+		return err, false
+	}
+
 	fi, err2 := file.Stat()
 	if err2 != nil {
 		return err2, false
@@ -156,28 +161,29 @@ func (wal *WAL) WriteInFile(entry *Config.Entry, path string) (error, bool) {
 		file.Truncate(1)
 	}
 
-	if err != nil {
-		log.Fatal(err)
-		return err, false
-	}
+	entryBytes := entry.ToByte()
+
+	//remainingCapacity := Config.MaxSegmentSize - fileInfo.Size()
+	remainingCapacity := wal.segmentSize - fi.Size()
 
 	defer file.Close()
 
-	mmapFile, err := mmap.Map(file, mmap.RDWR, 0)
-
-	if err != nil {
-		log.Fatal(err)
-		return err, false
-	}
-	defer mmapFile.Unmap()
-
-	entryBytes := entry.ToByte()
-
-	fileInfo, err := file.Stat()
-	//remainingCapacity := Config.MaxSegmentSize - fileInfo.Size()
-	remainingCapacity := wal.segmentSize - fileInfo.Size()
-
 	if len(entryBytes) <= int(remainingCapacity) {
+		err = file.Truncate(fi.Size() + int64(len(entryBytes)))
+
+		if err != nil {
+			log.Fatal(err)
+			return err, false
+		}
+
+		mmapFile, err := mmap.Map(file, mmap.RDWR, 0)
+
+		if err != nil {
+			log.Fatal(err)
+			return err, false
+		}
+		defer mmapFile.Unmap()
+
 		mmapFile = append(mmapFile, entryBytes...)
 		shifted = false
 
@@ -191,7 +197,27 @@ func (wal *WAL) WriteInFile(entry *Config.Entry, path string) (error, bool) {
 			return err, false
 		}
 
+		err = file.Truncate(fi.Size() + int64(len(firstPart)))
+
+		if err != nil {
+			log.Fatal(err)
+			return err, false
+		}
+
+		mmapFile, err := mmap.Map(file, mmap.RDWR, 0)
+
+		if err != nil {
+			log.Fatal(err)
+			return err, false
+		}
+		defer mmapFile.Unmap()
+
 		file2, err := os.OpenFile(nextPath, os.O_CREATE|os.O_RDWR, 0644)
+
+		if err != nil {
+			log.Fatal(err)
+			return err, false
+		}
 
 		fi, err2 := file.Stat()
 		if err2 != nil {
@@ -201,6 +227,8 @@ func (wal *WAL) WriteInFile(entry *Config.Entry, path string) (error, bool) {
 		if fi.Size() == 0 {
 			file2.Truncate(1)
 		}
+
+		err = file2.Truncate(fi.Size() + int64(len(secondPart)))
 
 		if err != nil {
 			log.Fatal(err)
