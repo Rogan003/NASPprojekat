@@ -164,7 +164,7 @@ func (wal *WAL) WriteInFile(entry *Config.Entry, path string) (error, bool) {
 	// 	return err, false
 	// }
 
-	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0644)
 
 	fi, err2 := file.Stat()
 	if err2 != nil {
@@ -210,7 +210,7 @@ func (wal *WAL) WriteInFile(entry *Config.Entry, path string) (error, bool) {
 			return err, false
 		}
 
-		file2, err := os.OpenFile(nextPath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
+		file2, err := os.OpenFile(nextPath, os.O_CREATE|os.O_RDWR, 0644)
 
 		fi, err2 := file.Stat()
 		if err2 != nil {
@@ -503,7 +503,10 @@ func (wal *WAL) readEntry(path string, offset int) (Config.Entry, int, bool) {
 								entry.Transaction.Value = valueBytes
 								newoffset = int(valueSize) - len(buffer)
 								shifted = true
-							} else {
+							}else if (len(buffer) == int(valueSize)){
+								shifted = true
+								newoffset = 0
+							}else {
 
 								shifted = false
 								newoffset = offset + 4 + 8 + 1 + 8 + 8 + int(valueSize) + int(keySize)
