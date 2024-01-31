@@ -570,6 +570,29 @@ func (wal *WAL) OpenWAL(mem *Memtable.NMemtables) error {
 			return err
 		}
 		wal.segmentsTable = fileMS
+		var lines []string
+		var counter = 1
+		lines = append(lines, "segment1.log 0")
+		for {
+			if counter == mem.N-1 {
+				break
+			}
+			counter++
+			lines = append(lines, "")
+		}
+
+		writer := bufio.NewWriter(wal.segmentsTable)
+		for _, line := range lines {
+			_, err := fmt.Fprintln(writer, line)
+			if err != nil {
+				panic(err)
+			}
+		}
+
+		if err := writer.Flush(); err != nil {
+			panic(err)
+		}
+
 		wal.CurrentSize = 0
 		wal.currentMemIndex = 0
 		wal.lowWaterMark = 0
