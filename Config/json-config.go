@@ -198,3 +198,38 @@ func (entry *Entry) ToByte() []byte { //pretvara iz vrednosti u bajtove
 
 	return data
 }
+
+map[string]int dict
+
+func readDictionary(dict *map[string]int) error {
+	fileContent, err := ioutil.ReadFile("dictionary.json")
+	if err != nil {
+		fmt.Println("Error reading the file:", err)
+		return err
+	}
+
+	err = json.Unmarshal(fileContent, dict)
+	if err != nil {
+		fmt.Println("Error unmarshalling JSON:", err)
+		return err
+	}
+	return nil
+}
+
+func saveDictionary(dict *map[string]int) error {
+	jsonString, err := json.Marshal(*dict)
+
+	if err != nil {
+		fmt.Println("Error marshalling JSON:", err)
+		return err
+	}
+
+	err := ioutil.WriteFile("dictionary.json", jsonString, 0644)
+
+	if err != nil {
+		fmt.Println("Error writing to file:", err)
+		return err
+	}
+	
+	return nil
+}
