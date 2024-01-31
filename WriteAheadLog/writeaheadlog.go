@@ -4,18 +4,20 @@ import (
 	"NASPprojekat/Config"
 	"NASPprojekat/Memtable"
 	"bufio"
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
-	"log"
+
 	"github.com/edsrzf/mmap-go"
-	"encoding/binary"
-	"reflect"
 )
 
 // treba jos resiti kad segment sadrzi pola jedne a pola druge memtabele
@@ -26,7 +28,7 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 		return err
 	}
 	memIdx := 0 //PROMENITI ZA NAJSTARIJI MEM, pretpostavljam da treba 0? posto je memtabla inicijalno prazna?
-	
+
 	// citamo od kog offseta treba krenuti citanje segmenta sa najmanjim indeksom
 	file, err := os.Open("files_WAL/memseg.txt")
 	if err != nil {
@@ -36,7 +38,7 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
-	
+
 	// citanje linija iz memseg redom
 	offset := 0
 	lineCount := 0
@@ -56,7 +58,7 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 			break
 		}
 	}
-	
+
 	if err := scanner.Err(); err != nil {
 		fmt.Println("Error reading file:", err)
 		return err
@@ -71,7 +73,9 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 				return nil
 			}
 			offset = next
-
+			if entry.Crc != Config.CRC32(entry.Transaction.Value) {
+				return errors.New("crc is different")
+			}
 			if entry.Tombstone {
 				//ako je operacija brisanja
 				mem.Delete(entry.Transaction.Key)
@@ -150,19 +154,18 @@ func (wal *WAL) ScanWALFolder() ([]string, error) {
 //funkcija samo radi cisto upisivanje jednog entry-ja
 
 // WriteInFile treba da doda entry i ako dodje do prelaza u sledeci segment, njegov deo upise u sledeci segment i vraca err,trye/false da ki je presao na sledeci entry
-func (wal *WAL)WriteInFile(entry *Config.Entry, path string) (error,bool) {
-
+func (wal *WAL) WriteInFile(entry *Config.Entry, path string) (error, bool) {
 
 	var shifted bool
 
 	// segementsFiles, err := wal.ScanWALFolder()
 	// if err!= nil{
 	// 	log.Fatal(err)
-	// 	return err, false 
+	// 	return err, false
 	// }
-	
+
 	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
-	
+
 	fi, err2 := file.Stat()
 	if err2 != nil {
 		return err2, false
@@ -172,16 +175,16 @@ func (wal *WAL)WriteInFile(entry *Config.Entry, path string) (error,bool) {
 		file.Truncate(1)
 	}
 
-	if err != nil{
+	if err != nil {
 		log.Fatal(err)
 		return err, false
 	}
 
 	defer file.Close()
-	
+
 	mmapFile, err := mmap.Map(file, mmap.RDWR, 0)
 
-	if err != nil{
+	if err != nil {
 		log.Fatal(err)
 		return err, false
 	}
@@ -193,41 +196,41 @@ func (wal *WAL)WriteInFile(entry *Config.Entry, path string) (error,bool) {
 	//remainingCapacity := Config.MaxSegmentSize - fileInfo.Size()
 	remainingCapacity := wal.segmentSize - fileInfo.Size()
 
-	if len(entryBytes) <= int(remainingCapacity){
+	if len(entryBytes) <= int(remainingCapacity) {
 		mmapFile = append(mmapFile, entryBytes...)
 		shifted = false
 
-	}else{
+	} else {
 
 		firstPart := entryBytes[:remainingCapacity]
 		secondPart := entryBytes[remainingCapacity:]
-		nextPath,err := getNextSegmentPath(path)
+		nextPath, err := getNextSegmentPath(path)
 		if err != nil {
 			log.Fatal(err)
 			return err, false
 		}
-		
+
 		file2, err := os.OpenFile(nextPath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
-	
+
 		fi, err2 := file.Stat()
 		if err2 != nil {
 			return err2, false
 		}
-	
+
 		if fi.Size() == 0 {
 			file2.Truncate(1)
 		}
-	
-		if err != nil{
+
+		if err != nil {
 			log.Fatal(err)
 			return err, false
 		}
-	
+
 		defer file2.Close()
 
-		mmapFile2, err := mmap.Map(file2, mmap.RDWR, 0 )
-		
-		if err != nil{
+		mmapFile2, err := mmap.Map(file2, mmap.RDWR, 0)
+
+		if err != nil {
 			log.Fatal(err)
 			return err, false
 		}
@@ -238,14 +241,13 @@ func (wal *WAL)WriteInFile(entry *Config.Entry, path string) (error,bool) {
 		shifted = true
 
 	}
-	
-	
+
 	return nil, shifted
 
 }
 
 func getNextSegmentPath(path string) (string, error) {
-	
+
 	_, fileName := filepath.Split(path)
 
 	dirPath := strings.TrimSuffix(path, fileName)
@@ -273,34 +275,35 @@ func isInSegments(targetPath string, segments []string) bool {
 	}
 	return false
 }
+
 //treba mi putanja do poslednjeg segmenta
 //provaliti kako dobiti poslednji segment
 
 // vraca entry, offset, true/false da li je presao
 // prima putanju do fajal ili fajl i offset
 
-func (wal *WAL)readEntry(path string, offset int) (Config.Entry, int, bool) {
+func (wal *WAL) readEntry(path string, offset int) (Config.Entry, int, bool) {
 
 	segementsFiles, err := wal.ScanWALFolder()
-	if err!= nil{
+	if err != nil {
 		log.Fatal(err)
-		return Config.Entry{}, 0, false 
+		return Config.Entry{}, 0, false
 	}
 	file, err := os.OpenFile(path, os.O_RDWR, 0644) // promenio sam os.O_RDONLY
-	
+
 	fi, err2 := file.Stat()
 	if err2 != nil {
 		return Config.Entry{}, 0, false
 	}
-	
+
 	if fi.Size() == 0 {
 		file.Truncate(1)
 	}
 
 	//da li treba vratiti gresku?
-	if err != nil{
+	if err != nil {
 		log.Fatal(err)
-		return Config.Entry{}, 0, false 
+		return Config.Entry{}, 0, false
 	}
 
 	defer file.Close()
@@ -313,66 +316,65 @@ func (wal *WAL)readEntry(path string, offset int) (Config.Entry, int, bool) {
 	defer mmapFile.Unmap()
 	//mozda treba defer.mmapFile.Unmap() ????
 
-	buffer := mmapFile[offset:]							//u buffer ide sve sto je ostalo od trenutnog fajla
+	buffer := mmapFile[offset:] //u buffer ide sve sto je ostalo od trenutnog fajla
 	var entry Config.Entry
 	//var entry Config.Entry{}
 	var shifted bool
 	var newoffset int
-	var buffer2 []byte									//baffer2 je za bajtove drugog fajl - inicijalizovace se ako postoji sledeci fajl				
-	nextPath,err := getNextSegmentPath(path)				//trazimo sledeci fajl i ako postoji otvaramo ga
-	if err!=nil{
+	var buffer2 []byte                        //baffer2 je za bajtove drugog fajl - inicijalizovace se ako postoji sledeci fajl
+	nextPath, err := getNextSegmentPath(path) //trazimo sledeci fajl i ako postoji otvaramo ga
+	if err != nil {
 		log.Fatal(err)
-		return Config.Entry{}, 0, false 
+		return Config.Entry{}, 0, false
 	}
 
-	if isInSegments(nextPath, segementsFiles){
-		if err!=nil{
+	if isInSegments(nextPath, segementsFiles) {
+		if err != nil {
 			log.Fatal(err)
-			return Config.Entry{}, 0, false 
+			return Config.Entry{}, 0, false
 		}
-		
+
 		file2, err := os.OpenFile(nextPath, os.O_RDWR, 0644) // promenio sam os.O_RDONLY
-	
+
 		fi, err2 := file.Stat()
 		if err2 != nil {
 			return Config.Entry{}, 0, false
 		}
-	
+
 		if fi.Size() == 0 {
 			file2.Truncate(1)
 		}
 
-		if err != nil{
+		if err != nil {
 			log.Fatal(err)
-			return Config.Entry{}, 0, false 
+			return Config.Entry{}, 0, false
 		}
-	
+
 		defer file2.Close()
-	
+
 		mmapFile2, err := mmap.Map(file2, mmap.RDWR, 0)
 		if err != nil {
 			log.Fatal(err)
 			return Config.Entry{}, 0, false
 		}
 		defer mmapFile2.Unmap()
-	
+
 		buffer2 = mmapFile2[0:]
 	}
 
-	
-	if len(buffer) < 4{
-		crc := buffer 
-		bytesLeft := buffer2[:(4-len(buffer))]
+	if len(buffer) < 4 {
+		crc := buffer
+		bytesLeft := buffer2[:(4 - len(buffer))]
 
-		entry.Crc = binary.LittleEndian.Uint32(append(crc,bytesLeft...))
-		buffer2 = buffer2[(4-len(buffer)):]
+		entry.Crc = binary.LittleEndian.Uint32(append(crc, bytesLeft...))
+		buffer2 = buffer2[(4 - len(buffer)):]
 
 		entry.Timestamp = binary.LittleEndian.Uint64(buffer2[:8])
 		buffer2 = buffer2[8:]
 
 		entry.Tombstone = (buffer2[0] != 0)
 		buffer2 = buffer2[1:]
-		
+
 		keySize := binary.LittleEndian.Uint64(buffer2[:8])
 		buffer2 = buffer2[8:]
 
@@ -384,22 +386,22 @@ func (wal *WAL)readEntry(path string, offset int) (Config.Entry, int, bool) {
 
 		entry.Transaction.Value = buffer2[:valueSize]
 		shifted = true
-		newoffset = (4-len(buffer)) + 8 + 1 + 8 + 8 + int(keySize) + int(valueSize)
+		newoffset = (4 - len(buffer)) + 8 + 1 + 8 + 8 + int(keySize) + int(valueSize)
 
-	}else{
+	} else {
 		entry.Crc = binary.LittleEndian.Uint32(buffer[:4])
 		buffer = buffer[4:]
 
-		if len(buffer) < 8{
+		if len(buffer) < 8 {
 			timestamp := buffer
-			bytesLeft := buffer2[:(8-len(buffer))]
+			bytesLeft := buffer2[:(8 - len(buffer))]
 
-			entry.Timestamp = binary.LittleEndian.Uint64(append(timestamp,bytesLeft...))
-			buffer2 = buffer2[(8-len(buffer)):]
-			
+			entry.Timestamp = binary.LittleEndian.Uint64(append(timestamp, bytesLeft...))
+			buffer2 = buffer2[(8 - len(buffer)):]
+
 			entry.Tombstone = (buffer2[0] != 0)
 			buffer2 = buffer2[1:]
-			
+
 			keySize := binary.LittleEndian.Uint64(buffer2[:8])
 			buffer2 = buffer2[8:]
 
@@ -411,17 +413,17 @@ func (wal *WAL)readEntry(path string, offset int) (Config.Entry, int, bool) {
 
 			entry.Transaction.Value = buffer2[:valueSize]
 			shifted = true
-			newoffset = (8-len(buffer)) + 1 + 8 + 8 + int(keySize) + int(valueSize)
+			newoffset = (8 - len(buffer)) + 1 + 8 + 8 + int(keySize) + int(valueSize)
 
-		}else{
+		} else {
 			entry.Timestamp = binary.LittleEndian.Uint64(buffer[:8])
 			buffer = buffer[8:]
 
-			if len(buffer) == 0{
+			if len(buffer) == 0 {
 
 				entry.Tombstone = (buffer2[0] != 0)
 				buffer2 = buffer2[1:]
-				
+
 				keySize := binary.LittleEndian.Uint64(buffer2[:8])
 				buffer2 = buffer2[8:]
 
@@ -434,17 +436,17 @@ func (wal *WAL)readEntry(path string, offset int) (Config.Entry, int, bool) {
 				entry.Transaction.Value = buffer2[:valueSize]
 				shifted = true
 				newoffset = 1 + 8 + 8 + int(keySize) + int(valueSize)
-			}else{
+			} else {
 
 				entry.Tombstone = (buffer[0] != 0)
 				buffer = buffer[1:]
 
 				if len(buffer) < 8 {
 					help := buffer
-					bytesLeft := buffer2[:(8-len(buffer))]
+					bytesLeft := buffer2[:(8 - len(buffer))]
 
-					keySize := binary.LittleEndian.Uint64(append(help,bytesLeft...))
-					buffer2 = buffer2[(8-len(buffer)):]
+					keySize := binary.LittleEndian.Uint64(append(help, bytesLeft...))
+					buffer2 = buffer2[(8 - len(buffer)):]
 
 					valueSize := binary.LittleEndian.Uint64(buffer2[:8])
 					buffer2 = buffer2[8:]
@@ -454,29 +456,29 @@ func (wal *WAL)readEntry(path string, offset int) (Config.Entry, int, bool) {
 
 					entry.Transaction.Value = buffer2[:valueSize]
 					shifted = true
-					newoffset = (8-len(buffer)) + 8 + int(keySize) + int(valueSize)
-				}else{
+					newoffset = (8 - len(buffer)) + 8 + int(keySize) + int(valueSize)
+				} else {
 					keySize := binary.LittleEndian.Uint64(buffer[:8])
 					buffer = buffer[8:]
 
 					if len(buffer) < 8 {
 						help := buffer
-						bytesLeft := buffer2[:(8-len(buffer))]
+						bytesLeft := buffer2[:(8 - len(buffer))]
 
-						valueSize := binary.LittleEndian.Uint64(append(help,bytesLeft...))
-						buffer2 = buffer2[(8-len(buffer)):]
+						valueSize := binary.LittleEndian.Uint64(append(help, bytesLeft...))
+						buffer2 = buffer2[(8 - len(buffer)):]
 
 						entry.Transaction.Key = string(buffer2[:keySize])
 						buffer2 = buffer2[keySize:]
 
 						entry.Transaction.Value = buffer2[:valueSize]
 						shifted = true
-						newoffset = (8-len(buffer)) + int(keySize) + int(valueSize)
-					}else{
+						newoffset = (8 - len(buffer)) + int(keySize) + int(valueSize)
+					} else {
 						valueSize := binary.LittleEndian.Uint64(buffer2[:8])
 						buffer2 = buffer2[8:]
-						
-						if len(buffer) < int(keySize){
+
+						if len(buffer) < int(keySize) {
 							key := buffer
 							bytesLeft := buffer2[:(int(keySize) - len(buffer))]
 
@@ -488,21 +490,21 @@ func (wal *WAL)readEntry(path string, offset int) (Config.Entry, int, bool) {
 							newoffset = int(valueSize) + (int(keySize) - len(buffer))
 							shifted = true
 
-						}else{
+						} else {
 
 							entry.Transaction.Key = string(buffer[:int(keySize)])
 							buffer = buffer[int(keySize):]
 
-							if len(buffer) < int(valueSize){
-								value := buffer			//ovde se sada nalazi deo value-a, sada treba ostatak value-a da uzmemo iz drugog fajla
-								bytesLeft := buffer2[:(int(valueSize) - len(buffer))] 
+							if len(buffer) < int(valueSize) {
+								value := buffer //ovde se sada nalazi deo value-a, sada treba ostatak value-a da uzmemo iz drugog fajla
+								bytesLeft := buffer2[:(int(valueSize) - len(buffer))]
 
 								valueBytes := append(value, bytesLeft...)
 								entry.Transaction.Value = valueBytes
 								newoffset = int(valueSize) - len(buffer)
 								shifted = true
-							}else{
-								
+							} else {
+
 								shifted = false
 								newoffset = offset + 4 + 8 + 1 + 8 + 8 + int(valueSize) + int(keySize)
 							}
@@ -512,7 +514,7 @@ func (wal *WAL)readEntry(path string, offset int) (Config.Entry, int, bool) {
 			}
 		}
 	}
-	
+
 	return entry, newoffset, shifted
 }
 
