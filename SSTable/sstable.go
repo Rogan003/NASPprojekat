@@ -419,11 +419,11 @@ func SizeTieredCompaction(lsm Config.LSMTree) {
 
 func merge(level int, lsm Config.LSMTree) {
 	br := lsm.Levels[level] + 1
-	dataFile, _ := os.Create("files_SSTable/dataFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".gob")
-	indexFile, _ := os.Create("files_SSTable/indexFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".gob")
-	summaryFile, _ := os.Create("files_SSTable/summaryFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".gob")
-	bloomFile, _ := os.Create("files_SSTable/bloomFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".gob")
-	merkleFile, _ := os.Create("files_SSTable/merkleFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".gob")
+	dataFile, _ := os.Create("files_SSTable/dataFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".db")
+	indexFile, _ := os.Create("files_SSTable/indexFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".db")
+	summaryFile, _ := os.Create("files_SSTable/summaryFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".db")
+	bloomFile, _ := os.Create("files_SSTable/bloomFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".db")
+	merkleFile, _ := os.Create("files_SSTable/merkleFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".db")
 
 	lsm.DataFilesNames = append(lsm.DataFilesNames, dataFile.Name())
 	mergeFiles(level, dataFile, indexFile, summaryFile, bloomFile, merkleFile, lsm)
@@ -677,11 +677,11 @@ func levelMerge(level int, lsm Config.LSMTree) {
 	//za file na visem nivou-uzimamo prvu tabelu jer eto??
 	br := lsm.Levels[level]
 
-	dataFile := "files_SSTable/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".gob"
-	indexFile := "files_SSTable/indexFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".gob"
-	summaryFile := "files_SSTable/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".gob"
-	bloomFile := "files_SSTable/bloomFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".gob"
-	merkleFile := "files_SSTable/merkleFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".gob"
+	dataFile := "files_SSTable/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".db"
+	indexFile := "files_SSTable/indexFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".db"
+	summaryFile := "files_SSTable/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".db"
+	bloomFile := "files_SSTable/bloomFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".db"
+	merkleFile := "files_SSTable/merkleFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".db"
 
 	//trazimo opseg indeksa
 	sumarry, _ := os.OpenFile(summaryFile, os.O_RDWR, 0777)
@@ -736,7 +736,7 @@ func findOtherTables(level int, bottomIdx string, topIdx string, lsm Config.LSMT
 	var entriesAdd []*Config.Entry // za pocetak je nil
 
 	for i := 1; i <= lsm.Levels[level]; i++ {
-		summaryFile := "files_SSTable/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".gob"
+		summaryFile := "files_SSTable/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db"
 
 		sumarry, _ := os.OpenFile(summaryFile, os.O_RDWR, 0777)
 		SummaryContent := LoadSummary(sumarry)
@@ -744,11 +744,11 @@ func findOtherTables(level int, bottomIdx string, topIdx string, lsm Config.LSMT
 		FirstKey := SummaryContent.FirstKey
 		LastKey := SummaryContent.LastKey
 
-		var dataFile = "files_SSTable/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".gob"
-		var indexFile = "files_SSTable/indexFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".gob"
-		//var summaryFile = "files_SSTable/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".gob"   // vec ima gore deklarisano
-		var bloomFile = "files_SSTable/bloomFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".gob"
-		var merkleFile = "files_SSTable/merkleFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".gob"
+		var dataFile = "files_SSTable/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db"
+		var indexFile = "files_SSTable/indexFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db"
+		//var summaryFile = "files_SSTable/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db"   // vec ima gore deklarisano
+		var bloomFile = "files_SSTable/bloomFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db"
+		var merkleFile = "files_SSTable/merkleFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db"
 
 		if FirstKey >= bottomIdx && FirstKey <= topIdx && LastKey >= bottomIdx && LastKey <= topIdx {
 			dataFiles = append(dataFiles, dataFile)

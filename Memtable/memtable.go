@@ -359,16 +359,17 @@ func (m *Memtable) flushToDisk(lsm *Config.LSMTree) {
 	// level[] cuva koliko sstableova se nalazi na svakom od nivoa, dodajemo jos jedan sstable
 	var i = lsm.Levels[0] + 1
 	//pravimo fajlove za novi sstable
-	DataFileName += "_" + strconv.Itoa(i) + ".gob"
-	IndexFileName += "_" + strconv.Itoa(i) + ".gob"
-	SummaryFileName += "_" + strconv.Itoa(i) + ".gob"
-	BloomFilterFileName += "_" + strconv.Itoa(i) + ".gob"
-	MerkleTreeFileName += "_" + strconv.Itoa(i) + ".gob"
+	DataFileName += "_" + strconv.Itoa(i) + ".db"
+	IndexFileName += "_" + strconv.Itoa(i) + ".db"
+	SummaryFileName += "_" + strconv.Itoa(i) + ".db"
+	BloomFilterFileName += "_" + strconv.Itoa(i) + ".db"
+	MerkleTreeFileName += "_" + strconv.Itoa(i) + ".db"
 
 	//pravljenje fajlova za novi sstable
 	dataFile, _ := os.Create(DataFileName)
 	err := dataFile.Close()
 	if err != nil {
+		fmt.Println(err)
 		return
 	}
 
