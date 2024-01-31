@@ -199,7 +199,7 @@ func (entry *Entry) ToByte() []byte { //pretvara iz vrednosti u bajtove
 	return data
 }
 
-map[string]int dict
+// map[string]int dict
 
 func readDictionary(dict *map[string]int) error {
 	fileContent, err := ioutil.ReadFile("dictionary.json")
@@ -224,7 +224,7 @@ func saveDictionary(dict *map[string]int) error {
 		return err
 	}
 
-	err := ioutil.WriteFile("dictionary.json", jsonString, 0644)
+	err = ioutil.WriteFile("dictionary.json", jsonString, 0644)
 
 	if err != nil {
 		fmt.Println("Error writing to file:", err)
