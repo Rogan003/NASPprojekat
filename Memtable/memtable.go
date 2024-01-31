@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 /*
@@ -85,13 +86,14 @@ func (nmt *NMemtables) Init(vers string, mCap int, num int, lsm *Config.LSMTree)
 // funkcija i za dodavanje i za izmenu elementa sa kljucem
 // u zavisnosti od verzije i prisutnosti elementa dodaje elem ili ga menja u odredjenoj strukturi
 // poziva se iz WAL-a, ako je uspesno odradjeno dodavanje/izmena
-func (nmt *NMemtables) Add(key string, value []byte) int {
+func (nmt *NMemtables) Add(key string, value []byte) (int, int) {
 
 	arr := nmt.Arr // arr memtabli
 	ind := nmt.R
 	memtable := arr[nmt.R] // prva "aktivna" memtabla
 
 	var ok bool = false
+	var lwm = -1
 	if memtable.version == "skiplist" {
 		ok = memtable.skiplist.Add(key, value)
 	} else {
@@ -104,21 +106,21 @@ func (nmt *NMemtables) Add(key string, value []byte) int {
 
 	if memtable.curCap == memtable.maxCap {
 		if (nmt.R-nmt.l == nmt.N-1) || (nmt.R < nmt.l) {
-			memtableLast := arr[nmt.l]  // izbrisala sam proveru da li je memtable empty
-			memtableLast.flush(nmt.lsm, nmt.l) // valjda nece trebati (testiracu)
+			memtableLast := arr[nmt.l]               // izbrisala sam proveru da li je memtable empty
+			lwm = memtableLast.flush(nmt.lsm, nmt.l) // valjda nece trebati (testiracu)
 			nmt.l = (nmt.l + 1) % nmt.N
 		}
 		nmt.R = (nmt.R + 1) % nmt.N
 	}
 
-	return ind
+	return ind, lwm
 }
 
 // pomocna funckija za Delete(),
 // kada se brise element koji je u starijim memtabelama
 // prvo ga doda, pa obrise, kako bi se kasnije flushovalo da je obrisano,
 // a ne da i dalje postoji
-func (nmt *NMemtables) AddAndDelete(key string, value []byte) {
+func (nmt *NMemtables) AddAndDelete(key string, value []byte) int {
 
 	arr := nmt.Arr         // arr memtabli
 	memtable := arr[nmt.R] // prva "aktivna" memtabla
@@ -135,21 +137,22 @@ func (nmt *NMemtables) AddAndDelete(key string, value []byte) {
 		memtable.curCap++
 		memtable.empty = false
 	}
-
+	var lwm = -1
 	if memtable.curCap == memtable.maxCap {
 		if (nmt.R-nmt.l == nmt.N-1) || (nmt.R < nmt.l) {
-			memtableLast := arr[nmt.l]  // izbrisala sam proveru da li je memtable empty
-			memtableLast.flush(nmt.lsm, nmt.l) // valjda nece trebati (testiracu)
+			memtableLast := arr[nmt.l]               // izbrisala sam proveru da li je memtable empty
+			lwm = memtableLast.flush(nmt.lsm, nmt.l) // valjda nece trebati (testiracu)
 			nmt.l = (nmt.l + 1) % nmt.N
 		}
 		nmt.R = (nmt.R + 1) % nmt.N
 	}
+	return lwm
 }
 
 // funkcija za brisanje elementa sa kljucem iz memtable
 // brisanje je logicko
 // poziva se iz WAL-a ako je uspesno sve zapisano
-func (nmt *NMemtables) Delete(key string) (bool, int) {
+func (nmt *NMemtables) Delete(key string) (bool, int, int) {
 
 	data, found, primaryMemtable := nmt.Get(key)
 
@@ -164,26 +167,26 @@ func (nmt *NMemtables) Delete(key string) (bool, int) {
 
 			if primaryMemtable {
 				// ako se nalazi u aktivnoj tabeli, samo obrisi
-				return memtable.skiplist.Delete(key), ind
+				return memtable.skiplist.Delete(key), ind, -1
 			} else {
 				// ne nalazi se u aktivnoj, nego u nekoj od proslih read-only tabela
 				// dodaj u primarni memtable pa onda izbrisi
-				nmt.AddAndDelete(key, data)
-				return true, ind
+				lwm := nmt.AddAndDelete(key, data)
+				return true, ind, lwm
 			}
 		} else {
 			if primaryMemtable {
-				return memtable.btree.Add(key, nil), ind
+				return memtable.btree.Add(key, nil), ind, -1
 			} else {
 				// ne nalazi se u aktivnoj, nego u nekoj od proslih read-only tabela
 				// dodaj u primarni memtable pa onda izbrisi
-				nmt.AddAndDelete(key, data)
-				return true, ind
+				lwm := nmt.AddAndDelete(key, data)
+				return true, ind, lwm
 			}
 		}
 	} else {
 		//fmt.Printf("Element sa kljucem %s ne postoji!\n", key)
-		return false, -1
+		return false, -1, -1
 	}
 
 }
@@ -248,7 +251,7 @@ func (nmt *NMemtables) Get(key string) ([]byte, bool, bool) {
 }
 
 // funkcija koja radi flush na disk (sstable)
-func (mt *Memtable) flush(lsm *Config.LSMTree, index int) {
+func (mt *Memtable) flush(lsm *Config.LSMTree, index int) int {
 	/*
 		for _, value := range mt.GetSortedElems() {
 			fmt.Printf("%s %d %t %s\n", value.Transaction.Key, value.Transaction.Value, value.Tombstone, value.ToByte())
@@ -277,9 +280,9 @@ func (mt *Memtable) flush(lsm *Config.LSMTree, index int) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		fmt.Println("Error opening file:", err)
-		return
+		return -1
 	}
-	defer file.Close()
+	//defer file.Close()
 
 	scanner := bufio.NewScanner(file)
 	var lines []string
@@ -290,21 +293,31 @@ func (mt *Memtable) flush(lsm *Config.LSMTree, index int) {
 
 	if err := scanner.Err(); err != nil {
 		fmt.Println("Error reading file:", err)
-		return
+		return -1
 	}
 
 	// Menjam liniju da bude prazna za odrejdeni memtable koji smo flushovali
-	if len(lines) >= memIdx+1 {
-		lines[memIdx] = ""
+
+	var lwm = -1
+	elements := strings.Split(lines[memIdx], ",")
+	lastSegData := strings.Split(elements[1], " ")
+	offsetEnd, err := strconv.Atoi(lastSegData[1])
+	segInx, err := strconv.Atoi(lastSegData[0])
+	if offsetEnd != 0 {
+		lwm = segInx - 1
+	} else {
+		lwm = segInx
 	}
+
+	lines[memIdx] = ""
 
 	// zapisujem izmenjen sadrzaj
 	file, err = os.Create(filePath)
 	if err != nil {
 		fmt.Println("Error creating file:", err)
-		return
+		return -1
 	}
-	defer file.Close()
+	//defer file.Close()
 
 	writer := bufio.NewWriter(file)
 	for _, line := range lines {
@@ -313,10 +326,11 @@ func (mt *Memtable) flush(lsm *Config.LSMTree, index int) {
 
 	if err := writer.Flush(); err != nil {
 		fmt.Println("Error writing to file:", err)
-		return
+		return -1
 	}
 
 	fmt.Println("Uspesno obrisani segmenti za flushovani memtable")
+	return lwm
 }
 
 func (mt *Memtable) GetSortedElems() []*Config.Entry {
