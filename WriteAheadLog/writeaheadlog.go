@@ -112,7 +112,7 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 		for {
 			// fmt.Println(fileName)
 			entry, next, jump := wal.readEntry(fileName, offset)
-			// fmt.Println(entry)
+			fmt.Println("kljuc ", entry.Transaction.Key)
 			//ako smo zavrsili sa citanjem svih entrya izadji iz fje
 			if reflect.DeepEqual(entry, Config.Entry{}) { // mislim da ovo ne valja skroz? mozda i valja
 				return nil
@@ -145,6 +145,12 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 		}
 
 	}
+	fileInfo, err := os.Stat(wal.lastSegment.Name())
+	if err != nil {
+		fmt.Println("Error getting file information:", err)
+		return err
+	}
+	wal.CurrentSize = fileInfo.Size()
 	return nil
 }
 
