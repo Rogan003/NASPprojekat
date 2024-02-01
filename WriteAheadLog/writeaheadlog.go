@@ -27,41 +27,72 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 	if err != nil {
 		return err
 	}
-	memIdx := 0 //PROMENITI ZA NAJSTARIJI MEM, pretpostavljam da treba 0? posto je memtabla inicijalno prazna?
-	// za sada nema info koja je najstarija, mozemo cuvati nekako ili da menjamo memseg prilikom remake, mislim da je bolje menjati memseg
-	// citamo od kog offseta treba krenuti citanje segmenta sa najmanjim indeksom
+
 	file, err := os.Open("files_WAL/memseg.txt")
 	if err != nil {
 		fmt.Println("Error opening memseg file:", err)
 		return err
 	}
 	//defer file.Close()
-
+	//citanje svih linija iz memseg u lines
 	scanner := bufio.NewScanner(file)
-
-	// citanje linija iz memseg redom
-	offset := 0
-	lineCount := 0
+	var lines []string
 	for scanner.Scan() {
-		lineCount++
-		if lineCount == memIdx {
-			// linija sa nasim pocetnim segmentom za rekreiranje
-			currentLine := scanner.Text()
-			elements := strings.Split(currentLine, ",")
-			firstSegData := strings.Split(elements[0], " ")
-			offsetStart, err := strconv.Atoi(firstSegData[1])
-			offset = offsetStart
-			if err != nil {
-				fmt.Println("Error:", err)
-				return err
-			}
-			break
-		}
+		line := scanner.Text()
+		lines = append(lines, line)
 	}
-
 	if err := scanner.Err(); err != nil {
 		fmt.Println("Error reading file:", err)
 		return err
+	}
+
+	//trazenje linije najnovije memtablea
+	activeMemIdx := 0
+	for i, line := range lines {
+		if !strings.Contains(line, ",") && line != "" {
+			activeMemIdx = i
+			break
+		}
+	}
+	//trazimo liniju najstarijeg memtablea od koga krece remake
+	oldestMemIdx := 0
+	if lines[(activeMemIdx+1)%len(lines)] == "" {
+		//ako je posle aktivnog prazna linija zbog flusha
+		oldestMemIdx = (activeMemIdx + 2) % len(lines)
+	} else {
+		//ako je posle aktivnog prazna linija zbog flusha
+		oldestMemIdx = (activeMemIdx + 1) % len(lines)
+	}
+	//uzimamo pocetak odakle krece remakeWAL (uzimamo pocetak najstarijeg memtablea)
+	offset := 0
+	elements := strings.Split(lines[oldestMemIdx], ",")
+	firstSegData := strings.Split(elements[0], " ")
+	offsetStart, err := strconv.Atoi(firstSegData[1])
+	offset = offsetStart
+	if err != nil {
+		fmt.Println("Error:", err)
+		return err
+	}
+
+	//ponovno popunjavanje memseg tako da najstariji mem bude na 1 liniji
+	var newlines []string
+	for i := 0; i < len(lines); i++ {
+		newlines[i] = lines[oldestMemIdx%len(lines)]
+		oldestMemIdx++
+	}
+	//newlines = append(newlines, "")
+
+	//upisivanje novog sadrzaja memseg nakon remakeWal
+	writer := bufio.NewWriter(file)
+	for _, line := range newlines {
+		_, err := fmt.Fprintln(writer, line)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	if err := writer.Flush(); err != nil {
+		panic(err)
 	}
 
 	//redom ucitavamo fajlove sa segmentima
@@ -122,7 +153,7 @@ func (wal *WAL) ScanWALFolder() ([]string, error) {
 			continue
 		}
 
-		if strings.HasSuffix(file.Name(), ".log") && strings.HasPrefix(file.Name(), "files_WAL/segment") {
+		if strings.HasSuffix(file.Name(), ".log") && strings.HasPrefix(file.Name(), "segment") {
 			segmentPath := file.Name()               //Konstruišemo putanju do trenutnog segmenta koristeći kombinujući path i ime trenutnog fajla.
 			segments = append(segments, segmentPath) //dodajemo putanju
 		}
