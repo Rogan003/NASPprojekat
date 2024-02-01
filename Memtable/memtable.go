@@ -301,13 +301,9 @@ func (mt *Memtable) flush(lsm *Config.LSMTree, index int) int {
 	var lwm = -1
 	elements := strings.Split(lines[memIdx], ",")
 	lastSegData := strings.Split(elements[1], " ")
-	offsetEnd, err := strconv.Atoi(lastSegData[1])
+	//offsetEnd, err := strconv.Atoi(lastSegData[1])
 	segInx, err := strconv.Atoi(lastSegData[0])
-	if offsetEnd != 0 {
-		lwm = segInx - 1
-	} else {
-		lwm = segInx
-	}
+	lwm = segInx - 1
 
 	lines[memIdx] = ""
 
