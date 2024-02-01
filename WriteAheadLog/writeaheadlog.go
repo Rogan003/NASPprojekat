@@ -127,9 +127,10 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 			//fmt.Println("filemame",fileName)
 			entry, next, jump := wal.readEntry(fileName, offset)
 			fmt.Println("kljuc ", entry.Transaction.Key)
+			fmt.Println(jump)
 			//ako smo zavrsili sa citanjem svih entrya izadji iz fje
 			if reflect.DeepEqual(entry, Config.Entry{}) { // mislim da ovo ne valja skroz? mozda i valja
-				return nil
+				break
 			}
 			offset = next
 			if entry.Crc != Config.CRC32(entry.Transaction.Value) {
@@ -389,8 +390,8 @@ func (wal *WAL) readEntry(path string, offset int) (Config.Entry, int, bool) {
 		return Config.Entry{}, 0, false
 	}
 
-	if fi.Size() <= 1 {
-		return Config.Entry{}, 0, false // ovo potencijalno treba? da li treba <= 1? da li je to greska?
+	if fi.Size() <= int64(offset) {
+		return Config.Entry{}, 0, false // ovo potencijalno treba? da li treba <= offset? da li je to greska?
 	}
 
 	defer file.Close()
@@ -920,5 +921,4 @@ func Put(wal *WAL, mem *Memtable.NMemtables, key string, value []byte) bool { //
 	return true
 }
 
-// delete segments ne radi kako treba, obrise sve fajlove?
-// sstable get
+// jedan nakon flush memseg ne valja
