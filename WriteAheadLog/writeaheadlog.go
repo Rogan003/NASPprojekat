@@ -80,13 +80,26 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 	//uzimamo pocetak odakle krece remakeWAL (uzimamo pocetak najstarijeg memtablea)
 	offset := 0
 	elements := strings.Split(lines[oldestMemIdx], ",")
+	/*
 	firstSegData := strings.Split(elements[0], " ")
-	offsetStart, err := strconv.Atoi(firstSegData[1])
-	offset = offsetStart
-	if err != nil {
-		fmt.Println("Error:", err)
-		return err
+	offsetStart, err := strconv.Atoi(firstSegData[1]) // ovde greska, trazi se zarez, a kada imamo samo jednu popunjenu tabelu zareza nema
+	*/
+	var offsetStart int
+	if len(elements) == 1 {
+		offsetStart = 0
+
+	} else {
+		firstSegData := strings.Split(elements[0], " ")
+		var err error
+		offsetStart, err = strconv.Atoi(firstSegData[1])
+
+		if err != nil {
+			fmt.Println("Error:", err)
+			return err
+		}
 	}
+
+	offset = offsetStart
 
 	//ponovno popunjavanje memseg tako da najstariji mem bude na 1 liniji
 	_, err = file.Seek(0, 0)
@@ -148,7 +161,7 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 	}
 
 	println("Celo ime ", wal.lastSegment.Name())
-	fileInfo, err := os.Stat("files_WAL/" + wal.lastSegment.Name())
+	fileInfo, err := os.Stat(wal.lastSegment.Name())
 	if err != nil {
 		fmt.Println("Error getting file information:", err)
 		return err
@@ -723,7 +736,7 @@ func (wal *WAL) OpenWAL(mem *Memtable.NMemtables) error {
 		wal.lowWaterMark = 0
 	} else {
 		//otvaramo fajl poslednjeg segmenta
-		lastSegmentPath := segments[len(segments)-1]
+		lastSegmentPath := "files_WAL/" + segments[len(segments)-1]
 		println(lastSegmentPath)
 		lastSegmentFile, err := os.OpenFile(lastSegmentPath, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0644) //0644 - vlasnik moze da cita i pise, ostali mogu samo da citaju
 		if err != nil {

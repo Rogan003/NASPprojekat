@@ -263,8 +263,8 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 									keys[in] = keyHelp
 									vals[in] = memElems[mem_indexes[i % memtable.N]].Transaction.Value
 									lastElem = keyHelp
-									lastElemsTables[in] =("M" + strconv.Itoa(i % memtable.N))
-									lastElemsPos[in] = mem_indexes[i % memtable.N]
+									lastElemsTables[lastIter + in] =("M" + strconv.Itoa(i % memtable.N))
+									lastElemsPos[lastIter + in] = mem_indexes[i % memtable.N]
 									break
 								} else if keyHelp > key2 {
 									mem_indexes[i%memtable.N] = -1
@@ -287,8 +287,8 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 									keys[in] = string(keyHelp)
 									vals[in] = valHelp
 									lastElem = string(keyHelp)
-									lastElemsTables[in] = ("S" + strconv.Itoa(index))
-									lastElemsPos[in] = indexes[index]
+									lastElemsTables[lastIter + in] = ("S" + strconv.Itoa(index))
+									lastElemsPos[lastIter + in] = indexes[index]
 									break
 								} else if string(keyHelp) > key2 {
 									indexes[index] = -1
