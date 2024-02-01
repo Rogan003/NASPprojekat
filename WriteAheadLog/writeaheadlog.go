@@ -108,9 +108,10 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 	}
 
 	//redom ucitavamo fajlove sa segmentima
+	//fmt.Println("svi segmenti: ",segmentsFiles)
 	for _, fileName := range segementsFiles {
 		for {
-			// fmt.Println(fileName)
+			//fmt.Println("filemame",fileName)
 			entry, next, jump := wal.readEntry(fileName, offset)
 			fmt.Println("kljuc ", entry.Transaction.Key)
 			//ako smo zavrsili sa citanjem svih entrya izadji iz fje
@@ -319,7 +320,7 @@ func getNextSegmentPath(path string) (string, error) {
 
 	_, fileName := filepath.Split(path)
 
-	dirPath := strings.TrimSuffix(path, fileName)
+	//dirPath := strings.TrimSuffix(path, fileName)
 
 	segmentNumberStr := strings.TrimSuffix(strings.TrimPrefix(fileName, "segment"), ".log")
 
@@ -331,9 +332,9 @@ func getNextSegmentPath(path string) (string, error) {
 	segmentNumber++
 
 	newFileName := fmt.Sprintf("segment%d.log", segmentNumber)
-	newPath := filepath.Join(dirPath, newFileName)
+	//newPath := filepath.Join("files_WAL", newFileName)
 
-	return newPath, nil
+	return newFileName, nil
 }
 
 func isInSegments(targetPath string, segments []string) bool {
@@ -397,20 +398,23 @@ func (wal *WAL) readEntry(path string, offset int) (Config.Entry, int, bool) {
 		log.Fatal(err)
 		return Config.Entry{}, 0, false
 	}
-
+	//println("segmenti ",segementsFiles[0])
 	if isInSegments(nextPath, segementsFiles) {
 		if err != nil {
 			log.Fatal(err)
 			return Config.Entry{}, 0, false
 		}
 
-		file2, err := os.OpenFile(nextPath, os.O_RDWR, 0644) // promenio sam os.O_RDONLY
+		//println("next path ",nextPath)
+		//nextPath = "files_WAL/segment2.log"
+		file2, err := os.OpenFile("files_WAL/"+nextPath, os.O_RDWR, 0644) // promenio sam os.O_RDONLY
+
 
 		fi, err2 := file2.Stat()
 		if err2 != nil {
 			return Config.Entry{}, 0, false
 		}
-
+		//println("file 2 velicina",fi.Size())
 		if fi.Size() == 0 {
 			file2.Truncate(1)
 		}
@@ -430,6 +434,9 @@ func (wal *WAL) readEntry(path string, offset int) (Config.Entry, int, bool) {
 		defer mmapFile2.Unmap()
 
 		buffer2 = mmapFile2[0:]
+		//buffer2 = make([]byte, len(mmapFile2))
+		// buffer2 = make([]byte, wal.segmentSize)
+    	// copy(buffer2, mmapFile2)
 	}
 
 	if len(buffer) < 4 {
@@ -519,8 +526,11 @@ func (wal *WAL) readEntry(path string, offset int) (Config.Entry, int, bool) {
 
 				if len(buffer) < 8 {
 					help := buffer
+					// println("duzina",len(buffer))
+					// println("duzina2",len(buffer2))
 					bytesLeft := buffer2[:(8 - len(buffer))]
-
+					
+					// println(bytesLeft)
 					keySize := binary.LittleEndian.Uint64(append(help, bytesLeft...))
 					buffer2 = buffer2[(8 - len(buffer)):]
 
@@ -597,6 +607,7 @@ func (wal *WAL) readEntry(path string, offset int) (Config.Entry, int, bool) {
 								bytess := make([]byte, int(valueSize))
 								copy(bytess, buffer[:int(valueSize)])
 								entry.Transaction.Value = bytess
+								//fmt.Print("Entri", entry)
 								shifted = false
 								newoffset = offset + 4 + 8 + 1 + 8 + 8 + int(valueSize) + int(keySize)
 							}
