@@ -78,7 +78,7 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 			if entry.Crc != Config.CRC32(entry.Transaction.Value) {
 				return errors.New("crc is different")
 			}
-			
+
 			if entry.Tombstone {
 				//ako je operacija brisanja
 				_, index, lwm := mem.Delete(entry.Transaction.Key) // dodao za lwm i index kod brisanja? jel treba? ja mislim da je okej
@@ -122,9 +122,9 @@ func (wal *WAL) ScanWALFolder() ([]string, error) {
 			continue
 		}
 
-		if strings.HasSuffix(file.Name(), ".log") && strings.HasPrefix(file.Name(), "segment") {
-			segmentPath := filepath.Join(wal.path, file.Name()) //Konstruišemo putanju do trenutnog segmenta koristeći kombinujući path i ime trenutnog fajla.
-			segments = append(segments, segmentPath)            //dodajemo putanju
+		if strings.HasSuffix(file.Name(), ".log") && strings.HasPrefix(file.Name(), "files_WAL/segment") {
+			segmentPath := file.Name()               //Konstruišemo putanju do trenutnog segmenta koristeći kombinujući path i ime trenutnog fajla.
+			segments = append(segments, segmentPath) //dodajemo putanju
 		}
 	}
 
@@ -170,6 +170,8 @@ func (wal *WAL) WriteInFile(entry *Config.Entry, path string) (error, bool) {
 	}
 
 	entryBytes := entry.ToByte()
+	print("duzina entry koji se unosi :")
+	println(len(entryBytes))
 
 	//remainingCapacity := Config.MaxSegmentSize - fileInfo.Size()
 	remainingCapacity := wal.segmentSize - fi.Size()
@@ -412,7 +414,7 @@ func (wal *WAL) readEntry(path string, offset int) (Config.Entry, int, bool) {
 	} else {
 		entry.Crc = binary.LittleEndian.Uint32(buffer[:4])
 		buffer = buffer[4:]
-		
+
 		if len(buffer) < 8 {
 			timestamp := buffer
 			bytesLeft := buffer2[:(8 - len(buffer))]
@@ -568,11 +570,13 @@ func (wal *WAL) DeleteSegments() error {
 	//brisanje fajla ako je index tog segmenta ispod lowWaterMarka
 	for _, file := range files {
 
-		idxStr := strings.TrimSuffix(strings.TrimPrefix(file.Name(), "files_WAL/segment"), ".log")
+		if !strings.Contains(file.Name(), "segment") {
+			continue
+		}
+
+		idxStr := strings.TrimSuffix(strings.TrimPrefix(file.Name(), "segment"), ".log")
 		idx, _ := strconv.Atoi(idxStr)
-
 		if idx <= wal.lowWaterMark {
-
 			err = os.Remove(wal.path + "/" + file.Name())
 			if err != nil {
 				fmt.Printf("Greška prilikom brisanja fajla %s: %s\n", file.Name(), err)
@@ -701,9 +705,6 @@ func (wal *WAL) AddEntry(entry *Config.Entry) error {
 		//otvaranje novog last segmenta
 		wal.lastSegment = lastSegmentFile
 	}
-	print(next)
-	println("lastSeg")
-	println(wal.lastSegment.Name())
 	fileInfo, err := os.Stat(wal.lastSegment.Name())
 	if err != nil {
 		fmt.Println("Error getting file information:", err)
@@ -711,10 +712,10 @@ func (wal *WAL) AddEntry(entry *Config.Entry) error {
 	}
 	//pamtimo koliko je zauzet trneutno
 	wal.CurrentSize = fileInfo.Size()
-	println("currentsize")
-	println(wal.CurrentSize)
-	println("lastSeg")
-	println(wal.lastSegment.Name())
+	//print("currentsize :")
+	//println(wal.CurrentSize)
+	//print("lastSeg :")
+	//println(wal.lastSegment.Name())
 	return nil
 
 }
@@ -746,7 +747,6 @@ func (wal *WAL) updateMemSeg(entry *Config.Entry, memIndex int) {
 		fmt.Println("Error:", err)
 		return
 	}
-
 	scanner := bufio.NewScanner(wal.segmentsTable)
 	var counter = 0
 	for scanner.Scan() {
