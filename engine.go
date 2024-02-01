@@ -47,7 +47,7 @@ func Get(memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *T
 		//ucitavamo summary i index fajlove za sstable u kojem je mozda element (saznali preko bloomfiltera)
 		summaryFileName := lsm.SummaryFilesNames[fileBF]
 		indexFileName := lsm.IndexFilesNames[fileBF]
-		foundValue := SSTable.Get(key, summaryFileName, indexFileName, lsm.BloomFilterFilesNames[fileBF])
+		foundValue := SSTable.Get(key, summaryFileName, indexFileName, lsm.DataFilesNames[fileBF])
 
 		if reflect.DeepEqual(foundValue, []byte{}) {
 			return nil, false
@@ -448,7 +448,7 @@ func Delete(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.
 		//ucitavamo summary i index fajlove za sstable u kojem je mozda element (saznali preko bloomfiltera)
 		summaryFileName := lsm.SummaryFilesNames[fileBF]
 		indexFileName := lsm.IndexFilesNames[fileBF]
-		foundValue := SSTable.Get(key, summaryFileName, indexFileName, lsm.BloomFilterFilesNames[fileBF])
+		foundValue := SSTable.Get(key, summaryFileName, indexFileName, lsm.DataFilesNames[fileBF])
 
 		if reflect.DeepEqual(foundValue, []byte{}) {
 			return nil, false

@@ -17,7 +17,6 @@ import (
 	"math"
 	"os"
 	"sort"
-	"time"
 )
 
 const (
@@ -285,7 +284,8 @@ func ReadData(position int64, DataFileName string) ([]byte, []byte) {
 		panic(err)
 	}
 
-	tombstone := binary.LittleEndian.Uint64(info[TOMBSTONE_START:KEY_SIZE_START])
+	tombstone := info[TOMBSTONE_START] // jel ovo sad prepoznaje obrisane
+
 	//ako je tombstone 1 ne citaj dalje
 	if tombstone == 1 {
 		return []byte{}, []byte{}
@@ -321,10 +321,10 @@ func NodeToBytes(node Config.Entry) []byte { //pretvara node u bajtove
 	var data []byte
 
 	crcb := make([]byte, CRC_SIZE)
-	binary.LittleEndian.PutUint32(crcb, CRC32(node.Transaction.Value))
+	binary.LittleEndian.PutUint32(crcb, node.Crc)
 	data = append(data, crcb...) //dodaje se CRC
 
-	sec := time.Now().Unix()
+	sec := node.Timestamp
 	secb := make([]byte, TIMESTAMP_SIZE)
 	binary.LittleEndian.PutUint64(secb, uint64(sec))
 	data = append(data, secb...) //dodaje se Timestamp
@@ -635,32 +635,32 @@ func mergeFiles(level int, dataFile *os.File, indexFile *os.File, summaryFile *o
 	MakeData(sortedAllEntries, dataFile.Name(), indexFile.Name(), summaryFile.Name(), bloomFile.Name())
 
 	for i := 1; i <= lsm.MaxSSTables; i++ {
-		err = os.Remove("files_SSTable/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + "gob")
+		err = os.Remove("files_SSTable/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db")
 		if err != nil {
 			log.Fatal(err)
 		}
-		err = os.Remove("files_SSTable/indexFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + "gob")
+		err = os.Remove("files_SSTable/indexFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db")
 		if err != nil {
 			log.Fatal(err)
 		}
-		err = os.Remove("files_SSTable/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + "gob")
+		err = os.Remove("files_SSTable/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db")
 		if err != nil {
 			log.Fatal(err)
 		}
-		err = os.Remove("files_SSTable/bloomFilterFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + "gob")
+		err = os.Remove("files_SSTable/bloomFilterFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db")
 		if err != nil {
 			log.Fatal(err)
 		}
-		err = os.Remove("files_SSTable/merkleTreeFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + "gob")
+		err = os.Remove("files_SSTable/merkleTreeFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db")
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		removeFileName(lsm, "files_SSTable/dataFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+"gob")
-		removeFileName(lsm, "files_SSTable/indexFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+"gob")
-		removeFileName(lsm, "files_SSTable/summaryFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+"gob")
-		removeFileName(lsm, "files_SSTable/bloomFilterFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+"gob")
-		removeFileName(lsm, "files_SSTable/merkleTreeFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+"gob")
+		removeFileName(lsm, "files_SSTable/dataFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".db")
+		removeFileName(lsm, "files_SSTable/indexFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".db")
+		removeFileName(lsm, "files_SSTable/summaryFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".db")
+		removeFileName(lsm, "files_SSTable/bloomFilterFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".db")
+		removeFileName(lsm, "files_SSTable/merkleTreeFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".db")
 	}
 }
 
