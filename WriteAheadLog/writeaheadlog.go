@@ -273,7 +273,7 @@ func (wal *WAL) WriteInFile(entry *Config.Entry, path string) (error, bool) {
 			return err, false
 		}
 
-		file2, err := os.OpenFile(nextPath, os.O_CREATE|os.O_RDWR, 0644)
+		file2, err := os.OpenFile("files_WAL/"+nextPath, os.O_CREATE|os.O_RDWR, 0644)
 
 		if err != nil {
 			log.Fatal(err)
