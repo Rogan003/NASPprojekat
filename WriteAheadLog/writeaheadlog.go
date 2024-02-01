@@ -146,12 +146,16 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 		}
 
 	}
-	fileInfo, err := os.Stat(wal.lastSegment.Name())
+
+	println("Celo ime ", wal.lastSegment.Name())
+	fileInfo, err := os.Stat("files_WAL/" + wal.lastSegment.Name())
 	if err != nil {
 		fmt.Println("Error getting file information:", err)
 		return err
 	}
+
 	wal.CurrentSize = fileInfo.Size()
+
 	return nil
 }
 
@@ -409,7 +413,6 @@ func (wal *WAL) readEntry(path string, offset int) (Config.Entry, int, bool) {
 		//nextPath = "files_WAL/segment2.log"
 		file2, err := os.OpenFile("files_WAL/"+nextPath, os.O_RDWR, 0644) // promenio sam os.O_RDONLY
 
-
 		fi, err2 := file2.Stat()
 		if err2 != nil {
 			return Config.Entry{}, 0, false
@@ -436,7 +439,7 @@ func (wal *WAL) readEntry(path string, offset int) (Config.Entry, int, bool) {
 		buffer2 = mmapFile2[0:]
 		//buffer2 = make([]byte, len(mmapFile2))
 		// buffer2 = make([]byte, wal.segmentSize)
-    	// copy(buffer2, mmapFile2)
+		// copy(buffer2, mmapFile2)
 	}
 
 	if len(buffer) < 4 {
@@ -529,7 +532,7 @@ func (wal *WAL) readEntry(path string, offset int) (Config.Entry, int, bool) {
 					// println("duzina",len(buffer))
 					// println("duzina2",len(buffer2))
 					bytesLeft := buffer2[:(8 - len(buffer))]
-					
+
 					// println(bytesLeft)
 					keySize := binary.LittleEndian.Uint64(append(help, bytesLeft...))
 					buffer2 = buffer2[(8 - len(buffer)):]
@@ -773,8 +776,8 @@ func (wal *WAL) AddEntry(entry *Config.Entry) error {
 	}
 	//pamtimo koliko je zauzet trneutno
 	wal.CurrentSize = fileInfo.Size()
-	//print("currentsize :")
-	//println(wal.CurrentSize)
+	print("currentsize :")
+	println(wal.CurrentSize)
 	//print("lastSeg :")
 	//println(wal.lastSegment.Name())
 	return nil
