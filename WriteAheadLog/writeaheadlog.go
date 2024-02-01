@@ -33,6 +33,7 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 		fmt.Println("Error opening memseg file:", err)
 		return err
 	}
+	wal.segmentsTable = file
 	_, err = file.Seek(0, 0)
 	if err != nil {
 		fmt.Println("Error:", err)
@@ -172,8 +173,8 @@ func (wal *WAL) ScanWALFolder() ([]string, error) {
 
 	sort.Slice(segments, func(i, j int) bool {
 
-		numI, _ := strconv.Atoi(strings.TrimPrefix(filepath.Base(segments[i]), "segment"))
-		numJ, _ := strconv.Atoi(strings.TrimPrefix(filepath.Base(segments[j]), "segment"))
+		numI, _ := strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(filepath.Base(segments[i]), "segment"), ".log"))
+		numJ, _ := strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(filepath.Base(segments[j]), "segment"), ".log"))
 
 		return numI < numJ
 	})
@@ -703,6 +704,7 @@ func (wal *WAL) OpenWAL(mem *Memtable.NMemtables) error {
 	} else {
 		//otvaramo fajl poslednjeg segmenta
 		lastSegmentPath := segments[len(segments)-1]
+		println(lastSegmentPath)
 		lastSegmentFile, err := os.OpenFile(lastSegmentPath, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0644) //0644 - vlasnik moze da cita i pise, ostali mogu samo da citaju
 		if err != nil {
 			return err
