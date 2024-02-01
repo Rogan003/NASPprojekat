@@ -90,7 +90,6 @@ func Get(key string, SummaryFileName string, IndexFileName string, DataFileName 
 
 		var indexPosition = uint64(0)
 		for {
-
 			//citamo velicinu kljuca
 			keySizeBytes := make([]byte, KEY_SIZE_SIZE)
 			_, err := sumarryFile.Read(keySizeBytes)
@@ -102,12 +101,13 @@ func Get(key string, SummaryFileName string, IndexFileName string, DataFileName 
 			if err != nil {
 				panic(err)
 			}
-
+			
 			if string(keyValue) > key {
 				dataPosition := findInIndex(indexPosition, key, IndexFileName)
 				notFound := -1
 				if dataPosition == uint64(notFound) {
-					panic("sstable: Nije pronadjen key u indexFile")
+					fmt.Println("sstable: Nije pronadjen key u indexFile")
+					break
 				}
 				_, data := ReadData(int64(dataPosition), DataFileName)
 				return data
@@ -119,8 +119,15 @@ func Get(key string, SummaryFileName string, IndexFileName string, DataFileName 
 				indexPosition = position
 				if err != nil {
 					if err == io.EOF {
-						sumarryFile.Close()
-						break
+						dataPosition := findInIndex(indexPosition, key, IndexFileName)
+						notFound := -1
+						if dataPosition == uint64(notFound) {
+							fmt.Println("sstable: Nije pronadjen key u indexFile")
+							sumarryFile.Close()
+							break
+						}
+						_, data := ReadData(int64(dataPosition), DataFileName)
+						return data
 					}
 					fmt.Println(err)
 					sumarryFile.Close()

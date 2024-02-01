@@ -28,7 +28,7 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 		return err
 	}
 	memIdx := 0 //PROMENITI ZA NAJSTARIJI MEM, pretpostavljam da treba 0? posto je memtabla inicijalno prazna?
-
+	// za sada nema info koja je najstarija, mozemo cuvati nekako ili da menjamo memseg prilikom remake, mislim da je bolje menjati memseg
 	// citamo od kog offseta treba krenuti citanje segmenta sa najmanjim indeksom
 	file, err := os.Open("files_WAL/memseg.txt")
 	if err != nil {
@@ -67,18 +67,26 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 	//redom ucitavamo fajlove sa segmentima
 	for _, fileName := range segementsFiles {
 		for {
+			// fmt.Println(fileName)
 			entry, next, jump := wal.readEntry(fileName, offset)
+			// fmt.Println(entry)
 			//ako smo zavrsili sa citanjem svih entrya izadji iz fje
-			if reflect.DeepEqual(entry, Config.Entry{}) {
+			if reflect.DeepEqual(entry, Config.Entry{}) { // mislim da ovo ne valja skroz? mozda i valja
 				return nil
 			}
 			offset = next
 			if entry.Crc != Config.CRC32(entry.Transaction.Value) {
 				return errors.New("crc is different")
 			}
+			
 			if entry.Tombstone {
 				//ako je operacija brisanja
-				mem.Delete(entry.Transaction.Key)
+				_, index, lwm := mem.Delete(entry.Transaction.Key) // dodao za lwm i index kod brisanja? jel treba? ja mislim da je okej
+				if lwm != -1 {
+					wal.lowWaterMark = lwm
+				}
+				wal.currentMemIndex = int64(index)
+
 			} else {
 				//ako je operacija dodavanja ili izmene
 				index, lwm := mem.Add(entry.Transaction.Key, entry.Transaction.Value)
@@ -145,7 +153,7 @@ func (wal *WAL) WriteInFile(entry *Config.Entry, path string) (error, bool) {
 	// 	return err, false
 	// }
 
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0644)
+	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
 
 	if err != nil {
 		log.Fatal(err)
@@ -165,6 +173,7 @@ func (wal *WAL) WriteInFile(entry *Config.Entry, path string) (error, bool) {
 
 	//remainingCapacity := Config.MaxSegmentSize - fileInfo.Size()
 	remainingCapacity := wal.segmentSize - fi.Size()
+	firstFileSize := fi.Size()
 
 	defer file.Close()
 
@@ -177,14 +186,14 @@ func (wal *WAL) WriteInFile(entry *Config.Entry, path string) (error, bool) {
 		}
 
 		mmapFile, err := mmap.Map(file, mmap.RDWR, 0)
+		defer mmapFile.Unmap()
 
 		if err != nil {
 			log.Fatal(err)
 			return err, false
 		}
-		defer mmapFile.Unmap()
 
-		mmapFile = append(mmapFile, entryBytes...)
+		mmapFile = append(mmapFile[:firstFileSize], entryBytes...)
 		shifted = false
 
 	} else {
@@ -205,12 +214,12 @@ func (wal *WAL) WriteInFile(entry *Config.Entry, path string) (error, bool) {
 		}
 
 		mmapFile, err := mmap.Map(file, mmap.RDWR, 0)
+		defer mmapFile.Unmap()
 
 		if err != nil {
 			log.Fatal(err)
 			return err, false
 		}
-		defer mmapFile.Unmap()
 
 		file2, err := os.OpenFile(nextPath, os.O_CREATE|os.O_RDWR, 0644)
 
@@ -245,8 +254,8 @@ func (wal *WAL) WriteInFile(entry *Config.Entry, path string) (error, bool) {
 		}
 		defer mmapFile2.Unmap()
 
-		mmapFile = append(mmapFile, firstPart...)
-		mmapFile2 = append(mmapFile2, secondPart...)
+		mmapFile = append(mmapFile[:firstFileSize], firstPart...)
+		mmapFile2 = append(mmapFile2[:fi.Size()], secondPart...)
 		shifted = true
 
 	}
@@ -300,34 +309,35 @@ func (wal *WAL) readEntry(path string, offset int) (Config.Entry, int, bool) {
 	}
 	file, err := os.OpenFile(path, os.O_RDWR, 0644) // promenio sam os.O_RDONLY
 
-	fi, err2 := file.Stat()
-	if err2 != nil {
-		return Config.Entry{}, 0, false
-	}
-
-	if fi.Size() == 0 {
-		file.Truncate(1)
-	}
-
 	//da li treba vratiti gresku?
 	if err != nil {
 		log.Fatal(err)
 		return Config.Entry{}, 0, false
 	}
 
+	fi, err2 := file.Stat()
+	if err2 != nil {
+		return Config.Entry{}, 0, false
+	}
+
+	if fi.Size() <= 1 {
+		return Config.Entry{}, 0, false // ovo potencijalno treba? da li treba <= 1? da li je to greska?
+	}
+
 	defer file.Close()
 
-	mmapFile, err := mmap.Map(file, mmap.RDWR, 0) // pogresan argument?
+	mmapFile, err := mmap.Map(file, mmap.RDWR, 0)
+	defer mmapFile.Unmap()
+
 	if err != nil {
 		log.Fatal(err)
 		return Config.Entry{}, 0, false
 	}
-	defer mmapFile.Unmap()
 	//mozda treba defer.mmapFile.Unmap() ????
 
 	buffer := mmapFile[offset:] //u buffer ide sve sto je ostalo od trenutnog fajla
+	//entry := Config.Entry{}
 	var entry Config.Entry
-	//var entry Config.Entry{}
 	var shifted bool
 	var newoffset int
 	var buffer2 []byte                        //baffer2 je za bajtove drugog fajl - inicijalizovace se ako postoji sledeci fajl
@@ -393,14 +403,16 @@ func (wal *WAL) readEntry(path string, offset int) (Config.Entry, int, bool) {
 		entry.Transaction.Key = string(buffer2[:keySize])
 		buffer2 = buffer2[keySize:]
 
-		entry.Transaction.Value = buffer2[:valueSize]
+		bytess := make([]byte, int(valueSize))
+		copy(bytess, buffer2[:int(valueSize)])
+		entry.Transaction.Value = bytess
 		shifted = true
 		newoffset = (4 - len(buffer)) + 8 + 1 + 8 + 8 + int(keySize) + int(valueSize)
 
 	} else {
 		entry.Crc = binary.LittleEndian.Uint32(buffer[:4])
 		buffer = buffer[4:]
-
+		
 		if len(buffer) < 8 {
 			timestamp := buffer
 			bytesLeft := buffer2[:(8 - len(buffer))]
@@ -420,7 +432,9 @@ func (wal *WAL) readEntry(path string, offset int) (Config.Entry, int, bool) {
 			entry.Transaction.Key = string(buffer2[:keySize])
 			buffer2 = buffer2[keySize:]
 
-			entry.Transaction.Value = buffer2[:valueSize]
+			bytess := make([]byte, int(valueSize))
+			copy(bytess, buffer2[:int(valueSize)])
+			entry.Transaction.Value = bytess
 			shifted = true
 			newoffset = (8 - len(buffer)) + 1 + 8 + 8 + int(keySize) + int(valueSize)
 
@@ -442,7 +456,9 @@ func (wal *WAL) readEntry(path string, offset int) (Config.Entry, int, bool) {
 				entry.Transaction.Key = string(buffer2[:keySize])
 				buffer2 = buffer2[keySize:]
 
-				entry.Transaction.Value = buffer2[:valueSize]
+				bytess := make([]byte, int(valueSize))
+				copy(bytess, buffer2[:int(valueSize)])
+				entry.Transaction.Value = bytess
 				shifted = true
 				newoffset = 1 + 8 + 8 + int(keySize) + int(valueSize)
 			} else {
@@ -463,7 +479,9 @@ func (wal *WAL) readEntry(path string, offset int) (Config.Entry, int, bool) {
 					entry.Transaction.Key = string(buffer2[:keySize])
 					buffer2 = buffer2[keySize:]
 
-					entry.Transaction.Value = buffer2[:valueSize]
+					bytess := make([]byte, int(valueSize))
+					copy(bytess, buffer2[:int(valueSize)])
+					entry.Transaction.Value = bytess
 					shifted = true
 					newoffset = (8 - len(buffer)) + 8 + int(keySize) + int(valueSize)
 				} else {
@@ -480,12 +498,14 @@ func (wal *WAL) readEntry(path string, offset int) (Config.Entry, int, bool) {
 						entry.Transaction.Key = string(buffer2[:keySize])
 						buffer2 = buffer2[keySize:]
 
-						entry.Transaction.Value = buffer2[:valueSize]
+						bytess := make([]byte, int(valueSize))
+						copy(bytess, buffer2[:int(valueSize)])
+						entry.Transaction.Value = bytess
 						shifted = true
 						newoffset = (8 - len(buffer)) + int(keySize) + int(valueSize)
 					} else {
-						valueSize := binary.LittleEndian.Uint64(buffer2[:8])
-						buffer2 = buffer2[8:]
+						valueSize := binary.LittleEndian.Uint64(buffer[:8])
+						buffer = buffer[8:]
 
 						if len(buffer) < int(keySize) {
 							key := buffer
@@ -495,12 +515,13 @@ func (wal *WAL) readEntry(path string, offset int) (Config.Entry, int, bool) {
 							entry.Transaction.Key = string(keyBytes)
 							buffer2 = buffer2[(int(keySize) - len(buffer)):]
 
-							entry.Transaction.Value = buffer2[:int(valueSize)]
+							bytess := make([]byte, int(valueSize))
+							copy(bytess, buffer2[:int(valueSize)])
+							entry.Transaction.Value = bytess
 							newoffset = int(valueSize) + (int(keySize) - len(buffer))
 							shifted = true
 
 						} else {
-
 							entry.Transaction.Key = string(buffer[:int(keySize)])
 							buffer = buffer[int(keySize):]
 
@@ -509,13 +530,22 @@ func (wal *WAL) readEntry(path string, offset int) (Config.Entry, int, bool) {
 								bytesLeft := buffer2[:(int(valueSize) - len(buffer))]
 
 								valueBytes := append(value, bytesLeft...)
+								bytess := make([]byte, int(valueSize))
+								copy(bytess, valueBytes)
+								entry.Transaction.Value = bytess
 								entry.Transaction.Value = valueBytes
 								newoffset = int(valueSize) - len(buffer)
 								shifted = true
 							} else if len(buffer) == int(valueSize) {
+								bytess := make([]byte, int(valueSize))
+								copy(bytess, buffer)
+								entry.Transaction.Value = bytess
 								shifted = true
 								newoffset = 0
 							} else {
+								bytess := make([]byte, int(valueSize))
+								copy(bytess, buffer[:int(valueSize)])
+								entry.Transaction.Value = bytess
 								shifted = false
 								newoffset = offset + 4 + 8 + 1 + 8 + 8 + int(valueSize) + int(keySize)
 							}
@@ -543,7 +573,7 @@ func (wal *WAL) DeleteSegments() error {
 
 		if idx <= wal.lowWaterMark {
 
-			err = os.Remove(file.Name())
+			err = os.Remove(wal.path + "/" + file.Name())
 			if err != nil {
 				fmt.Printf("Greška prilikom brisanja fajla %s: %s\n", file.Name(), err)
 			} else {
@@ -786,10 +816,10 @@ func Delete(wal *WAL, mem *Memtable.NMemtables, key string) { //dodaje transakci
 	_, memIndex, lwm := mem.Delete(key)
 	if lwm != -1 {
 		wal.lowWaterMark = lwm
+		wal.DeleteSegments()
 	}
 	if wal.currentMemIndex != int64(memIndex) {
 		wal.updateMemSeg(entry, memIndex)
-		wal.DeleteSegments()
 	}
 }
 
@@ -802,12 +832,16 @@ func Put(wal *WAL, mem *Memtable.NMemtables, key string, value []byte) bool { //
 	memIndex, lwm := mem.Add(key, value)
 	if lwm != -1 {
 		wal.lowWaterMark = lwm
+		wal.DeleteSegments() // mozda je ovde okej?
 	}
-	if wal.currentMemIndex != int64(memIndex) { // treba da se desava samo nakon flush-a, a ne nakon svakog prelaska na novu memtabelu
+	if wal.currentMemIndex != int64(memIndex) {
 		wal.updateMemSeg(entry, memIndex)
-		//wal.DeleteSegments()
+		//wal.DeleteSegments() treba da se desava samo nakon flush-a, a ne nakon svakog prelaska na novu memtabelu
 	}
 	print("low water mark ")
 	println(wal.lowWaterMark)
 	return true
 }
+
+// delete segments ne radi kako treba, obrise sve fajlove?
+// sstable get

@@ -207,7 +207,7 @@ func (entry *Entry) ToByte() []byte { //pretvara iz vrednosti u bajtove
 	binary.LittleEndian.PutUint32(crcb, CRC32(entry.Transaction.Value))
 	data = append(data, crcb...) //dodaje se CRC
 
-	sec := time.Now().Unix()
+	sec := entry.Timestamp
 	secb := make([]byte, TIMESTAMP_SIZE)
 	binary.LittleEndian.PutUint64(secb, uint64(sec))
 	data = append(data, secb...) //dodaje se Timestamp

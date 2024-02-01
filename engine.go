@@ -45,9 +45,9 @@ func Get(memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *T
 	if foundBF {                                          // ovde nesto potencijalno ne valja, mozda treba dodati putanje u bloomFilterFilesNames?
 		fmt.Println("Mozda postoji na disku.")
 		//ucitavamo summary i index fajlove za sstable u kojem je mozda element (saznali preko bloomfiltera)
-		summaryFileName := fileBF[0:14] + "summaryFile" + fileBF[22:]
-		indexFileName := fileBF[0:14] + "indexFile" + fileBF[22:]
-		foundValue := SSTable.Get(key, summaryFileName, indexFileName, fileBF)
+		summaryFileName := lsm.SummaryFilesNames[fileBF]
+		indexFileName := lsm.IndexFilesNames[fileBF]
+		foundValue := SSTable.Get(key, summaryFileName, indexFileName, lsm.BloomFilterFilesNames[fileBF])
 
 		if reflect.DeepEqual(foundValue, []byte{}) {
 			return nil, false
@@ -71,21 +71,21 @@ func convertToBytes(value interface{}) ([]byte, error) {
 }
 
 // trazenje elementa sa nekim kljucem u svim bloomfilterima
-func SearchTroughBloomFilters(key string, lsm *Config.LSMTree) (bool, string) {
+func SearchTroughBloomFilters(key string, lsm *Config.LSMTree) (bool, int) {
 	bf := BloomFilter.BloomFilter{}
 	// kada se ponovo pokrene ne prepoznaje da postoji bilo sta u nizu
 	for i := 0; i < len(lsm.BloomFilterFilesNames); i++ {
 		err := bf.Deserialize(lsm.BloomFilterFilesNames[i])
 		if err != nil && err != io.EOF {
-			return false, ""
+			return false, -1
 		}
 		found := bf.Check_elem([]byte(key))
 		if found {
-			return found, lsm.BloomFilterFilesNames[i]
+			return found, i
 		}
 
 	}
-	return false, ""
+	return false, -1
 }
 
 func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize int) {
@@ -446,9 +446,9 @@ func Delete(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.
 	if foundBF {
 		fmt.Println("Mozda postoji na disku.")
 		//ucitavamo summary i index fajlove za sstable u kojem je mozda element (saznali preko bloomfiltera)
-		summaryFileName := fileBF[0:14] + "summaryFile" + fileBF[22:]
-		indexFileName := fileBF[0:14] + "indexFile" + fileBF[22:]
-		foundValue := SSTable.Get(key, summaryFileName, indexFileName, fileBF)
+		summaryFileName := lsm.SummaryFilesNames[fileBF]
+		indexFileName := lsm.IndexFilesNames[fileBF]
+		foundValue := SSTable.Get(key, summaryFileName, indexFileName, lsm.BloomFilterFilesNames[fileBF])
 
 		if reflect.DeepEqual(foundValue, []byte{}) {
 			return nil, false
