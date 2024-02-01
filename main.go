@@ -643,30 +643,30 @@ func main() {
 			var key1, key2 string
 			fmt.Printf("Unesite prvi kljuc: ")
 			fmt.Scanf("%s", &key1)
-			fmt.Printf("\nUnesite drugi kljuc: ")
+			fmt.Printf("Unesite drugi kljuc: ")
 			fmt.Scanf("%s", &key2)
-			RangeScan(&mt, key1, key2, conf.PageSize)
+			RangeScan(&mt, key1, key2, conf.PageSize, lsm)
 
 		case 9:
 			var key string
 			fmt.Printf("Unesite prefiks za skeniranje: ")
 			fmt.Scanf("%s", &key)
-			PrefixScan(&mt, key, conf.PageSize)
+			PrefixScan(&mt, key, conf.PageSize, lsm)
 
 		case 10:
 			fmt.Println("Unesite opseg za iteriranje: ")
 			var key1, key2 string
 			fmt.Printf("Unesite prvi kljuc: ")
 			fmt.Scanf("%s", &key1)
-			fmt.Printf("\nUnesite drugi kljuc: ")
+			fmt.Printf("Unesite drugi kljuc: ")
 			fmt.Scanf("%s", &key2)
-			RangeIter(&mt, key1, key2)
+			RangeIter(&mt, key1, key2, lsm)
 
 		case 11:
 			var key string
 			fmt.Printf("Unesite prefiks za iteriranje: ")
 			fmt.Scanf("%s", &key)
-			PrefixIter(&mt, key)
+			PrefixIter(&mt, key, lsm)
 
 		case 'x':
 			break
