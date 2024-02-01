@@ -59,15 +59,20 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 			activeMemIdx = i
 			break
 		}
+
 	}
 	//trazimo liniju najstarijeg memtablea od koga krece remake
-	oldestMemIdx := 0
-	if lines[(activeMemIdx+1)%len(lines)] == "" {
-		//ako je posle aktivnog prazna linija zbog flusha
-		oldestMemIdx = (activeMemIdx + 2) % (len(lines))
-	} else {
-		//ako je posle aktivnog prazna linija zbog flusha
-		oldestMemIdx = (activeMemIdx + 1) % (len(lines))
+
+	//postavimo na prvu liniju, jer ako se ne desi promena u narednom foru (sve linij sem aktivnog seg su prazne)
+	// aktivni seg je i najstariji
+	oldestMemIdx := activeMemIdx
+	for i := 1; i < len(lines); i++ {
+		//trazi prvu ne preaznu liniju posle aktivnog memtablea
+		//ako su sve prazne smatrace se da je najstariji onaj prvi posle aktivnog
+		if lines[(activeMemIdx+i)%len(lines)] != "" {
+			oldestMemIdx = (activeMemIdx + i) % (len(lines))
+			break
+		}
 	}
 
 	var newlines []string
@@ -81,8 +86,8 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 	offset := 0
 	elements := strings.Split(lines[oldestMemIdx], ",")
 	/*
-	firstSegData := strings.Split(elements[0], " ")
-	offsetStart, err := strconv.Atoi(firstSegData[1]) // ovde greska, trazi se zarez, a kada imamo samo jednu popunjenu tabelu zareza nema
+		firstSegData := strings.Split(elements[0], " ")
+		offsetStart, err := strconv.Atoi(firstSegData[1]) // ovde greska, trazi se zarez, a kada imamo samo jednu popunjenu tabelu zareza nema
 	*/
 	var offsetStart int
 	if len(elements) == 1 {
