@@ -269,19 +269,21 @@ func ReadData(position int64, DataFileName string) ([]byte, []byte) {
 	file, err := os.OpenFile(DataFileName, os.O_RDWR, 0777)
 	if err != nil {
 		log.Fatal(err)
+		return []byte{}, []byte{}
 	}
 	defer file.Close()
 	// pomeramo se na poziciju u dataFile gde je nas podatak
 	_, err = file.Seek(position, 0)
 	if err != nil {
 		log.Fatal(err)
+		return []byte{}, []byte{}
 	}
 	// cita bajtove podatka DO key i value u info
 	// CRC (4B)   | Timestamp (8B) | Tombstone(1B) | Key Size (8B) | Value Size (8B)
 	info := make([]byte, KEY_SIZE_START)
 	_, err = file.Read(info)
 	if err != nil {
-		panic(err)
+		return []byte{}, []byte{} // mozda neka prijava gresaka npr za kraj fajla?
 	}
 
 	tombstone := info[TOMBSTONE_START] // jel ovo sad prepoznaje obrisane
@@ -294,7 +296,7 @@ func ReadData(position int64, DataFileName string) ([]byte, []byte) {
 	info2 := make([]byte, KEY_START-KEY_SIZE_START)
 	_, err = file.Read(info2)
 	if err != nil {
-		panic(err)
+		return []byte{}, []byte{} // mozda neka prijava gresaka npr za kraj fajla?
 	}
 
 	key_size := binary.LittleEndian.Uint64(info2[:KEY_SIZE_SIZE])
@@ -305,7 +307,7 @@ func ReadData(position int64, DataFileName string) ([]byte, []byte) {
 	data := make([]byte, key_size+value_size)
 	_, err = file.Read(data)
 	if err != nil {
-		panic(err)
+		return []byte{}, []byte{} // mozda neka prijava gresaka npr za kraj fajla?
 	}
 	key := data[:key_size]
 	val := data[key_size : key_size+value_size]
