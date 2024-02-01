@@ -2,6 +2,7 @@ package SSTable
 
 import (
 	"NASPprojekat/BloomFilter"
+	"NASPprojekat/MerkleTree"
 	"NASPprojekat/Config"
 	"hash/crc32"
 
@@ -75,6 +76,24 @@ func make_filter(elems []*Config.Entry, numElems int, filePath string) {
 
 	bf.Serialize(filePath)
 }
+
+func make_merkle(elems []*Config.Entry, filePath string) {
+	// flag: Tamara
+	// elems = nodes
+	// pretvoriti niz elems u niz bajtova
+	var data [][]byte
+
+	for _, entry := range elems {
+		bytesData := NodeToBytes(*entry)
+		data = append(data, bytesData)
+	}
+
+	mt := MerkleTree.MerkleTree{}
+	mt.Init(data)
+
+	mt.Serialize(filePath)
+}
+
 
 // preko kljuca trazimo u summaryFile poziciju za nas klju u indexFile iz kog kasnije dobijamo poziicju naseg kljuca i vrednosti u dataFile
 func Get(key string, SummaryFileName string, IndexFileName string, DataFileName string) []byte {
@@ -365,7 +384,7 @@ func NodeToBytes(node Config.Entry) []byte { //pretvara node u bajtove
 	return data
 }
 
-func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, SummaryFileName string, BloomFileName string) {
+func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, SummaryFileName string, BloomFileName string, MerkleFileName string) {
 	indexFile, err := os.OpenFile(IndexFileName, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0777)
 	if err != nil {
 		panic(err)
@@ -390,6 +409,10 @@ func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, 
 
 	// pravi se bloom filter
 	make_filter(nodes, len(nodes), BloomFileName)
+
+	// pravi se merkle tree
+	// flag: Tamara
+	make_merkle(nodes, MerkleFileName)
 
 	file, err := os.OpenFile(DataFileName, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0777)
 	if err != nil {
@@ -634,7 +657,7 @@ func mergeFiles(level int, dataFile *os.File, indexFile *os.File, summaryFile *o
 	closeFiles(levelFiles)
 
 	//pravljenje novog sstablea od svih sstableova ovog nivoa koji su sada spojeni
-	MakeData(sortedAllEntries, dataFile.Name(), indexFile.Name(), summaryFile.Name(), bloomFile.Name())
+	MakeData(sortedAllEntries, dataFile.Name(), indexFile.Name(), summaryFile.Name(), bloomFile.Name(), merkleFile.Name())
 
 	for i := 1; i <= lsm.MaxSSTables; i++ {
 		err = os.Remove("files_SSTable/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db")
@@ -853,7 +876,7 @@ func splitSSTable(k1 string, k2 string, k3 string, lower bool, dataFile string, 
 
 	//pravljenje novog sstablea od svih sstableova ovog nivoa koji su sada spojeni
 	//fali merkle???
-	MakeData(entriesRewrite, dataFile, indexFile, summaryFile, bloomFile)
+	MakeData(entriesRewrite, dataFile, indexFile, summaryFile, bloomFile, merkleFile)
 
 	return entriesAdd
 }
@@ -1014,7 +1037,7 @@ func levelMergeFiles(level int, dataFiles []string, indexFiles []string, summary
 
 	//pravljenje novog sstablea od svih sstableova ovog nivoa koji su sada spojeni
 	//fali merkle???
-	MakeData(sortedAllEntries, dataFileName, indexFileName, summaryFileName, bloomFileName)
+	MakeData(sortedAllEntries, dataFileName, indexFileName, summaryFileName, bloomFileName, merkleFileName)
 
 	// brisemo sve fajlove za ostale SSTabele, jer su spojene u veliku i ne trebaju nam vise
 	for i := 1; i < len(dataFiles); i++ {

@@ -402,5 +402,5 @@ func (m *Memtable) flushToDisk(lsm *Config.LSMTree) {
 
 	//pravimo sstable, mora da se pre prosledjivanja SORTIRA MEMTABLE
 	//MORA DA SE PROSLEDI LISTA SORTIRANIH ENTYJA A NE MEMTABLE
-	SSTable.MakeData(m.GetSortedElems(), DataFileName, IndexFileName, SummaryFileName, BloomFilterFileName)
+	SSTable.MakeData(m.GetSortedElems(), DataFileName, IndexFileName, SummaryFileName, BloomFilterFileName, MerkleTreeFileName)
 }
