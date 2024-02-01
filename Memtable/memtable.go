@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -22,10 +23,12 @@ Sadrzi maks kapacitet i trenutni broj operacija
 type Memtable struct {
 	skiplist SkipList.SkipList
 	btree    BTree.BTree
-	version  string
-	maxCap   int
-	curCap   int
-	empty    bool
+	hashmap  map[string]*Config.Entry
+
+	version string
+	maxCap  int
+	curCap  int
+	empty   bool
 }
 
 // konstruktor za memtable, na osnovu verzije (skip lista ili b stablo) i maksimalnog kapaciteta kreira inicijalno stanje strukture
@@ -33,6 +36,10 @@ func (mt *Memtable) Init(vers string, mCap int) {
 	if vers == "skiplist" {
 		mt.skiplist = SkipList.SkipList{}
 		mt.skiplist.Init(20)
+
+	} else if vers == "hashmap" {
+		mt.hashmap = make(map[string]*Config.Entry)
+		
 	} else {
 		mt.btree = BTree.BTree{}
 		mt.btree.Init(10) // koje vrednosti treba da idu u konstruktore? za sada nek bude ovako pa cemo videti, isto i u flush
@@ -94,11 +101,24 @@ func (nmt *NMemtables) Add(key string, value []byte) (int, int) {
 
 	var ok bool = false
 	var lwm = -1
+
 	if memtable.version == "skiplist" {
 		ok = memtable.skiplist.Add(key, value)
+
+	} else if memtable.version == "hashmap" {
+		_, found := memtable.hashmap[key]
+		if !found {
+			elem := Config.NewEntry(false, *Config.NewTransaction(key, value))
+			memtable.hashmap[key] = elem
+			ok = true
+		} else {
+			ok = false
+		}
+
 	} else {
 		ok = memtable.btree.Add(key, value)
 	}
+
 	if ok {
 		memtable.curCap++
 		memtable.empty = false
@@ -129,6 +149,17 @@ func (nmt *NMemtables) AddAndDelete(key string, value []byte) int {
 	if memtable.version == "skiplist" {
 		ok = memtable.skiplist.Add(key, value)
 		memtable.skiplist.Delete(key)
+
+	} else if memtable.version == "hashmap" {
+		_, found := memtable.hashmap[key]
+		if !found {
+			elem := Config.NewEntry(true, *Config.NewTransaction(key, value))
+			memtable.hashmap[key] = elem
+			ok = true
+		} else {
+			ok = false
+		}
+
 	} else {
 		ok = memtable.btree.Add(key, value)
 		memtable.btree.Add(key, nil)
@@ -174,6 +205,28 @@ func (nmt *NMemtables) Delete(key string) (bool, int, int) {
 				lwm := nmt.AddAndDelete(key, data)
 				return true, ind, lwm
 			}
+
+		} else if memtable.version == "hashmap" {
+			if primaryMemtable {
+				// ako se nalazi u aktivnoj tabeli, samo obrisi
+				elem, found := memtable.hashmap[key]
+				if !found { // ako ne postoji u hashmapi, ne brisemo ga
+					return false, ind, -1
+				}
+				if elem.Tombstone == true { // ako postoji, a tombostone = 1 (obrisan) onda isto false vracamo
+					return false, ind, -1
+				}
+				newElem := Config.NewEntry(true, *Config.NewTransaction(key, elem.Transaction.Value))		
+				memtable.hashmap[key] = newElem
+				return true, ind, -1
+
+			} else {
+				// ne nalazi se u aktivnoj, nego u nekoj od proslih read-only tabela
+				// dodaj u primarni memtable pa onda izbrisi
+				lwm := nmt.AddAndDelete(key, data)
+				return true, ind, lwm
+			}
+
 		} else {
 			if primaryMemtable {
 				return memtable.btree.Add(key, nil), ind, -1
@@ -222,8 +275,25 @@ func (nmt *NMemtables) Get(key string) ([]byte, bool, bool) {
 				} else {
 					return skipNode.Elem.Transaction.Value, true, false
 				}
-
 			}
+
+		} else if memtable.version == "hashmap" {
+			// pronalazak u hashmapi
+			elem, found := memtable.hashmap[key]
+			if elem.Transaction.Value != nil && found {
+				//fmt.Printf("%s %d\n", elem.Transaction.Key, elem.Transaction.Value)
+				if elem.Tombstone {
+					return []byte{}, false, false
+				}
+
+				if r == nmt.R {
+					return elem.Transaction.Value, true, true
+
+				} else {
+					return elem.Transaction.Value, true, false
+				}
+			}
+
 		} else {
 			_, _, _, elem := memtable.btree.Find(key)
 			if elem != nil {
@@ -264,6 +334,9 @@ func (mt *Memtable) flush(lsm *Config.LSMTree, index int) int {
 	if mt.version == "skiplist" {
 		mt.skiplist = SkipList.SkipList{}
 		mt.skiplist.Init(20)
+
+	} else if mt.version == "hashmap" {
+		mt.hashmap = make(map[string]*Config.Entry)
 
 	} else {
 		mt.btree = BTree.BTree{}
@@ -336,6 +409,20 @@ func (mt *Memtable) GetSortedElems() []*Config.Entry {
 
 	if mt.version == "skiplist" {
 		return mt.skiplist.AllElem()
+
+	} else if mt.version == "hashmap" {
+		elements := make([]*Config.Entry, 0, len(mt.hashmap))
+
+		keys := make([]string, 0, len(mt.hashmap))
+		for key := range mt.hashmap {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+
+		for _, key := range keys {
+			elements = append(elements, mt.hashmap[key])
+		}
+		return elements
 	}
 
 	return mt.btree.AllElem()
