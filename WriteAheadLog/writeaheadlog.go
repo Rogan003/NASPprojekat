@@ -28,9 +28,14 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 		return err
 	}
 
-	file, err := os.Open("files_WAL/memseg.txt")
+	file, err := os.OpenFile("files_WAL/memseg.txt", os.O_RDWR, 0644)
 	if err != nil {
 		fmt.Println("Error opening memseg file:", err)
+		return err
+	}
+	_, err = file.Seek(0, 0)
+	if err != nil {
+		fmt.Println("Error:", err)
 		return err
 	}
 	//defer file.Close()
@@ -58,11 +63,19 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 	oldestMemIdx := 0
 	if lines[(activeMemIdx+1)%len(lines)] == "" {
 		//ako je posle aktivnog prazna linija zbog flusha
-		oldestMemIdx = (activeMemIdx + 2) % len(lines)
+		oldestMemIdx = (activeMemIdx + 2) % (len(lines))
 	} else {
 		//ako je posle aktivnog prazna linija zbog flusha
-		oldestMemIdx = (activeMemIdx + 1) % len(lines)
+		oldestMemIdx = (activeMemIdx + 1) % (len(lines))
 	}
+
+	var newlines []string
+	newlines = append(newlines, lines[oldestMemIdx:]...)
+	newlines = append(newlines, lines[:oldestMemIdx]...)
+	for _, element := range lines {
+		fmt.Println("nova linija ", element)
+	}
+
 	//uzimamo pocetak odakle krece remakeWAL (uzimamo pocetak najstarijeg memtablea)
 	offset := 0
 	elements := strings.Split(lines[oldestMemIdx], ",")
@@ -75,13 +88,11 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 	}
 
 	//ponovno popunjavanje memseg tako da najstariji mem bude na 1 liniji
-	var newlines []string
-	for i := 0; i < len(lines); i++ {
-		newlines[i] = lines[oldestMemIdx%len(lines)]
-		oldestMemIdx++
+	_, err = file.Seek(0, 0)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return err
 	}
-	//newlines = append(newlines, "")
-
 	//upisivanje novog sadrzaja memseg nakon remakeWal
 	writer := bufio.NewWriter(file)
 	for _, line := range newlines {
@@ -340,7 +351,7 @@ func (wal *WAL) readEntry(path string, offset int) (Config.Entry, int, bool) {
 		log.Fatal(err)
 		return Config.Entry{}, 0, false
 	}
-	file, err := os.OpenFile(path, os.O_RDWR, 0644) // promenio sam os.O_RDONLY
+	file, err := os.OpenFile("files_WAL/"+path, os.O_RDWR, 0644) // promenio sam os.O_RDONLY
 
 	//da li treba vratiti gresku?
 	if err != nil {
