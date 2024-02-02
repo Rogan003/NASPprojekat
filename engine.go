@@ -16,8 +16,11 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"reflect"
+	"sort"
 	"strconv"
+	"strings"
 )
 
 func Get(memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *TokenBucket.TokenBucket, lsm *Config.LSMTree) ([]byte, bool) {
@@ -72,6 +75,28 @@ func convertToBytes(value interface{}) ([]byte, error) {
 
 // trazenje elementa sa nekim kljucem u svim bloomfilterima
 func SearchTroughBloomFiltersOneFile(key string, lsm *Config.LSMTree) (bool, int) {
+	sort.Slice(lsm.OneFilesNames, func(i, j int) bool {
+
+		str1 := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(lsm.OneFilesNames[i]), "oneFile_"), ".db")
+		str2 := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(lsm.OneFilesNames[j]), "oneFile_"), ".db")
+
+		substrings1 := strings.Split(str1, "_")
+		level1, _ := strconv.Atoi(substrings1[0])
+		num1, _ := strconv.Atoi(substrings1[1])
+
+		substrings2 := strings.Split(str2, "_")
+		level2, _ := strconv.Atoi(substrings2[0])
+		num2, _ := strconv.Atoi(substrings2[1])
+
+		if level1 < level2 {
+			return true
+		} else if level1 > level2 {
+			return false
+		}
+
+		return num1 < num2
+	})
+
 	bf := BloomFilter.BloomFilter{}
 	// kada se ponovo pokrene ne prepoznaje da postoji bilo sta u nizu
 	for i := 0; i < len(lsm.OneFilesNames); i++ {
@@ -100,6 +125,29 @@ func SearchTroughBloomFiltersOneFile(key string, lsm *Config.LSMTree) (bool, int
 
 // trazenje elementa sa nekim kljucem u svim bloomfilterima
 func SearchTroughBloomFilters(key string, lsm *Config.LSMTree) (bool, int) {
+
+	sort.Slice(lsm.BloomFilterFilesNames, func(i, j int) bool {
+
+		str1 := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(lsm.BloomFilterFilesNames[i]), "bloomFilterFile_"), ".db")
+		str2 := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(lsm.BloomFilterFilesNames[j]), "bloomFilterFile_"), ".db")
+
+		substrings1 := strings.Split(str1, "_")
+		level1, _ := strconv.Atoi(substrings1[0])
+		num1, _ := strconv.Atoi(substrings1[1])
+
+		substrings2 := strings.Split(str2, "_")
+		level2, _ := strconv.Atoi(substrings2[0])
+		num2, _ := strconv.Atoi(substrings2[1])
+
+		if level1 < level2 {
+			return true
+		} else if level1 > level2 {
+			return false
+		}
+
+		return num1 < num2
+	})
+
 	bf := BloomFilter.BloomFilter{}
 	// kada se ponovo pokrene ne prepoznaje da postoji bilo sta u nizu
 	for i := 0; i < len(lsm.BloomFilterFilesNames); i++ {
