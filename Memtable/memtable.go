@@ -39,7 +39,7 @@ func (mt *Memtable) Init(vers string, mCap int) {
 
 	} else if vers == "hashmap" {
 		mt.hashmap = make(map[string]*Config.Entry)
-		
+
 	} else {
 		mt.btree = BTree.BTree{}
 		mt.btree.Init(10) // koje vrednosti treba da idu u konstruktore? za sada nek bude ovako pa cemo videti, isto i u flush
@@ -66,13 +66,13 @@ slobodnu, a ako jesu ipak sve popunjenje, flushujemo poslednju read-only tabelu 
 oba pokazivaca l' i 'r' za jedno mjesto ispred.
 */
 type NMemtables struct {
-	N   int             // broj memtabli
-	Arr []*Memtable     // niz memtabli
-	l   int             // left index
-	R   int             // right index
-	lsm *Config.LSMTree // lsm tree from config
-	DegreeOfDilutionIndex	int
-	DegreeOfDilutionSummary	int
+	N                       int             // broj memtabli
+	Arr                     []*Memtable     // niz memtabli
+	l                       int             // left index
+	R                       int             // right index
+	lsm                     *Config.LSMTree // lsm tree from config
+	DegreeOfDilutionIndex   int
+	DegreeOfDilutionSummary int
 }
 
 // konstruktor za vise memtabli, sve isto, dodan num = broj memtabli i lsm stablo iz configa
@@ -130,7 +130,7 @@ func (nmt *NMemtables) Add(key string, value []byte) (int, int) {
 
 	if memtable.curCap == memtable.maxCap {
 		if (nmt.R-nmt.l == nmt.N-1) || (nmt.R < nmt.l) {
-			memtableLast := arr[nmt.l]               // izbrisala sam proveru da li je memtable empty
+			memtableLast := arr[nmt.l]                                                                       // izbrisala sam proveru da li je memtable empty
 			lwm = memtableLast.flush(nmt.lsm, nmt.l, nmt.DegreeOfDilutionSummary, nmt.DegreeOfDilutionIndex) // valjda nece trebati (testiracu)
 			nmt.l = (nmt.l + 1) % nmt.N
 		}
@@ -175,7 +175,7 @@ func (nmt *NMemtables) AddAndDelete(key string, value []byte) int {
 	var lwm = -1
 	if memtable.curCap == memtable.maxCap {
 		if (nmt.R-nmt.l == nmt.N-1) || (nmt.R < nmt.l) {
-			memtableLast := arr[nmt.l]               // izbrisala sam proveru da li je memtable empty
+			memtableLast := arr[nmt.l]                                                                       // izbrisala sam proveru da li je memtable empty
 			lwm = memtableLast.flush(nmt.lsm, nmt.l, nmt.DegreeOfDilutionSummary, nmt.DegreeOfDilutionIndex) // valjda nece trebati (testiracu)
 			nmt.l = (nmt.l + 1) % nmt.N
 		}
@@ -220,7 +220,7 @@ func (nmt *NMemtables) Delete(key string) (bool, int, int) {
 				if elem.Tombstone == true { // ako postoji, a tombostone = 1 (obrisan) onda isto false vracamo
 					return false, ind, -1
 				}
-				newElem := Config.NewEntry(true, *Config.NewTransaction(key, elem.Transaction.Value))		
+				newElem := Config.NewEntry(true, *Config.NewTransaction(key, elem.Transaction.Value))
 				memtable.hashmap[key] = newElem
 				return true, ind, -1
 
@@ -494,4 +494,5 @@ func (m *Memtable) flushToDisk(lsm *Config.LSMTree, dil_s int, dil_i int) {
 	//pravimo sstable, mora da se pre prosledjivanja SORTIRA MEMTABLE
 	//MORA DA SE PROSLEDI LISTA SORTIRANIH ENTYJA A NE MEMTABLE
 	SSTable.MakeData(m.GetSortedElems(), DataFileName, IndexFileName, SummaryFileName, BloomFilterFileName, MerkleTreeFileName, dil_s, dil_i)
+	lsm.Levels[0]++
 }
