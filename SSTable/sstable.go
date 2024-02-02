@@ -276,6 +276,11 @@ func findInIndex(startPosition uint64, key string, IndexFileName string) uint64 
 	for {
 		currentKey, position := ReadFromIndex(file)
 		if position == -1 {
+			if lastPos == -1 {
+				notFound := -1
+				return uint64(notFound) 
+			}
+			
 			return uint64(lastPos)
 		}
 		if currentKey == key {
