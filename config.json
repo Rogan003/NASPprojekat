@@ -8,7 +8,8 @@
 	"level_num": 5,
 	"t":10,
 	"token_bucket_maxsize": 15,
-	"degree_of_dilution": 5,
+	"degree_of_dilution_summary": 3,
+	"degree_of_dilution_index": 2,
 	"page_size" : 2,
 	"compression" : false
 }

@@ -340,7 +340,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 							}
 
 							for {
-								keyHelp, valHelp, end := SSTable.ReadData(int64(indexes[index]), value)
+								keyHelp, valHelp, end := SSTable.ReadAnyData(int64(indexes[index]), value)
 
 								if end {
 									indexes[index] = -1
@@ -423,7 +423,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 							vals[i] = memElems[lastElemsPos[lastIter + i]].Transaction.Value
 						} else if lastElemsTables[lastIter + i] != "" {
 							pos, _ := strconv.Atoi(lastElemsTables[lastIter + i][1:])
-							keyHelp, valHelp, _ := SSTable.ReadData(int64(lastElemsPos[lastIter + i]), sstables[pos])
+							keyHelp, valHelp, _ := SSTable.ReadAnyData(int64(lastElemsPos[lastIter + i]), sstables[pos])
 							
 							keys[i] = string(keyHelp)
 							vals[i] = valHelp
@@ -450,7 +450,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 						vals[i] = memElems[lastElemsPos[lastIter - pageSize + i]].Transaction.Value
 					} else {
 						pos, _ := strconv.Atoi(lastElemsTables[lastIter - pageSize + i][1:])
-						keyHelp, valHelp, _ := SSTable.ReadData(int64(lastElemsPos[lastIter - pageSize + i]), sstables[pos])
+						keyHelp, valHelp, _ := SSTable.ReadAnyData(int64(lastElemsPos[lastIter - pageSize + i]), sstables[pos])
 						
 						keys[i] = string(keyHelp)
 						vals[i] = valHelp

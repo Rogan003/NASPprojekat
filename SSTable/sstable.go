@@ -15,9 +15,9 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
+	//"math"
 	"os"
-	"sort"
+	//"sort"
 )
 
 const (
@@ -124,10 +124,10 @@ func Get(key string, SummaryFileName string, IndexFileName string, DataFileName 
 				dataPosition := findInIndex(indexPosition, key, IndexFileName)
 				notFound := -1
 				if dataPosition == uint64(notFound) {
-					fmt.Println("sstable: Nije pronadjen key u indexFile")
+					fmt.Println("sstable: Nije pronadjen key")
 					break
 				}
-				_, data, _ := ReadData(int64(dataPosition), DataFileName)
+				_, data, _ := ReadData(int64(dataPosition), DataFileName, key)
 				return data
 			} else {
 				// citanje pozicije za taj kljuc u indexFile
@@ -144,7 +144,7 @@ func Get(key string, SummaryFileName string, IndexFileName string, DataFileName 
 							sumarryFile.Close()
 							break
 						}
-						_, data, _ := ReadData(int64(dataPosition), DataFileName)
+						_, data, _ := ReadData(int64(dataPosition), DataFileName, key)
 						return data
 					}
 					fmt.Println(err)
@@ -171,16 +171,25 @@ func findInIndex(startPosition uint64, key string, IndexFileName string) uint64 
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	var lastPos int64 = -1
 	for {
 		currentKey, position := ReadFromIndex(file)
-		if position == -1 || currentKey > key {
-			notFound := -1
-			return uint64(notFound)
+		if position == -1 {
+			return uint64(lastPos)
 		}
 		if currentKey == key {
 			return uint64(position)
 		}
+
+		if currentKey > key { // valjda nece nikada biti da je lastPos prazan?
+			if lastPos == -1 {
+				notFound := -1
+				return uint64(notFound) 
+			}
+			return uint64(lastPos)
+		}
+
+		lastPos = position
 	}
 }
 
@@ -287,7 +296,7 @@ func LoadSummary(summary *os.File) *SStableSummary {
 	}
 }
 
-func ReadData(position int64, DataFileName string) ([]byte, []byte, bool) {
+func ReadAnyData(position int64, DataFileName string) ([]byte, []byte, bool) {
 	file, err := os.OpenFile(DataFileName, os.O_RDWR, 0777)
 	if err != nil {
 		log.Fatal(err)
@@ -334,6 +343,87 @@ func ReadData(position int64, DataFileName string) ([]byte, []byte, bool) {
 	key := data[:key_size]
 	val := data[key_size : key_size+value_size]
 	return key, val, false
+}
+
+func ReadData(position int64, DataFileName string, realKey string) ([]byte, []byte, bool) {
+	file, err := os.OpenFile(DataFileName, os.O_RDWR, 0777)
+	if err != nil {
+		log.Fatal(err)
+		return []byte{}, []byte{}, false
+	}
+	defer file.Close()
+	// pomeramo se na poziciju u dataFile gde je nas podatak
+	_, err = file.Seek(position, 0)
+	if err != nil {
+		log.Fatal(err)
+		return []byte{}, []byte{}, false
+	}
+	
+	for {
+		// cita bajtove podatka DO key i value u info
+		// CRC (4B)   | Timestamp (8B) | Tombstone(1B) | Key Size (8B) | Value Size (8B)
+		info := make([]byte, KEY_SIZE_START)
+		_, err = file.Read(info)
+		if err != nil {
+			if err == io.EOF {
+				return []byte{}, []byte{}, true // mozda neka prijava gresaka npr za kraj fajla?
+			}
+
+			return []byte{}, []byte{}, false
+		}
+
+		tombstone := info[TOMBSTONE_START] // jel ovo sad prepoznaje obrisane
+
+		//ako je tombstone 1 ne citaj dalje
+		if tombstone == 1 {
+			info3 := make([]byte, KEY_SIZE_SIZE)
+			_, err = file.Read(info3)
+			if err != nil {
+				return []byte{}, []byte{}, false // mozda neka prijava gresaka npr za kraj fajla?
+			}
+
+			key_size := binary.LittleEndian.Uint64(info3)
+
+			// cita bajtove podatka, odnosno key data
+			data := make([]byte, key_size)
+			_, err = file.Read(data)
+			if err != nil {
+				return []byte{}, []byte{}, false // mozda neka prijava gresaka npr za kraj fajla?
+			}
+			key := data[:key_size]
+
+			if string(key) <= realKey {
+				return []byte{}, []byte{}, false
+			}
+
+			continue
+		}
+		//ako je tombstone 0 onda citaj sve
+		info2 := make([]byte, KEY_START-KEY_SIZE_START)
+		_, err = file.Read(info2)
+		if err != nil {
+			return []byte{}, []byte{}, false // mozda neka prijava gresaka npr za kraj fajla?
+		}
+
+		key_size := binary.LittleEndian.Uint64(info2[:KEY_SIZE_SIZE])
+		value_size := binary.LittleEndian.Uint64(info2[KEY_SIZE_SIZE:])
+
+		// cita bajtove podatka, odnosno key i value u data
+		//| Key | Value |
+		data := make([]byte, key_size+value_size)
+		_, err = file.Read(data)
+		if err != nil {
+			return []byte{}, []byte{}, false // mozda neka prijava gresaka npr za kraj fajla?
+		}
+		key := data[:key_size]
+		val := data[key_size : key_size+value_size]
+		
+		if string(key) == realKey {
+			return key, val, false
+		} else if realKey < string(key) {
+			return []byte{}, []byte{}, false
+		}
+	}
 }
 
 func CRC32(data []byte) uint32 {
@@ -387,7 +477,7 @@ func NodeToBytes(node Config.Entry) []byte { //pretvara node u bajtove
 	return data
 }
 
-func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, SummaryFileName string, BloomFileName string, MerkleFileName string) {
+func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, SummaryFileName string, BloomFileName string, MerkleFileName string, dil_sum int, dil_ind int) {
 	indexFile, err := os.OpenFile(IndexFileName, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0777)
 	if err != nil {
 		panic(err)
@@ -415,7 +505,7 @@ func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, 
 
 	// pravi se merkle tree
 	// flag: Tamara
-	make_merkle(nodes, MerkleFileName)
+	//make_merkle(nodes, MerkleFileName)
 
 	file, err := os.OpenFile(DataFileName, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0777)
 	if err != nil {
@@ -424,6 +514,7 @@ func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, 
 	defer file.Close()
 
 	var n = 0 // krece se od 0 da bi prvi kljuc u summaryFile bio prvi i u indexFile
+	var n2 = -1
 	for _, node := range nodes {
 		position, _ := FileLength(file)
 		// cvor se upisuje u DataFile
@@ -432,11 +523,16 @@ func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, 
 			return
 		}
 		// upisivanje u index fajl
-		positionSum := AddToIndex(position, node.Transaction.Key, indexFile)
-		// upisuje svaki peti u summary file
-		if n%5 == 0 {
-			AddToSummary(positionSum, node.Transaction.Key, summaryFile)
+		if n % dil_ind == 0 {
+			positionSum := AddToIndex(position, node.Transaction.Key, indexFile)
+			n2++
+
+			// upisuje svaki peti u summary file
+			if n2 % dil_sum == 0 {
+				AddToSummary(positionSum, node.Transaction.Key, summaryFile)
+			}
 		}
+	
 		n += 1
 	}
 	err = file.Sync()
@@ -446,13 +542,13 @@ func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, 
 }
 
 // sizeTierdCompaction
-func SizeTieredCompaction(lsm Config.LSMTree) {
+func SizeTieredCompaction(lsm Config.LSMTree, dil_s int, dil_i int) {
 	if lsm.Levels[0] == lsm.MaxSSTables {
-		merge(1, lsm)
+		merge(1, lsm, dil_s, dil_i)
 	}
 }
 
-func merge(level int, lsm Config.LSMTree) {
+func merge(level int, lsm Config.LSMTree, dil_s int, dil_i int) {
 	br := lsm.Levels[level] + 1
 	dataFile, _ := os.Create("files_SSTable/dataFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".db")
 	indexFile, _ := os.Create("files_SSTable/indexFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".db")
@@ -461,11 +557,11 @@ func merge(level int, lsm Config.LSMTree) {
 	merkleFile, _ := os.Create("files_SSTable/merkleFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".db")
 
 	lsm.DataFilesNames = append(lsm.DataFilesNames, dataFile.Name())
-	mergeFiles(level, dataFile, indexFile, summaryFile, bloomFile, merkleFile, lsm)
+	mergeFiles(level, dataFile, indexFile, summaryFile, bloomFile, merkleFile, lsm, dil_s, dil_i)
 	lsm.Levels[level-1] = 0
 	lsm.Levels[level]++
 	if lsm.Levels[level] == lsm.MaxSSTables && level != lsm.CountOfLevels { // proverava broj fajlova na sledećem nivou, i ne treba da pozove merge ako je na 3. nivou tj ako je nivo 2
-		merge(level+1, lsm)
+		merge(level+1, lsm, dil_s, dil_i)
 	}
 }
 
@@ -618,7 +714,7 @@ func removeFileName(lsm Config.LSMTree, name string) {
 	lsm.DataFilesNames = append(slice2, slice1...)
 }
 
-func mergeFiles(level int, dataFile *os.File, indexFile *os.File, summaryFile *os.File, bloomFile *os.File, merkleFile *os.File, lsm Config.LSMTree) {
+func mergeFiles(level int, dataFile *os.File, indexFile *os.File, summaryFile *os.File, bloomFile *os.File, merkleFile *os.File, lsm Config.LSMTree, dil_s int, dil_i int) {
 
 	//otvorimo sve fajlove
 	//procitamo prvi podatak (tombstone) iz svakog od njih i njih stvaimo u listu
@@ -660,7 +756,7 @@ func mergeFiles(level int, dataFile *os.File, indexFile *os.File, summaryFile *o
 	closeFiles(levelFiles)
 
 	//pravljenje novog sstablea od svih sstableova ovog nivoa koji su sada spojeni
-	MakeData(sortedAllEntries, dataFile.Name(), indexFile.Name(), summaryFile.Name(), bloomFile.Name(), merkleFile.Name())
+	MakeData(sortedAllEntries, dataFile.Name(), indexFile.Name(), summaryFile.Name(), bloomFile.Name(), merkleFile.Name(), dil_s, dil_i)
 
 	for i := 1; i <= lsm.MaxSSTables; i++ {
 		err = os.Remove("files_SSTable/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db")
@@ -691,7 +787,7 @@ func mergeFiles(level int, dataFile *os.File, indexFile *os.File, summaryFile *o
 		removeFileName(lsm, "files_SSTable/merkleTreeFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".db")
 	}
 }
-
+/*
 //---------------------------LEVEL TIERED COMPACTION--------------------------------
 // kod level tiered kompakcije svaki nivo (run) je T puta veci od prethodnog. T je uglavnom 10. Kriterijum za kompakciju ce biti broj tabela po run-u.
 // Uzima se tabela iz nivoa na kom se vrsi kompakcija i traze se odgovarajuce tabele u narednom nivou. Spajaju se i nova tabela se dodaje u nizi nivo.
@@ -1203,3 +1299,4 @@ func renameFiles(files []string, targetFile string, num int) {
 		}
 	}
 }
+*/

@@ -22,7 +22,8 @@ type Config struct {
 	LevelNumber       int    `json:"level_num"`   // maksimum sstabela po nivou
 	T                 int    `json:"t"`           //kolikoo se povecava svaki level
 	TokenBucketSize   int    `json:"token_bucket_maxsize"`
-	DegreeOfDilution  int    `json:"degree_of_dilution"` // stepen proredjenosti u summaryfile sstabla
+	DegreeOfDilutionSummary  int    `json:"degree_of_dilution_summary"` // stepen proredjenosti u summaryfile sstabla
+	DegreeOfDilutionIndex  int    `json:"degree_of_dilution_index"`
 	PageSize          int    `json:"page_size"`
 	Compression       bool   `json:"compression"`
 }
@@ -42,7 +43,7 @@ type LSMTree struct {
 // cita parametre programa iz json fajla i pravi intsancu Configa
 func ConfigInst() (Config, error) {
 	var config Config
-	configData, err := os.ReadFile("config.json")
+	configData, err := os.ReadFile("config.json") // ako ne postoji popuniti config default vrednostima i vratiti ga
 	if err != nil {
 		log.Fatal(err)
 	}

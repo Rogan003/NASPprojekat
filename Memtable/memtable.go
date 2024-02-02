@@ -71,10 +71,12 @@ type NMemtables struct {
 	l   int             // left index
 	R   int             // right index
 	lsm *Config.LSMTree // lsm tree from config
+	DegreeOfDilutionIndex	int
+	DegreeOfDilutionSummary	int
 }
 
 // konstruktor za vise memtabli, sve isto, dodan num = broj memtabli i lsm stablo iz configa
-func (nmt *NMemtables) Init(vers string, mCap int, num int, lsm *Config.LSMTree) {
+func (nmt *NMemtables) Init(vers string, mCap int, num int, lsm *Config.LSMTree, ds int, di int) {
 	var curArr []*Memtable
 
 	for i := 0; i < num; i++ {
@@ -88,6 +90,8 @@ func (nmt *NMemtables) Init(vers string, mCap int, num int, lsm *Config.LSMTree)
 	nmt.l = 0
 	nmt.R = 0
 	nmt.lsm = lsm
+	nmt.DegreeOfDilutionIndex = di
+	nmt.DegreeOfDilutionSummary = ds
 }
 
 // funkcija i za dodavanje i za izmenu elementa sa kljucem
@@ -127,7 +131,7 @@ func (nmt *NMemtables) Add(key string, value []byte) (int, int) {
 	if memtable.curCap == memtable.maxCap {
 		if (nmt.R-nmt.l == nmt.N-1) || (nmt.R < nmt.l) {
 			memtableLast := arr[nmt.l]               // izbrisala sam proveru da li je memtable empty
-			lwm = memtableLast.flush(nmt.lsm, nmt.l) // valjda nece trebati (testiracu)
+			lwm = memtableLast.flush(nmt.lsm, nmt.l, nmt.DegreeOfDilutionSummary, nmt.DegreeOfDilutionIndex) // valjda nece trebati (testiracu)
 			nmt.l = (nmt.l + 1) % nmt.N
 		}
 		nmt.R = (nmt.R + 1) % nmt.N
@@ -172,7 +176,7 @@ func (nmt *NMemtables) AddAndDelete(key string, value []byte) int {
 	if memtable.curCap == memtable.maxCap {
 		if (nmt.R-nmt.l == nmt.N-1) || (nmt.R < nmt.l) {
 			memtableLast := arr[nmt.l]               // izbrisala sam proveru da li je memtable empty
-			lwm = memtableLast.flush(nmt.lsm, nmt.l) // valjda nece trebati (testiracu)
+			lwm = memtableLast.flush(nmt.lsm, nmt.l, nmt.DegreeOfDilutionSummary, nmt.DegreeOfDilutionIndex) // valjda nece trebati (testiracu)
 			nmt.l = (nmt.l + 1) % nmt.N
 		}
 		nmt.R = (nmt.R + 1) % nmt.N
@@ -321,7 +325,7 @@ func (nmt *NMemtables) Get(key string) ([]byte, bool, bool) {
 }
 
 // funkcija koja radi flush na disk (sstable)
-func (mt *Memtable) flush(lsm *Config.LSMTree, index int) int {
+func (mt *Memtable) flush(lsm *Config.LSMTree, index int, dil_s int, dil_i int) int {
 	/*
 		for _, value := range mt.GetSortedElems() {
 			fmt.Printf("%s %d %t %s\n", value.Transaction.Key, value.Transaction.Value, value.Tombstone, value.ToByte())
@@ -329,7 +333,7 @@ func (mt *Memtable) flush(lsm *Config.LSMTree, index int) int {
 		fmt.Printf("\n")
 	*/
 
-	mt.flushToDisk(lsm)
+	mt.flushToDisk(lsm, dil_s, dil_i)
 
 	if mt.version == "skiplist" {
 		mt.skiplist = SkipList.SkipList{}
@@ -428,7 +432,7 @@ func (mt *Memtable) GetSortedElems() []*Config.Entry {
 	return mt.btree.AllElem()
 }
 
-func (m *Memtable) flushToDisk(lsm *Config.LSMTree) {
+func (m *Memtable) flushToDisk(lsm *Config.LSMTree, dil_s int, dil_i int) {
 	fmt.Println("Zapisano na disk.")
 	//citamo podatke prvog nivoa jer u njega flushujemo, osmi sstable na prvom nivou je u fajlu npr SSTable/files/dataFile_1_8
 	var DataFileName = "files_SSTable/dataFile_1"
@@ -489,5 +493,5 @@ func (m *Memtable) flushToDisk(lsm *Config.LSMTree) {
 
 	//pravimo sstable, mora da se pre prosledjivanja SORTIRA MEMTABLE
 	//MORA DA SE PROSLEDI LISTA SORTIRANIH ENTYJA A NE MEMTABLE
-	SSTable.MakeData(m.GetSortedElems(), DataFileName, IndexFileName, SummaryFileName, BloomFilterFileName, MerkleTreeFileName)
+	SSTable.MakeData(m.GetSortedElems(), DataFileName, IndexFileName, SummaryFileName, BloomFilterFileName, MerkleTreeFileName, dil_s, dil_i)
 }
