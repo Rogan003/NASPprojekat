@@ -333,7 +333,7 @@ func (mt *Memtable) flush(lsm *Config.LSMTree, index int, dil_s int, dil_i int) 
 		fmt.Printf("\n")
 	*/
 
-	mt.flushToDisk(lsm, dil_s, dil_i)
+	mt.flushToDisk(lsm, dil_s, dil_i, false)
 
 	if mt.version == "skiplist" {
 		mt.skiplist = SkipList.SkipList{}
@@ -432,7 +432,7 @@ func (mt *Memtable) GetSortedElems() []*Config.Entry {
 	return mt.btree.AllElem()
 }
 
-func (m *Memtable) flushToDisk(lsm *Config.LSMTree, dil_s int, dil_i int) {
+func (m *Memtable) flushToDisk(lsm *Config.LSMTree, dil_s int, dil_i int, oneFile bool) {
 	fmt.Println("Zapisano na disk.")
 	//citamo podatke prvog nivoa jer u njega flushujemo, osmi sstable na prvom nivou je u fajlu npr SSTable/files/dataFile_1_8
 	var DataFileName = "files_SSTable/dataFile_1"
@@ -495,4 +495,5 @@ func (m *Memtable) flushToDisk(lsm *Config.LSMTree, dil_s int, dil_i int) {
 	//MORA DA SE PROSLEDI LISTA SORTIRANIH ENTYJA A NE MEMTABLE
 	SSTable.MakeData(m.GetSortedElems(), DataFileName, IndexFileName, SummaryFileName, BloomFilterFileName, MerkleTreeFileName, dil_s, dil_i)
 	lsm.Levels[0]++
+	SSTable.SizeTieredCompaction(*lsm, dil_s, dil_i, false)
 }
