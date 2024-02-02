@@ -8,24 +8,24 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"time"
 	"strings"
+	"time"
 )
 
 type Config struct {
-	WalSize           int64  `json:"wal_size"`
-	MemtableSize      uint64 `json:"memtable_size"`
-	MemtableStructure string `json:"memtable_structure"`
-	MemtableNumber    int    `json:"memtable_number"`
-	CacheCapacity     uint64 `json:"cache_capacity"`
-	LevelCount        int    `json:"level_count"` // broj nivoa
-	LevelNumber       int    `json:"level_num"`   // maksimum sstabela po nivou
-	T                 int    `json:"t"`           //kolikoo se povecava svaki level
-	TokenBucketSize   int    `json:"token_bucket_maxsize"`
-	DegreeOfDilutionSummary  int    `json:"degree_of_dilution_summary"` // stepen proredjenosti u summaryfile sstabla
-	DegreeOfDilutionIndex  int    `json:"degree_of_dilution_index"`
-	PageSize          int    `json:"page_size"`
-	Compression       bool   `json:"compression"`
+	WalSize                 int64  `json:"wal_size"`
+	MemtableSize            uint64 `json:"memtable_size"`
+	MemtableStructure       string `json:"memtable_structure"`
+	MemtableNumber          int    `json:"memtable_number"`
+	CacheCapacity           uint64 `json:"cache_capacity"`
+	LevelCount              int    `json:"level_count"` // broj nivoa
+	LevelNumber             int    `json:"level_num"`   // maksimum sstabela po nivou
+	T                       int    `json:"t"`           //kolikoo se povecava svaki level
+	TokenBucketSize         int    `json:"token_bucket_maxsize"`
+	DegreeOfDilutionSummary int    `json:"degree_of_dilution_summary"` // stepen proredjenosti u summaryfile sstabla
+	DegreeOfDilutionIndex   int    `json:"degree_of_dilution_index"`
+	PageSize                int    `json:"page_size"`
+	Compression             bool   `json:"compression"`
 }
 
 type LSMTree struct {
@@ -36,6 +36,7 @@ type LSMTree struct {
 	IndexFilesNames       []string
 	SummaryFilesNames     []string
 	BloomFilterFilesNames []string
+	OneFilesNames         []string
 	MerkleTreeFilesNames  []string
 	T                     int
 }
@@ -70,9 +71,10 @@ func NewLMSTree(Config Config) *LSMTree {
 	summaryFile := make([]string, 0)
 	filterFile := make([]string, 0)
 	merkleFile := make([]string, 0)
+	oneFile := make([]string, 0)
 
 	files, err := ioutil.ReadDir("files_SSTable") //ucitavanje svega sto je u folderu, vraca listu fajlova ili gresku
-	if err != nil {		//ako do nje dodje za slucaj da je doslo do greske
+	if err != nil {                               //ako do nje dodje za slucaj da je doslo do greske
 		fmt.Println("Greska pri citanju direktorijuma sa SSTabelama!")
 		return nil
 	}
@@ -83,25 +85,28 @@ func NewLMSTree(Config Config) *LSMTree {
 		}
 
 		if strings.HasSuffix(file.Name(), ".db") && strings.HasPrefix(file.Name(), "bloomFilterFile") {
-			path := "files_SSTable/" + file.Name() 
+			path := "files_SSTable/" + file.Name()
 			filterFile = append(filterFile, path)
 
 		} else if strings.HasSuffix(file.Name(), ".db") && strings.HasPrefix(file.Name(), "dataFile") {
-			path := "files_SSTable/" + file.Name() 
+			path := "files_SSTable/" + file.Name()
 			dataFile = append(dataFile, path)
 
 		} else if strings.HasSuffix(file.Name(), ".db") && strings.HasPrefix(file.Name(), "indexFile") {
-			path := "files_SSTable/" + file.Name() 
+			path := "files_SSTable/" + file.Name()
 			indexFile = append(indexFile, path)
 
 		} else if strings.HasSuffix(file.Name(), ".db") && strings.HasPrefix(file.Name(), "summaryFile") {
-			path := "files_SSTable/" + file.Name() 
+			path := "files_SSTable/" + file.Name()
 			summaryFile = append(summaryFile, path)
 
 		} else if strings.HasSuffix(file.Name(), ".db") && strings.HasPrefix(file.Name(), "merkleTreeFile") {
-			path := "files_SSTable/" + file.Name() 
+			path := "files_SSTable/" + file.Name()
 			merkleFile = append(merkleFile, path)
-			
+
+		} else if strings.HasSuffix(file.Name(), ".db") && strings.HasPrefix(file.Name(), "oneFile") {
+			path := "files_SSTable/" + file.Name()
+			merkleFile = append(oneFile, path)
 		}
 	}
 
@@ -114,6 +119,7 @@ func NewLMSTree(Config Config) *LSMTree {
 		SummaryFilesNames:     summaryFile,
 		BloomFilterFilesNames: filterFile,
 		MerkleTreeFilesNames:  merkleFile,
+		OneFilesNames:         oneFile,
 		T:                     Config.T,
 	}
 }
