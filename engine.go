@@ -99,9 +99,10 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 	// smisliti efikasan nacin za odrzavanje nekih stranica u cache (da li treba uopste?)
 
 	// DODATI PRESKAKANJE ZA STRUKTURE KAD IH ZAVRSIMO
-	// Kad nisu svi elementi na stranici
-	// Kada idemo test prefix
-	// test3-test8 range scan
+	// Kad nisu svi elementi na stranici, ispise elem, ali posle opet pri vracanju unapred pravi gresku, test3-test9 range scan 	RADI
+	// Kada idemo test prefix	RADI
+	// test3-test8 range scan	RADI
+	// test3-test9 range iter	RADI
 
 	if key1 > key2 {
 		fmt.Println("Greska! Opseg nije moguc!")
@@ -309,12 +310,12 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 							}
 
 							for {
-								keyHelp := memElems[mem_indexes[i%memtable.N]].Transaction.Key
-
 								if mem_indexes[i%memtable.N] == len(memElems) {
 									mem_indexes[i%memtable.N] = -1
 									break
 								}
+
+								keyHelp := memElems[mem_indexes[i%memtable.N]].Transaction.Key
 
 								if keyHelp != lastElem && keyHelp < keys[in] && keyHelp <= key2 && !memElems[mem_indexes[i%memtable.N]].Tombstone && !(keyHelp[0:3] == "bf_" || keyHelp[0:4] == "cms_" || keyHelp[0:4] == "hll_" || keyHelp[0:3] == "sh_" || keyHelp[0:3] == "tb_") {
 									keys[in] = keyHelp
@@ -414,18 +415,21 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 
 				} else if lastIter < numLastElems {
 					for i := 0; i < pageSize; i++ {
-						if lastElemsTables[lastIter + i][0] == 'M' {
+						if lastElemsTables[lastIter + i] != "" && lastElemsTables[lastIter + i][0] == 'M' {
 							pos, _ := strconv.Atoi(lastElemsTables[lastIter + i][1:])
 							memElems := memtable.Arr[pos].GetSortedElems()
 	
 							keys[i] = memElems[lastElemsPos[lastIter + i]].Transaction.Key
 							vals[i] = memElems[lastElemsPos[lastIter + i]].Transaction.Value
-						} else {
+						} else if lastElemsTables[lastIter + i] != "" {
 							pos, _ := strconv.Atoi(lastElemsTables[lastIter + i][1:])
 							keyHelp, valHelp, _ := SSTable.ReadData(int64(lastElemsPos[lastIter + i]), sstables[pos])
 							
 							keys[i] = string(keyHelp)
 							vals[i] = valHelp
+						} else {
+							keys[i] = ""
+							vals[i] = []byte{0}
 						}
 					}
 
