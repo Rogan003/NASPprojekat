@@ -2,8 +2,8 @@ package SSTable
 
 import (
 	"NASPprojekat/BloomFilter"
-	"NASPprojekat/MerkleTree"
 	"NASPprojekat/Config"
+	"NASPprojekat/MerkleTree"
 	"hash/crc32"
 
 	//"io/ioutil"
@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+
 	//"math"
 	"os"
 	//"sort"
@@ -94,6 +95,77 @@ func make_merkle(elems []*Config.Entry, filePath string) {
 	mt.Serialize(filePath)
 }
 
+func GetFromOneFile(key string, FileName string) []byte {
+
+	//iz summary citamo opseg kljuceva u sstable (prvi i poslendji)
+	file, _ := os.OpenFile(FileName, os.O_RDWR, 0777)
+	summaryOffsetBytes := make([]byte, KEY_SIZE_SIZE)
+	indexOffsetBytes := make([]byte, KEY_SIZE_SIZE)
+
+	_, _ = file.Read(summaryOffsetBytes)
+	_, _ = file.Read(indexOffsetBytes)
+
+	summaryOffset := binary.LittleEndian.Uint64(summaryOffsetBytes)
+	indexOffset := binary.LittleEndian.Uint64(indexOffsetBytes)
+
+	//skace na summary deo
+	file.Seek(int64(summaryOffset), 0)
+	summary := LoadSummary(file)
+	// ako je trazeni kljuc u tom opsegu, podatak bi trebalo da se nalazi u ovom sstable
+	if summary.FirstKey <= key && key <= summary.LastKey {
+
+		var indexPosition = uint64(0)
+		for {
+			//citamo velicinu kljuca
+			keySizeBytes := make([]byte, KEY_SIZE_SIZE)
+			_, err := file.Read(keySizeBytes)
+			keySize := int64(binary.LittleEndian.Uint64(keySizeBytes))
+
+			//citamo keySize bajtiva da bi dobili kljuc
+			keyValue := make([]byte, keySize)
+			_, err = file.Read(keyValue)
+			if err != nil {
+				panic(err)
+			}
+
+			if string(keyValue) > key {
+				//OVO RESITI
+				dataPosition := findInIndexInOneFile(indexPosition, summaryOffset, key, file)
+				notFound := -1
+				if dataPosition == uint64(notFound) {
+					fmt.Println("sstable: Nije pronadjen key")
+					break
+				}
+				_, data, _ := ReadDataOneFile(int64(dataPosition), int64(indexOffset), FileName, key)
+				return data
+			} else {
+				// citanje pozicije za taj kljuc u indexFile
+				positionBytes := make([]byte, KEY_SIZE_SIZE)
+				_, err = file.Read(positionBytes)
+				position := binary.LittleEndian.Uint64(positionBytes)
+				indexPosition = position
+				if err != nil {
+					if err == io.EOF {
+						dataPosition := findInIndexInOneFile(indexPosition, summaryOffset, key, file)
+						notFound := -1
+						if dataPosition == uint64(notFound) {
+							fmt.Println("sstable: Nije pronadjen key u indexFile")
+							file.Close()
+							break
+						}
+						_, data, _ := ReadDataOneFile(int64(dataPosition), int64(indexOffset), FileName, key)
+						return data
+					}
+					fmt.Println(err)
+					file.Close()
+					return []byte{}
+				}
+				continue
+			}
+		}
+	}
+	return []byte{}
+}
 
 // preko kljuca trazimo u summaryFile poziciju za nas klju u indexFile iz kog kasnije dobijamo poziicju naseg kljuca i vrednosti u dataFile
 func Get(key string, SummaryFileName string, IndexFileName string, DataFileName string) []byte {
@@ -119,7 +191,7 @@ func Get(key string, SummaryFileName string, IndexFileName string, DataFileName 
 			if err != nil {
 				panic(err)
 			}
-			
+
 			if string(keyValue) > key {
 				dataPosition := findInIndex(indexPosition, key, IndexFileName)
 				notFound := -1
@@ -158,6 +230,35 @@ func Get(key string, SummaryFileName string, IndexFileName string, DataFileName 
 	return []byte{}
 }
 
+func findInIndexInOneFile(startPosition uint64, endPosition uint64, key string, file *os.File) uint64 {
+
+	// od date pozicije citamo
+	_, err := file.Seek(int64(startPosition), 0)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var lastPos int64 = -1
+	for {
+		currentKey, position := ReadFromIndex(file)
+		if position == int64(endPosition) {
+			return uint64(lastPos)
+		}
+		if currentKey == key {
+			return uint64(position)
+		}
+
+		if currentKey > key { // valjda nece nikada biti da je lastPos prazan?
+			if lastPos == -1 {
+				notFound := -1
+				return uint64(notFound)
+			}
+			return uint64(lastPos)
+		}
+
+		lastPos = position
+	}
+}
+
 // vraca offset za dataFile, nakon sto nadje u indexFile
 func findInIndex(startPosition uint64, key string, IndexFileName string) uint64 {
 
@@ -184,7 +285,7 @@ func findInIndex(startPosition uint64, key string, IndexFileName string) uint64 
 		if currentKey > key { // valjda nece nikada biti da je lastPos prazan?
 			if lastPos == -1 {
 				notFound := -1
-				return uint64(notFound) 
+				return uint64(notFound)
 			}
 			return uint64(lastPos)
 		}
@@ -345,6 +446,95 @@ func ReadAnyData(position int64, DataFileName string) ([]byte, []byte, bool) {
 	return key, val, false
 }
 
+func ReadDataOneFile(position int64, endPosition int64, DataFileName string, realKey string) ([]byte, []byte, bool) {
+	file, err := os.OpenFile(DataFileName, os.O_RDWR, 0777)
+	if err != nil {
+		log.Fatal(err)
+		return []byte{}, []byte{}, false
+	}
+	defer file.Close()
+	// pomeramo se na poziciju u dataFile gde je nas podatak
+	_, err = file.Seek(position, 0)
+	if err != nil {
+		log.Fatal(err)
+		return []byte{}, []byte{}, false
+	}
+
+	for {
+
+		currentOffset, err := file.Seek(0, io.SeekCurrent)
+		if err != nil {
+			fmt.Println("Error getting file offset:", err)
+		}
+		if endPosition == currentOffset {
+			return []byte{}, []byte{}, true // mozda neka prijava gresaka npr za kraj fajla?
+		}
+		// cita bajtove podatka DO key i value u info
+		// CRC (4B)   | Timestamp (8B) | Tombstone(1B) | Key Size (8B) | Value Size (8B)
+		info := make([]byte, KEY_SIZE_START)
+		_, err = file.Read(info)
+		if err != nil {
+			if err == io.EOF {
+				return []byte{}, []byte{}, true // mozda neka prijava gresaka npr za kraj fajla?
+			}
+
+			return []byte{}, []byte{}, false
+		}
+
+		tombstone := info[TOMBSTONE_START] // jel ovo sad prepoznaje obrisane
+
+		//ako je tombstone 1 ne citaj dalje
+		if tombstone == 1 {
+			info3 := make([]byte, KEY_SIZE_SIZE)
+			_, err = file.Read(info3)
+			if err != nil {
+				return []byte{}, []byte{}, false // mozda neka prijava gresaka npr za kraj fajla?
+			}
+
+			key_size := binary.LittleEndian.Uint64(info3)
+
+			// cita bajtove podatka, odnosno key data
+			data := make([]byte, key_size)
+			_, err = file.Read(data)
+			if err != nil {
+				return []byte{}, []byte{}, false // mozda neka prijava gresaka npr za kraj fajla?
+			}
+			key := data[:key_size]
+
+			if string(key) <= realKey {
+				return []byte{}, []byte{}, false
+			}
+
+			continue
+		}
+		//ako je tombstone 0 onda citaj sve
+		info2 := make([]byte, KEY_START-KEY_SIZE_START)
+		_, err = file.Read(info2)
+		if err != nil {
+			return []byte{}, []byte{}, false // mozda neka prijava gresaka npr za kraj fajla?
+		}
+
+		key_size := binary.LittleEndian.Uint64(info2[:KEY_SIZE_SIZE])
+		value_size := binary.LittleEndian.Uint64(info2[KEY_SIZE_SIZE:])
+
+		// cita bajtove podatka, odnosno key i value u data
+		//| Key | Value |
+		data := make([]byte, key_size+value_size)
+		_, err = file.Read(data)
+		if err != nil {
+			return []byte{}, []byte{}, false // mozda neka prijava gresaka npr za kraj fajla?
+		}
+		key := data[:key_size]
+		val := data[key_size : key_size+value_size]
+
+		if string(key) == realKey {
+			return key, val, false
+		} else if realKey < string(key) {
+			return []byte{}, []byte{}, false
+		}
+	}
+}
+
 func ReadData(position int64, DataFileName string, realKey string) ([]byte, []byte, bool) {
 	file, err := os.OpenFile(DataFileName, os.O_RDWR, 0777)
 	if err != nil {
@@ -358,7 +548,7 @@ func ReadData(position int64, DataFileName string, realKey string) ([]byte, []by
 		log.Fatal(err)
 		return []byte{}, []byte{}, false
 	}
-	
+
 	for {
 		// cita bajtove podatka DO key i value u info
 		// CRC (4B)   | Timestamp (8B) | Tombstone(1B) | Key Size (8B) | Value Size (8B)
@@ -417,7 +607,7 @@ func ReadData(position int64, DataFileName string, realKey string) ([]byte, []by
 		}
 		key := data[:key_size]
 		val := data[key_size : key_size+value_size]
-		
+
 		if string(key) == realKey {
 			return key, val, false
 		} else if realKey < string(key) {
@@ -477,6 +667,108 @@ func NodeToBytes(node Config.Entry) []byte { //pretvara node u bajtove
 	return data
 }
 
+func MakeDataOneFile(nodes []*Config.Entry, FileName string) error {
+	file, err := os.OpenFile(FileName, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0777)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+	//zauzimanje prostoa za offsete koji ce pokazivati na pocetak summary,index i data dela
+	summaryOffsetSize := make([]byte, KEY_SIZE_SIZE)
+	indexOffsetSize := make([]byte, KEY_SIZE_SIZE)
+	dataOffsetSize := make([]byte, KEY_SIZE_SIZE)
+	file.Write(summaryOffsetSize)
+	file.Write(indexOffsetSize)
+	file.Write(dataOffsetSize)
+
+	//bloomfilter
+	bfsize := make([]byte, KEY_SIZE_SIZE)
+	bf := BloomFilter.BloomFilter{}
+	bf.Init(len(nodes), 0.01)
+
+	for _, val := range nodes {
+		bf.Add([]byte(val.Transaction.Key))
+	}
+	//serijalizacija
+	bfbytes, err := bf.ToBytes()
+	if err != nil {
+		return err
+	}
+	//upis za bf
+	binary.LittleEndian.PutUint64(bfsize, uint64(len(bfbytes)))
+	file.Write(bfsize)
+	file.Write(bfbytes)
+	//merkle
+	var data [][]byte
+
+	for _, entry := range nodes {
+		bytesData := NodeToBytes(*entry)
+		data = append(data, bytesData)
+	}
+
+	mt := MerkleTree.MerkleTree{}
+	mt.Init(data)
+	//FALI SERIJALIZACIJA ZA MERKLE
+	merkleSize := make([]byte, KEY_SIZE_SIZE)
+	binary.LittleEndian.PutUint64(merkleSize, uint64(len(merkleBytes)))
+	file.Write(merkleSize)
+	file.Write(merkleBytes)
+
+	//DATA
+	dataOffset, err := FileLength(file)
+
+	var offsetList []int64
+	//upisivanje data dela
+	for _, node := range nodes {
+		position, _ := FileLength(file)
+		offsetList = append(offsetList, position)
+		// cvor se upisuje u Data deo fajla
+		_, err = file.Write(NodeToBytes(*node))
+		if err != nil {
+			return err
+		}
+	}
+
+	//PRAVLJENJE INDEX DELA
+	var offsetIndexList []int64
+	indexOffset, err := FileLength(file)
+	for i, el := range offsetList {
+
+		indexOff := AddToIndex(el, nodes[i].Transaction.Key, file)
+		offsetIndexList = append(offsetList, indexOff)
+
+	}
+	//PRAVLJENJE SUMMARY DELA
+	summaryOffset, err := FileLength(file)
+
+	// uzima najmanji i najveci kljuc iz nodes iz memtable
+	first := make([]byte, KEY_SIZE_SIZE)
+	last := make([]byte, KEY_SIZE_SIZE)
+	binary.LittleEndian.PutUint64(first, uint64(len([]byte(nodes[0].Transaction.Key))))
+	binary.LittleEndian.PutUint64(last, uint64(len([]byte(nodes[len(nodes)-1].Transaction.Key))))
+	// upisuje najmanji i najveci kljuc na pocetak summary dela
+	file.Write(first)
+	file.Write(last)
+	file.Write([]byte(nodes[0].Transaction.Key))
+	file.Write([]byte(nodes[len(nodes)-1].Transaction.Key))
+	for i, el := range offsetIndexList {
+		if i%5 == 0 {
+			AddToSummary(el, nodes[i].Transaction.Key, file)
+		}
+	}
+
+	//UPISIVANJE OFFSETA DATA,SUMMARY I INDEX DELA FAJLA
+	file.Seek(0, 0)
+	binary.LittleEndian.PutUint64(dataOffsetSize, uint64(dataOffset))
+	binary.LittleEndian.PutUint64(indexOffsetSize, uint64(indexOffset))
+	binary.LittleEndian.PutUint64(summaryOffsetSize, uint64(summaryOffset))
+	file.Write(summaryOffsetSize)
+	file.Write(indexOffsetSize)
+	file.Write(dataOffsetSize)
+	return nil
+
+}
+
 func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, SummaryFileName string, BloomFileName string, MerkleFileName string, dil_sum int, dil_ind int) {
 	indexFile, err := os.OpenFile(IndexFileName, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0777)
 	if err != nil {
@@ -523,16 +815,16 @@ func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, 
 			return
 		}
 		// upisivanje u index fajl
-		if n % dil_ind == 0 {
+		if n%dil_ind == 0 {
 			positionSum := AddToIndex(position, node.Transaction.Key, indexFile)
 			n2++
 
 			// upisuje svaki peti u summary file
-			if n2 % dil_sum == 0 {
+			if n2%dil_sum == 0 {
 				AddToSummary(positionSum, node.Transaction.Key, summaryFile)
 			}
 		}
-	
+
 		n += 1
 	}
 	err = file.Sync()
@@ -787,6 +1079,7 @@ func mergeFiles(level int, dataFile *os.File, indexFile *os.File, summaryFile *o
 		removeFileName(lsm, "files_SSTable/merkleTreeFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".db")
 	}
 }
+
 /*
 //---------------------------LEVEL TIERED COMPACTION--------------------------------
 // kod level tiered kompakcije svaki nivo (run) je T puta veci od prethodnog. T je uglavnom 10. Kriterijum za kompakciju ce biti broj tabela po run-u.
