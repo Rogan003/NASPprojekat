@@ -7,6 +7,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"reflect"
+	"bytes"
 )
 
  
@@ -280,6 +281,37 @@ func (n *Node) String() string {
 func Hash(data []byte) [20]byte {
 	return sha1.Sum(data)
 }
+
+
+
+func (mt *MerkleTree) ToBytes() ([]byte, error) {
+	var network bytes.Buffer
+    enc := gob.NewEncoder(&network)
+
+    err := enc.Encode(*mt)
+    if err != nil {
+        return nil, err
+    }
+
+    return network.Bytes(), nil
+}
+
+func (mt *MerkleTree) FromBytes(bytess []byte) error {
+	network := bytes.NewBuffer(bytess)
+    dec := gob.NewDecoder(network)
+
+    err := dec.Decode(&mt)
+
+    if err != nil {
+        return err
+    }
+
+    return nil
+}
+
+
+
+
 
 
 /*
