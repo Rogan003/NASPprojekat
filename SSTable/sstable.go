@@ -127,7 +127,7 @@ func Get(key string, SummaryFileName string, IndexFileName string, DataFileName 
 					fmt.Println("sstable: Nije pronadjen key u indexFile")
 					break
 				}
-				_, data := ReadData(int64(dataPosition), DataFileName)
+				_, data, _ := ReadData(int64(dataPosition), DataFileName)
 				return data
 			} else {
 				// citanje pozicije za taj kljuc u indexFile
@@ -144,7 +144,7 @@ func Get(key string, SummaryFileName string, IndexFileName string, DataFileName 
 							sumarryFile.Close()
 							break
 						}
-						_, data := ReadData(int64(dataPosition), DataFileName)
+						_, data, _ := ReadData(int64(dataPosition), DataFileName)
 						return data
 					}
 					fmt.Println(err)
@@ -174,7 +174,7 @@ func findInIndex(startPosition uint64, key string, IndexFileName string) uint64 
 
 	for {
 		currentKey, position := ReadFromIndex(file)
-		if currentKey > key {
+		if position == -1 || currentKey > key {
 			notFound := -1
 			return uint64(notFound)
 		}
@@ -197,6 +197,9 @@ func ReadFromIndex(file *os.File) (string, int64) {
 	keyLenBytes := make([]byte, KEY_SIZE_SIZE)
 	_, err := file.Read(keyLenBytes)
 	if err != nil {
+		if err == io.EOF {
+			return "", -1
+		}
 		panic(err)
 	}
 	keySize := int64(binary.LittleEndian.Uint64(keyLenBytes))
@@ -284,38 +287,38 @@ func LoadSummary(summary *os.File) *SStableSummary {
 	}
 }
 
-func ReadData(position int64, DataFileName string) ([]byte, []byte) {
+func ReadData(position int64, DataFileName string) ([]byte, []byte, bool) {
 	file, err := os.OpenFile(DataFileName, os.O_RDWR, 0777)
 	if err != nil {
 		log.Fatal(err)
-		return []byte{}, []byte{}
+		return []byte{}, []byte{}, false
 	}
 	defer file.Close()
 	// pomeramo se na poziciju u dataFile gde je nas podatak
 	_, err = file.Seek(position, 0)
 	if err != nil {
 		log.Fatal(err)
-		return []byte{}, []byte{}
+		return []byte{}, []byte{}, false
 	}
 	// cita bajtove podatka DO key i value u info
 	// CRC (4B)   | Timestamp (8B) | Tombstone(1B) | Key Size (8B) | Value Size (8B)
 	info := make([]byte, KEY_SIZE_START)
 	_, err = file.Read(info)
 	if err != nil {
-		return []byte{}, []byte{} // mozda neka prijava gresaka npr za kraj fajla?
+		return []byte{}, []byte{}, true // mozda neka prijava gresaka npr za kraj fajla?
 	}
 
 	tombstone := info[TOMBSTONE_START] // jel ovo sad prepoznaje obrisane
 
 	//ako je tombstone 1 ne citaj dalje
 	if tombstone == 1 {
-		return []byte{}, []byte{}
+		return []byte{}, []byte{}, false
 	}
 	//ako je tombstone 0 onda citaj sve
 	info2 := make([]byte, KEY_START-KEY_SIZE_START)
 	_, err = file.Read(info2)
 	if err != nil {
-		return []byte{}, []byte{} // mozda neka prijava gresaka npr za kraj fajla?
+		return []byte{}, []byte{}, false // mozda neka prijava gresaka npr za kraj fajla?
 	}
 
 	key_size := binary.LittleEndian.Uint64(info2[:KEY_SIZE_SIZE])
@@ -326,11 +329,11 @@ func ReadData(position int64, DataFileName string) ([]byte, []byte) {
 	data := make([]byte, key_size+value_size)
 	_, err = file.Read(data)
 	if err != nil {
-		return []byte{}, []byte{} // mozda neka prijava gresaka npr za kraj fajla?
+		return []byte{}, []byte{}, false // mozda neka prijava gresaka npr za kraj fajla?
 	}
 	key := data[:key_size]
 	val := data[key_size : key_size+value_size]
-	return key, val
+	return key, val, false
 }
 
 func CRC32(data []byte) uint32 {

@@ -99,6 +99,9 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 	// smisliti efikasan nacin za odrzavanje nekih stranica u cache (da li treba uopste?)
 
 	// DODATI PRESKAKANJE ZA STRUKTURE KAD IH ZAVRSIMO
+	// Kad nisu svi elementi na stranici
+	// Kada idemo test prefix
+	// test3-test8 range scan
 
 	if key1 > key2 {
 		fmt.Println("Greska! Opseg nije moguc!")
@@ -110,12 +113,14 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 			memElems := value.GetSortedElems()
 			mem_indexes[index] = -1
 
-			for index, value := range memElems {
+			for index2, value := range memElems {
 				if value.Transaction.Key >= key1 && value.Transaction.Key <= key2 {
-					mem_indexes[index] = index
+					mem_indexes[index] = index2
 					break
 				}
 			}
+
+			// fmt.Println(mem_indexes[index])
 		}
 
 		sstables := lsm.DataFilesNames
@@ -151,7 +156,31 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 					_, err = sumarryFile.Read(keyValue)
 					if err != nil {
 						if err == io.EOF {
-							indexes[index] = -1 // jel ovo treba ovde?
+							file, err := os.OpenFile(indexFileName, os.O_RDWR, 0777)
+							if err != nil {
+								log.Fatal(err)
+							}
+							defer file.Close()
+							// od date pozicije citamo
+							_, err = file.Seek(int64(indexPosition), 0)
+							if err != nil {
+								log.Fatal(err)
+							}
+
+							for {
+								currentKey, position := SSTable.ReadFromIndex(file)
+								if position == -1 {
+									break
+								}
+								if currentKey > key2 {
+									break
+								}
+								if currentKey >= key1 && currentKey <= key2 {
+									indexes[index] = int(position)
+									break
+								}
+							}
+
 							break
 						}
 						panic(err)
@@ -171,6 +200,9 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 
 						for {
 							currentKey, position := SSTable.ReadFromIndex(file)
+							if currentKey > key2 {
+								break
+							}
 							if currentKey >= key1 && currentKey <= key2 {
 								indexes[index] = int(position)
 								break
@@ -199,22 +231,30 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 
 								for {
 									currentKey, position := SSTable.ReadFromIndex(file)
+									if position == -1 {
+										break
+									}
+
+									if currentKey > key2 {
+										break
+									}
+
 									if currentKey >= key1 && currentKey <= key2 {
 										indexes[index] = int(position)
 										break
 									}
 								}
 
-								sumarryFile.Close()
 								break
 							}
 							fmt.Println(err)
-							sumarryFile.Close()
 							break
 						}
 					}
 				}
 			}
+
+			// fmt.Println(indexes[index])
 		}
 
 		forward := true
@@ -229,11 +269,23 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 			vals := make([][]byte, pageSize)
 			
 			if forward {
-				if lastIter == len(lastElemsTables) {
+				numLastElems := 0
+
+				for _, val := range lastElemsTables {
+					if val != "" {
+						numLastElems++
+					}
+				}
+
+				if lastIter == len(lastElemsTables) && (lastElem != "{" || lastIter == 0) {
 					lastElemsTables = append(lastElemsTables, make([]string, pageSize)...)
 					lastElemsPos = append(lastElemsPos, make([]int, pageSize)...)
 
 					for in := 0; in < pageSize; in++ {
+						if lastIter != 0 && lastElem == "{" {
+							break
+						}
+
 						// ovde se magija desava, sve okej validne elem dodati u elems
 						// prolaziti i kroz memtable u pravilnom redosledu od najnovije do najstarije
 						// prolazak kroz sve elemente na pozicijama, vidimo najmanji i dodajmeo i inkrementiramo (pomeramo napred), ako je previse napred -1
@@ -259,18 +311,24 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 							for {
 								keyHelp := memElems[mem_indexes[i%memtable.N]].Transaction.Key
 
+								if mem_indexes[i%memtable.N] == len(memElems) {
+									mem_indexes[i%memtable.N] = -1
+									break
+								}
+
 								if keyHelp != lastElem && keyHelp < keys[in] && keyHelp <= key2 && !memElems[mem_indexes[i%memtable.N]].Tombstone && !(keyHelp[0:3] == "bf_" || keyHelp[0:4] == "cms_" || keyHelp[0:4] == "hll_" || keyHelp[0:3] == "sh_" || keyHelp[0:3] == "tb_") {
 									keys[in] = keyHelp
 									vals[in] = memElems[mem_indexes[i % memtable.N]].Transaction.Value
-									lastElem = keyHelp
 									lastElemsTables[lastIter + in] =("M" + strconv.Itoa(i % memtable.N))
 									lastElemsPos[lastIter + in] = mem_indexes[i % memtable.N]
 									break
 								} else if keyHelp > key2 {
 									mem_indexes[i%memtable.N] = -1
 									break
-								} else if keyHelp < keys[in] {
+								} else if keyHelp <= keys[in] {
 									mem_indexes[i%memtable.N]++
+								} else if keyHelp > keys[in] {
+									break
 								}
 							}
 						}
@@ -281,19 +339,23 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 							}
 
 							for {
-								keyHelp, valHelp := SSTable.ReadData(int64(indexes[index]), value) // u get se poziva nad ovim value?
-								// sta ako dodjemo do kraja fajla?
+								keyHelp, valHelp, end := SSTable.ReadData(int64(indexes[index]), value)
+
+								if end {
+									indexes[index] = -1
+									break
+								}
+
 								if string(keyHelp) != lastElem && string(keyHelp) < keys[in] && string(keyHelp) <= key2 && !bytes.Equal(keyHelp, []byte{}) && !(string(keyHelp)[0:3] == "bf_" || string(keyHelp)[0:4] == "cms_" || string(keyHelp)[0:4] == "hll_" || string(keyHelp)[0:3] == "sh_" || string(keyHelp)[0:3] == "tb_") {
 									keys[in] = string(keyHelp)
 									vals[in] = valHelp
-									lastElem = string(keyHelp)
 									lastElemsTables[lastIter + in] = ("S" + strconv.Itoa(index))
 									lastElemsPos[lastIter + in] = indexes[index]
 									break
 								} else if string(keyHelp) > key2 {
 									indexes[index] = -1
 									break
-								} else if string(keyHelp) < keys[in] {
+								} else if string(keyHelp) <= keys[in] {
 									file, err := os.OpenFile(value, os.O_RDWR, 0777)
 									if err != nil {
 										log.Fatal(err)
@@ -317,27 +379,40 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 										panic(err)
 									}
 
-									info2 := make([]byte, SSTable.KEY_START-SSTable.KEY_SIZE_START)
-									_, err = file.Read(info2)
-									if err != nil {
-										if err == io.EOF {
-											indexes[index] = -1
-											break
+									tombstone := info[SSTable.TOMBSTONE_START] // jel ovo sad prepoznaje obrisane
+
+									//ako je tombstone 1 ne citaj dalje
+									if tombstone == 1 {
+										indexes[index] += int(SSTable.KEY_START)
+									} else {
+										info2 := make([]byte, SSTable.KEY_START-SSTable.KEY_SIZE_START)
+										_, err = file.Read(info2)
+										if err != nil {
+											if err == io.EOF {
+												indexes[index] = -1
+												break
+											}
+
+											panic(err)
 										}
 
-										panic(err)
+										key_size := binary.LittleEndian.Uint64(info2[:SSTable.KEY_SIZE_SIZE])
+										value_size := binary.LittleEndian.Uint64(info2[SSTable.KEY_SIZE_SIZE:])
+
+										indexes[index] += int(SSTable.KEY_START) + int(key_size) + int(value_size)
 									}
-
-									key_size := binary.LittleEndian.Uint64(info2[:SSTable.KEY_SIZE_SIZE])
-									value_size := binary.LittleEndian.Uint64(info2[SSTable.KEY_SIZE_SIZE:])
-
-									indexes[index] += int(SSTable.KEY_START) + int(key_size) + int(value_size)
+								} else if string(keyHelp) > keys[in] {
+									break
 								}
 							}
 						}
+
+						lastElem = keys[in]
 					}
 
-				} else {
+					lastIter += pageSize
+
+				} else if lastIter < numLastElems {
 					for i := 0; i < pageSize; i++ {
 						if lastElemsTables[lastIter + i][0] == 'M' {
 							pos, _ := strconv.Atoi(lastElemsTables[lastIter + i][1:])
@@ -347,15 +422,17 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 							vals[i] = memElems[lastElemsPos[lastIter + i]].Transaction.Value
 						} else {
 							pos, _ := strconv.Atoi(lastElemsTables[lastIter + i][1:])
-							keyHelp, valHelp := SSTable.ReadData(int64(lastElemsPos[lastIter + i]), sstables[pos])
+							keyHelp, valHelp, _ := SSTable.ReadData(int64(lastElemsPos[lastIter + i]), sstables[pos])
 							
 							keys[i] = string(keyHelp)
 							vals[i] = valHelp
 						}
 					}
-				}
 
-				lastIter += pageSize
+					lastIter += pageSize
+				} else {
+					fmt.Println("Nema podataka unapred!")
+				}
 
 			} else if lastIter > pageSize {
 				lastIter -= pageSize
@@ -369,7 +446,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 						vals[i] = memElems[lastElemsPos[lastIter - pageSize + i]].Transaction.Value
 					} else {
 						pos, _ := strconv.Atoi(lastElemsTables[lastIter - pageSize + i][1:])
-						keyHelp, valHelp := SSTable.ReadData(int64(lastElemsPos[lastIter - pageSize + i]), sstables[pos])
+						keyHelp, valHelp, _ := SSTable.ReadData(int64(lastElemsPos[lastIter - pageSize + i]), sstables[pos])
 						
 						keys[i] = string(keyHelp)
 						vals[i] = valHelp
@@ -381,6 +458,13 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 			}
 
 			for index, value := range keys {
+				if value == "{" {
+					if index == 0 {
+						fmt.Println("Nema podataka!")
+					}
+					break
+				}
+
 				if value != "" {
 					fmt.Printf("%d. %s: %s\n", index+1, value, vals[index])
 				}
@@ -411,7 +495,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 }
 
 func PrefixScan(memtable *Memtable.NMemtables, prefix string, pageSize int, lsm *Config.LSMTree) {
-	RangeScan(memtable, prefix, prefix[:len(prefix) - 1] + string(prefix[len(prefix) - 1] + 1), pageSize, lsm)
+	RangeScan(memtable, prefix, prefix + string(255), pageSize, lsm)
 }
 
 func RangeIter(memtable *Memtable.NMemtables, key1 string, key2 string, lsm *Config.LSMTree) {
