@@ -667,7 +667,7 @@ func NodeToBytes(node Config.Entry) []byte { //pretvara node u bajtove
 	return data
 }
 
-func MakeDataOneFile(nodes []*Config.Entry, FileName string) error {
+func MakeDataOneFile(nodes []*Config.Entry, FileName string, dil_s int, dil_i int) error {
 	file, err := os.OpenFile(FileName, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0777)
 	if err != nil {
 		panic(err)
@@ -710,9 +710,9 @@ func MakeDataOneFile(nodes []*Config.Entry, FileName string) error {
 	mt.Init(data)
 	//FALI SERIJALIZACIJA ZA MERKLE
 	merkleSize := make([]byte, KEY_SIZE_SIZE)
-	binary.LittleEndian.PutUint64(merkleSize, uint64(len(merkleBytes)))
+	//binary.LittleEndian.PutUint64(merkleSize, uint64(len(merkleBytes)))
 	file.Write(merkleSize)
-	file.Write(merkleBytes)
+	//file.Write(merkleBytes)
 
 	//DATA
 	dataOffset, err := FileLength(file)
@@ -733,10 +733,10 @@ func MakeDataOneFile(nodes []*Config.Entry, FileName string) error {
 	var offsetIndexList []int64
 	indexOffset, err := FileLength(file)
 	for i, el := range offsetList {
-
-		indexOff := AddToIndex(el, nodes[i].Transaction.Key, file)
-		offsetIndexList = append(offsetList, indexOff)
-
+		if i%dil_i == 0 {
+			indexOff := AddToIndex(el, nodes[i].Transaction.Key, file)
+			offsetIndexList = append(offsetList, indexOff)
+		}
 	}
 	//PRAVLJENJE SUMMARY DELA
 	summaryOffset, err := FileLength(file)
@@ -752,7 +752,7 @@ func MakeDataOneFile(nodes []*Config.Entry, FileName string) error {
 	file.Write([]byte(nodes[0].Transaction.Key))
 	file.Write([]byte(nodes[len(nodes)-1].Transaction.Key))
 	for i, el := range offsetIndexList {
-		if i%5 == 0 {
+		if i%dil_s == 0 {
 			AddToSummary(el, nodes[i].Transaction.Key, file)
 		}
 	}
@@ -834,10 +834,150 @@ func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, 
 }
 
 // sizeTierdCompaction
-func SizeTieredCompaction(lsm Config.LSMTree, dil_s int, dil_i int) {
+func SizeTieredCompaction(lsm Config.LSMTree, dil_s int, dil_i int, oneFile bool) {
 	if lsm.Levels[0] == lsm.MaxSSTables {
-		merge(1, lsm, dil_s, dil_i)
+		if oneFile {
+			mergeOneFile(1, lsm, dil_s, dil_i)
+		} else {
+			merge(1, lsm, dil_s, dil_i)
+		}
 	}
+}
+
+func mergeOneFile(level int, lsm Config.LSMTree, dil_s int, dil_i int) {
+	br := lsm.Levels[level] + 1
+	sstableFile, _ := os.Create("files_SSTable/oneFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".db")
+
+	lsm.OneFilesNames = append(lsm.DataFilesNames, sstableFile.Name())
+	mergeOneFiles(level, sstableFile, lsm, dil_s, dil_i)
+	lsm.Levels[level-1] = 0
+	lsm.Levels[level]++
+	if lsm.Levels[level] == lsm.MaxSSTables && level != lsm.CountOfLevels { // proverava broj fajlova na sledećem nivou, i ne treba da pozove merge ako je na 3. nivou tj ako je nivo 2
+		mergeOneFile(level+1, lsm, dil_s, dil_i)
+	}
+}
+
+func mergeOneFiles(level int, sstableFile *os.File, lsm Config.LSMTree, dil_s int, dil_i int) {
+
+	//otvorimo sve fajlove
+	//procitamo prvi podatak (tombstone) iz svakog od njih i njih stvaimo u listu
+	//ako je dosao do rkaja fajla vraca nil
+	//trazimo min kljuc i njega dodajemo u novu skiplistu
+	//ako imamo iste kljuceve onda nadji najnoviji i njega dodaj u skiplist a ostale prekosci
+
+	//uzimamo imena svih data fajlova ovog nivoa
+	levelSubstring := "files_SSTable/oneFile" + strconv.Itoa(level) + "_"
+	levelFileNames := levelFileNames(lsm.OneFilesNames, levelSubstring)
+	//otvaranje data fajlova na ovom nivou
+	levelFiles, err := openFiles(levelFileNames)
+	if err != nil {
+		//ako ima greske pri otvaranju nekog fajla
+		panic(err)
+	}
+
+	var entries []*Config.Entry
+	var sortedAllEntries []*Config.Entry
+	//niz koji pamti krajeve data segmenata svih fajlova
+	var eofList []int
+	//prolazimo kroz dajlove i pozicioniramo se na pocetak data segmenta
+	for _, file := range levelFiles {
+		dataOffsetBytes := make([]byte, KEY_SIZE_SIZE)
+		indexOffsetBytes := make([]byte, KEY_SIZE_SIZE)
+		sstableFile.Seek(Config.KEY_SIZE_SIZE, 0)
+
+		_, _ = sstableFile.Read(indexOffsetBytes)
+		_, _ = sstableFile.Read(dataOffsetBytes)
+
+		dataOffset := binary.LittleEndian.Uint64(dataOffsetBytes)
+		indexOffset := binary.LittleEndian.Uint64(indexOffsetBytes)
+		eofList = append(eofList, int(indexOffset))
+		file.Seek(int64(dataOffset), 0)
+	}
+
+	//u entries cuvamo trenutne entie na kojim smo iz svakog sstablea sa ovog nivoa
+	for i, file := range levelFiles {
+		entry := readMergeOneFile(file, eofList[i])
+		entries = append(entries, entry)
+	}
+	for {
+		//procitali smo sve fajlove do kraja
+		if areAllNil(entries) {
+			break
+		}
+		minKeyArray, minEntry := findMinKeyEntry(entries)
+		sortedAllEntries = append(sortedAllEntries, minEntry)
+		//citamo naredne entye za fajlove koji su bili na min entry
+		for _, index := range minKeyArray {
+			newEntry := readMerge(levelFiles[index])
+			entries[index] = newEntry
+		}
+
+	}
+	closeFiles(levelFiles)
+
+	//pravljenje novog sstablea od svih sstableova ovog nivoa koji su sada spojeni
+	MakeDataOneFile(sortedAllEntries, sstableFile.Name(), dil_s, dil_i)
+
+	for i := 1; i <= lsm.MaxSSTables; i++ {
+		err = os.Remove("files_SSTable/oneFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		lsm.OneFilesNames = removeFileName(lsm.OneFilesNames, "files_SSTable/oneFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".db")
+	}
+}
+
+// cita iz fajla za merge, vraca procutani entry ili nil ako smo dosli do kraja fajla
+func readMergeOneFile(file *os.File, endposition int) *Config.Entry {
+
+	// cita bajtove podatka DO key i value u info
+	// CRC (4B)   | Timestamp (8B) | Tombstone(1B) | Key Size (8B) | Value Size (8B)
+
+	currentOffset, err := file.Seek(0, io.SeekCurrent)
+	if err != nil {
+		fmt.Println("Error getting file offset:", err)
+		return nil
+	}
+
+	if currentOffset == int64(endposition) {
+		return nil
+	}
+
+	info := make([]byte, KEY_SIZE_START)
+	_, err = file.Read(info)
+	if err != nil {
+		return nil
+	}
+
+	tombstone := binary.LittleEndian.Uint64(info[TOMBSTONE_START:KEY_SIZE_START])
+	//ako je tombstone 1 procitaj odmah sledeci
+	if tombstone == 1 {
+		return readMerge(file)
+	}
+	//ako je tombstone 0 onda citaj sve podatke entrya
+	info2 := make([]byte, KEY_START-KEY_SIZE_START)
+	_, err = file.Read(info2)
+	if err != nil {
+		return nil
+	}
+
+	key_size := binary.LittleEndian.Uint64(info2[:KEY_SIZE_SIZE])
+	value_size := binary.LittleEndian.Uint64(info2[KEY_SIZE_SIZE:])
+
+	// cita bajtove podatka, odnosno key i value u data
+	//| Key | Value |
+	data := make([]byte, key_size+value_size)
+	_, err = file.Read(data)
+	if err != nil {
+		return nil
+	}
+	info = append(info, info2...)
+	info = append(info, data...)
+
+	entry := Config.ToEntry(info)
+
+	return &entry
 }
 
 func merge(level int, lsm Config.LSMTree, dil_s int, dil_i int) {
@@ -903,10 +1043,23 @@ func readMerge(file *os.File) *Config.Entry {
 	if err != nil {
 		return nil
 	}
+	println("key_size_start: ", KEY_SIZE_START)
+	println("tombstone_start: ", TOMBSTONE_START)
 
-	tombstone := binary.LittleEndian.Uint64(info[TOMBSTONE_START:KEY_SIZE_START])
+	tombstone := binary.LittleEndian.Uint64(info[TOMBSTONE_START:])
 	//ako je tombstone 1 procitaj odmah sledeci
 	if tombstone == 1 {
+		info := make([]byte, KEY_SIZE_SIZE)
+		_, err = file.Read(info)
+		if err != nil {
+			return nil
+		}
+		key_size := binary.LittleEndian.Uint64(info)
+		info = make([]byte, key_size)
+		_, err = file.Read(info)
+		if err != nil {
+			return nil
+		}
 		return readMerge(file)
 	}
 	//ako je tombstone 0 onda citaj sve podatke entrya
@@ -993,17 +1146,17 @@ func findMinKeyEntry(entries []*Config.Entry) ([]int, *Config.Entry) {
 
 	return minKeyArray, mostRecentEntry
 }
-func removeFileName(lsm Config.LSMTree, name string) {
+func removeFileName(array []string, name string) []string {
 	slice1 := []string{}
 	slice2 := []string{}
-	for i, n := range lsm.DataFilesNames {
+	for i, n := range array {
 		if n == name {
-			slice1 = append(lsm.DataFilesNames[:i], lsm.DataFilesNames[i+1:]...)
+			slice1 = append(array[:i], array[i+1:]...)
 			break
 		}
 	}
 
-	lsm.DataFilesNames = append(slice2, slice1...)
+	return append(slice2, slice1...)
 }
 
 func mergeFiles(level int, dataFile *os.File, indexFile *os.File, summaryFile *os.File, bloomFile *os.File, merkleFile *os.File, lsm Config.LSMTree, dil_s int, dil_i int) {
@@ -1072,11 +1225,11 @@ func mergeFiles(level int, dataFile *os.File, indexFile *os.File, summaryFile *o
 			log.Fatal(err)
 		}
 
-		removeFileName(lsm, "files_SSTable/dataFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".db")
-		removeFileName(lsm, "files_SSTable/indexFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".db")
-		removeFileName(lsm, "files_SSTable/summaryFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".db")
-		removeFileName(lsm, "files_SSTable/bloomFilterFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".db")
-		removeFileName(lsm, "files_SSTable/merkleTreeFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".db")
+		lsm.DataFilesNames = removeFileName(lsm.DataFilesNames, "files_SSTable/dataFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".db")
+		lsm.IndexFilesNames = removeFileName(lsm.IndexFilesNames, "files_SSTable/indexFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".db")
+		lsm.SummaryFilesNames = removeFileName(lsm.SummaryFilesNames, "files_SSTable/summaryFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".db")
+		lsm.BloomFilterFilesNames = removeFileName(lsm.BloomFilterFilesNames, "files_SSTable/bloomFilterFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".db")
+		lsm.MerkleTreeFilesNames = removeFileName(lsm.MerkleTreeFilesNames, "files_SSTable/merkleTreeFile_"+strconv.Itoa(level)+"_"+strconv.Itoa(i)+".db")
 	}
 }
 
