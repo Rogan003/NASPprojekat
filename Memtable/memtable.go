@@ -333,7 +333,7 @@ func (mt *Memtable) flush(lsm *Config.LSMTree, index int, dil_s int, dil_i int) 
 		fmt.Printf("\n")
 	*/
 
-	mt.flushToDisk(lsm, dil_s, dil_i, false)
+	mt.flushToDisk(lsm, dil_s, dil_i, true)
 
 	if mt.version == "skiplist" {
 		mt.skiplist = SkipList.SkipList{}
@@ -434,66 +434,86 @@ func (mt *Memtable) GetSortedElems() []*Config.Entry {
 
 func (m *Memtable) flushToDisk(lsm *Config.LSMTree, dil_s int, dil_i int, oneFile bool) {
 	fmt.Println("Zapisano na disk.")
-	//citamo podatke prvog nivoa jer u njega flushujemo, osmi sstable na prvom nivou je u fajlu npr SSTable/files/dataFile_1_8
-	var DataFileName = "files_SSTable/dataFile_1"
-	var IndexFileName = "files_SSTable/indexFile_1"
-	var SummaryFileName = "files_SSTable/summaryFile_1"
-	var BloomFilterFileName = "files_SSTable/bloomFilterFile_1"
-	var MerkleTreeFileName = "files_SSTable/merkleTreeFile_1"
+	if oneFile {
+		//citamo podatke prvog nivoa jer u njega flushujemo, osmi sstable na prvom nivou je u fajlu npr SSTable/files/dataFile_1_8
+		var OneFileName = "files_SSTable/oneFile_1"
+		// level[] cuva koliko sstableova se nalazi na svakom od nivoa, dodajemo jos jedan sstable
+		var i = lsm.Levels[0] + 1
+		//pravimo fajlove za novi sstable
+		OneFileName += "_" + strconv.Itoa(i) + ".db"
+		//pravljenje fajlova za novi sstable
+		dataFile, _ := os.Create(OneFileName)
+		err := dataFile.Close()
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
 
-	//MEMTABLE TREBA DA SE SORTIRA
+		lsm.OneFilesNames = append(lsm.OneFilesNames, OneFileName)
 
-	// level[] cuva koliko sstableova se nalazi na svakom od nivoa, dodajemo jos jedan sstable
-	var i = lsm.Levels[0] + 1
-	//pravimo fajlove za novi sstable
-	DataFileName += "_" + strconv.Itoa(i) + ".db"
-	IndexFileName += "_" + strconv.Itoa(i) + ".db"
-	SummaryFileName += "_" + strconv.Itoa(i) + ".db"
-	BloomFilterFileName += "_" + strconv.Itoa(i) + ".db"
-	MerkleTreeFileName += "_" + strconv.Itoa(i) + ".db"
+		SSTable.MakeDataOneFile(m.GetSortedElems(), OneFileName, dil_s, dil_i)
+	} else {
+		//citamo podatke prvog nivoa jer u njega flushujemo, osmi sstable na prvom nivou je u fajlu npr SSTable/files/dataFile_1_8
+		var DataFileName = "files_SSTable/dataFile_1"
+		var IndexFileName = "files_SSTable/indexFile_1"
+		var SummaryFileName = "files_SSTable/summaryFile_1"
+		var BloomFilterFileName = "files_SSTable/bloomFilterFile_1"
+		var MerkleTreeFileName = "files_SSTable/merkleTreeFile_1"
 
-	//pravljenje fajlova za novi sstable
-	dataFile, _ := os.Create(DataFileName)
-	err := dataFile.Close()
-	if err != nil {
-		fmt.Println(err)
-		return
+		//MEMTABLE TREBA DA SE SORTIRA
+
+		// level[] cuva koliko sstableova se nalazi na svakom od nivoa, dodajemo jos jedan sstable
+		var i = lsm.Levels[0] + 1
+		//pravimo fajlove za novi sstable
+		DataFileName += "_" + strconv.Itoa(i) + ".db"
+		IndexFileName += "_" + strconv.Itoa(i) + ".db"
+		SummaryFileName += "_" + strconv.Itoa(i) + ".db"
+		BloomFilterFileName += "_" + strconv.Itoa(i) + ".db"
+		MerkleTreeFileName += "_" + strconv.Itoa(i) + ".db"
+
+		//pravljenje fajlova za novi sstable
+		dataFile, _ := os.Create(DataFileName)
+		err := dataFile.Close()
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		indexFile, _ := os.Create(IndexFileName)
+		err = indexFile.Close()
+		if err != nil {
+			return
+		}
+
+		summaryFile, _ := os.Create(SummaryFileName)
+		err = summaryFile.Close()
+		if err != nil {
+			return
+		}
+
+		bloomFilterFile, _ := os.Create(BloomFilterFileName)
+		err = bloomFilterFile.Close()
+		if err != nil {
+			return
+		}
+
+		merkleTreeFile, _ := os.Create(MerkleTreeFileName)
+		err = merkleTreeFile.Close()
+		if err != nil {
+			return
+		}
+
+		//novi fajlovi se dodaju u liste sa imenima svih fajlova koji cine lsm tree
+		lsm.DataFilesNames = append(lsm.DataFilesNames, DataFileName)
+		lsm.IndexFilesNames = append(lsm.IndexFilesNames, IndexFileName)
+		lsm.SummaryFilesNames = append(lsm.SummaryFilesNames, SummaryFileName)
+		lsm.BloomFilterFilesNames = append(lsm.BloomFilterFilesNames, BloomFilterFileName)
+		lsm.MerkleTreeFilesNames = append(lsm.MerkleTreeFilesNames, MerkleTreeFileName)
+
+		//pravimo sstable, mora da se pre prosledjivanja SORTIRA MEMTABLE
+		//MORA DA SE PROSLEDI LISTA SORTIRANIH ENTYJA A NE MEMTABLE
+		SSTable.MakeData(m.GetSortedElems(), DataFileName, IndexFileName, SummaryFileName, BloomFilterFileName, MerkleTreeFileName, dil_s, dil_i)
+		lsm.Levels[0]++
+		SSTable.SizeTieredCompaction(*lsm, dil_s, dil_i, false)
 	}
-
-	indexFile, _ := os.Create(IndexFileName)
-	err = indexFile.Close()
-	if err != nil {
-		return
-	}
-
-	summaryFile, _ := os.Create(SummaryFileName)
-	err = summaryFile.Close()
-	if err != nil {
-		return
-	}
-
-	bloomFilterFile, _ := os.Create(BloomFilterFileName)
-	err = bloomFilterFile.Close()
-	if err != nil {
-		return
-	}
-
-	merkleTreeFile, _ := os.Create(MerkleTreeFileName)
-	err = merkleTreeFile.Close()
-	if err != nil {
-		return
-	}
-
-	//novi fajlovi se dodaju u liste sa imenima svih fajlova koji cine lsm tree
-	lsm.DataFilesNames = append(lsm.DataFilesNames, DataFileName)
-	lsm.IndexFilesNames = append(lsm.IndexFilesNames, IndexFileName)
-	lsm.SummaryFilesNames = append(lsm.SummaryFilesNames, SummaryFileName)
-	lsm.BloomFilterFilesNames = append(lsm.BloomFilterFilesNames, BloomFilterFileName)
-	lsm.MerkleTreeFilesNames = append(lsm.MerkleTreeFilesNames, MerkleTreeFileName)
-
-	//pravimo sstable, mora da se pre prosledjivanja SORTIRA MEMTABLE
-	//MORA DA SE PROSLEDI LISTA SORTIRANIH ENTYJA A NE MEMTABLE
-	SSTable.MakeData(m.GetSortedElems(), DataFileName, IndexFileName, SummaryFileName, BloomFilterFileName, MerkleTreeFileName, dil_s, dil_i)
-	lsm.Levels[0]++
-	SSTable.SizeTieredCompaction(*lsm, dil_s, dil_i, false)
 }

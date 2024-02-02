@@ -99,6 +99,7 @@ func GetFromOneFile(key string, FileName string) []byte {
 
 	//iz summary citamo opseg kljuceva u sstable (prvi i poslendji)
 	file, _ := os.OpenFile(FileName, os.O_RDWR, 0777)
+	file.Seek(0, 0)
 	summaryOffsetBytes := make([]byte, KEY_SIZE_SIZE)
 	indexOffsetBytes := make([]byte, KEY_SIZE_SIZE)
 
@@ -108,15 +109,18 @@ func GetFromOneFile(key string, FileName string) []byte {
 	summaryOffset := binary.LittleEndian.Uint64(summaryOffsetBytes)
 	indexOffset := binary.LittleEndian.Uint64(indexOffsetBytes)
 
+	println("sum ", summaryOffset)
+	println("idx ", indexOffset)
 	//skace na summary deo
 	file.Seek(int64(summaryOffset), 0)
 	summary := LoadSummary(file)
 	// ako je trazeni kljuc u tom opsegu, podatak bi trebalo da se nalazi u ovom sstable
 	if summary.FirstKey <= key && key <= summary.LastKey {
 
-		var indexPosition = uint64(0)
+		var indexPosition = indexOffset
 		for {
-			//citamo velicinu kljuca
+			println(indexPosition)
+			//citamo velicinu kljucax
 			keySizeBytes := make([]byte, KEY_SIZE_SIZE)
 			_, err := file.Read(keySizeBytes)
 			keySize := int64(binary.LittleEndian.Uint64(keySizeBytes))
@@ -278,9 +282,9 @@ func findInIndex(startPosition uint64, key string, IndexFileName string) uint64 
 		if position == -1 {
 			if lastPos == -1 {
 				notFound := -1
-				return uint64(notFound) 
+				return uint64(notFound)
 			}
-			
+
 			return uint64(lastPos)
 		}
 		if currentKey == key {
@@ -682,6 +686,9 @@ func MakeDataOneFile(nodes []*Config.Entry, FileName string, dil_s int, dil_i in
 	summaryOffsetSize := make([]byte, KEY_SIZE_SIZE)
 	indexOffsetSize := make([]byte, KEY_SIZE_SIZE)
 	dataOffsetSize := make([]byte, KEY_SIZE_SIZE)
+	binary.LittleEndian.PutUint64(dataOffsetSize, uint64(1))
+	binary.LittleEndian.PutUint64(indexOffsetSize, uint64(1))
+	binary.LittleEndian.PutUint64(summaryOffsetSize, uint64(1))
 	file.Write(summaryOffsetSize)
 	file.Write(indexOffsetSize)
 	file.Write(dataOffsetSize)
@@ -764,12 +771,31 @@ func MakeDataOneFile(nodes []*Config.Entry, FileName string, dil_s int, dil_i in
 
 	//UPISIVANJE OFFSETA DATA,SUMMARY I INDEX DELA FAJLA
 	file.Seek(0, 0)
+	println("offset sum ", summaryOffset)
+	println("offset idx ", indexOffset)
+	println("offset data ", dataOffset)
+	summaryOffsetSize = make([]byte, KEY_SIZE_SIZE)
+	indexOffsetSize = make([]byte, KEY_SIZE_SIZE)
+	dataOffsetSize = make([]byte, KEY_SIZE_SIZE)
 	binary.LittleEndian.PutUint64(dataOffsetSize, uint64(dataOffset))
 	binary.LittleEndian.PutUint64(indexOffsetSize, uint64(indexOffset))
 	binary.LittleEndian.PutUint64(summaryOffsetSize, uint64(summaryOffset))
 	file.Write(summaryOffsetSize)
 	file.Write(indexOffsetSize)
 	file.Write(dataOffsetSize)
+	file.Seek(0, 0)
+	summaryOffsetSize = make([]byte, KEY_SIZE_SIZE)
+	indexOffsetSize = make([]byte, KEY_SIZE_SIZE)
+	dataOffsetSize = make([]byte, KEY_SIZE_SIZE)
+	_, _ = file.Read(summaryOffsetSize)
+	_, _ = file.Read(indexOffsetSize)
+	_, _ = file.Read(dataOffsetSize)
+	summaryOffset = int64(binary.LittleEndian.Uint64(summaryOffsetSize))
+	indexOffset = int64(binary.LittleEndian.Uint64(indexOffsetSize))
+	dataOffset = int64(binary.LittleEndian.Uint64(dataOffsetSize))
+	println("offset sum ", summaryOffset)
+	println("offset idx ", indexOffset)
+	println("offset data ", dataOffset)
 	return nil
 
 }
