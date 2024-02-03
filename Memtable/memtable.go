@@ -74,6 +74,7 @@ type NMemtables struct {
 	DegreeOfDilutionIndex   int
 	DegreeOfDilutionSummary int
 	Compression             bool
+	SizedCompaction 		bool
 	Dict1                   *map[int]string
 	Dict2                   *map[string]int
 }
@@ -137,7 +138,7 @@ func (nmt *NMemtables) Add(key string, value []byte) (int, int) {
 	if memtable.curCap == memtable.maxCap {
 		if (nmt.R-nmt.l == nmt.N-1) || (nmt.R < nmt.l) {
 			memtableLast := arr[nmt.l]                                                                                                                           // izbrisala sam proveru da li je memtable empty
-			lwm = memtableLast.flush(nmt.lsm, nmt.l, nmt.DegreeOfDilutionSummary, nmt.DegreeOfDilutionIndex, false, true, nmt.Compression, nmt.Dict1, nmt.Dict2) // valjda nece trebati (testiracu)
+			lwm = memtableLast.flush(nmt.lsm, nmt.l, nmt.DegreeOfDilutionSummary, nmt.DegreeOfDilutionIndex, false, nmt.SizedCompaction, nmt.Compression, nmt.Dict1, nmt.Dict2) // valjda nece trebati (testiracu)
 			nmt.l = (nmt.l + 1) % nmt.N
 		}
 		nmt.R = (nmt.R + 1) % nmt.N
@@ -527,7 +528,8 @@ func (m *Memtable) flushToDisk(lsm *Config.LSMTree, dil_s int, dil_i int, oneFil
 	//KOMPAKCIJA
 	if sizeComp {
 		SSTable.SizeTieredCompaction(*lsm, dil_s, dil_i, oneFile, comp, dict1, dict2)
+	}
 	} else {
-		//pozvati levelcomp
+		SSTable.LevelTieredCompaction(*lsm, dil_s, dil_i, oneFile, comp, dict1, dict2)
 	}
 }

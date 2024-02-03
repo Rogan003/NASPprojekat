@@ -989,9 +989,9 @@ func MakeDataOneFile(nodes []*Config.Entry, FileName string, dil_s int, dil_i in
 	//FALI SERIJALIZACIJA ZA MERKLE
 	// trebalo bi da radi?? - nije isprobano
 	merkleBytes, err := mt.ToBytes()
-	if err != nil {
-		return err
-	}
+   if err != nil {
+        return err
+   }
 	merkleSize := make([]byte, KEY_SIZE_SIZE)
 	binary.LittleEndian.PutUint64(merkleSize, uint64(len(merkleBytes)))
 	file.Write(merkleSize)
@@ -1539,10 +1539,34 @@ func mergeFiles(level int, dataFile *os.File, indexFile *os.File, summaryFile *o
 func LevelTieredCompaction(lsm Config.LSMTree, dil_s int, dil_i int, oneFile bool, comp bool, dict1 *map[int]string, dict2 *map[string]int) {
 	if lsm.Levels[0] == lsm.MaxSSTables {
 		if oneFile{
-			//levelMergeOneFile(0, lsm, dil_s, dil_i, comp, dict1, dict2)
+			levelMergeOneFile(1, lsm, dil_s, dil_i, comp, dict1, dict2)
 		}else{
-			levelMerge(0, lsm, dil_s, dil_i, comp, dict1, dict2)
+			levelMerge(1, lsm, dil_s, dil_i, comp, dict1, dict2)
 		}
+	}
+}
+
+func levelMergeOneFile(level int, lsm Config.LSMTree, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int){
+	br := lsm.Levels[level]
+
+	//izabrali smo tabelu na visem nivou
+	sstableFile := "files_SSTable/oneFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".db"
+	
+	//treba dobaviti indekse iz sstableFile iz summarija
+
+	//naci tabele koje su sa sledeceg nivoa
+
+	//sve tabele dodati u neki niz koji ce se proslediti funkciji koja ce da merguje sve
+
+	lsm.Levels[level]--
+	// (dodaj tu jednu iz levela na [level + 1], i oduzmi num merge-ovanih)
+	lsm.Levels[level+1] += 1   // dodaj spojenu koju smo prebacili tu
+	lsm.Levels[level+1] -= num // oduzmi sve koje smo spojili sa tog nivoa
+
+	// ** T: provjeriti da li je okej uslov za level tiered?
+	if lsm.Levels[level+1] == int(float64(lsm.MaxSSTables)*math.Pow(float64(lsm.T), float64(level+1))) && level != lsm.CountOfLevels {
+		// proverava broj fajlova na sledećem nivou, i ne treba da pozove merge ako je na 3. nivou tj ako je nivo 2
+		levelMergeOneFile(level+1, lsm, dil_s, dil_i, comp, dict1, dict2)
 	}
 }
 
