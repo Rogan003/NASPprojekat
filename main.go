@@ -658,13 +658,19 @@ func main() {
 			fmt.Scanf("%s", &key1)
 			fmt.Printf("Unesite drugi kljuc: ")
 			fmt.Scanf("%s", &key2)
-			RangeScan(&mt, key1, key2, conf.PageSize, lsm, conf.Compression, &dict1)
+			fmt.Printf("Unesite redni broj stranice koju zelite dobaviti: ")
+			var pageNum int
+			fmt.Scanf("%d", &pageNum)
+			RangeScan(&mt, key1, key2, conf.PageSize, lsm, conf.Compression, &dict1, pageNum)
 
 		case 9:
 			var key string
 			fmt.Printf("Unesite prefiks za skeniranje: ")
 			fmt.Scanf("%s", &key)
-			PrefixScan(&mt, key, conf.PageSize, lsm, conf.Compression, &dict1)
+			fmt.Printf("Unesite redni broj stranice koju zelite dobaviti: ")
+			var pageNum int
+			fmt.Scanf("%d", &pageNum)
+			PrefixScan(&mt, key, conf.PageSize, lsm, conf.Compression, &dict1, pageNum)
 
 		case 10:
 			fmt.Println("Unesite opseg za iteriranje: ")
