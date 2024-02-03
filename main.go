@@ -14,7 +14,7 @@ import (
 	//"NASPprojekat/CountMinSketch"
 	//"NASPprojekat/HyperLogLog"
 	//"NASPprojekat/BTree"
-	//"NASPprojekat/MerkleTree"
+	"NASPprojekat/MerkleTree"
 	"NASPprojekat/Cache"
 	"NASPprojekat/Memtable"
 	"NASPprojekat/WriteAheadLog"
@@ -149,6 +149,7 @@ func main() {
 		fmt.Println("9. Prefix Scan")
 		fmt.Println("10. Range Iter")
 		fmt.Println("11. Prefix Iter")
+		fmt.Println("12. Uporedi MerkleTree SSTabela")
 		fmt.Println("x. Izlaz")
 		fmt.Print("Unesi broj opcije: ")
 
@@ -726,6 +727,123 @@ func main() {
 			fmt.Printf("Unesite prefiks za iteriranje: ")
 			fmt.Scanf("%s", &key)
 			PrefixIter(&mt, key, lsm, conf.Compression, &dict1)
+
+
+		// uporedi Merkle	
+		case 12:
+			// nivo        - level
+			// redni broj  - rbr
+			cnt := lsm.CountOfLevels // broj nivoa
+
+			var levelStr, rbrStr string
+			fmt.Printf("Unesite broj nivoa (levela): ")
+			fmt.Scanf("%s", &levelStr)
+
+			level, err := strconv.Atoi(levelStr) // npr. 1. level (kod nas 0.)
+			if err != nil {
+				fmt.Print("GRESKA! pogresan unos nivoa.\n")
+				continue
+			}
+			if level < 1 || level > cnt {
+				fmt.Print("GRESKA! pogresan unos nivoa.\n")
+				continue
+			}
+
+			fmt.Printf("Unesite redni broj sstabele: ")
+			fmt.Scanf("%s", &rbrStr)
+
+			rbr, err := strconv.Atoi(rbrStr) // npr. 3. tabela (kod nas 2.)
+			if err != nil {
+				fmt.Print("GRESKA! pogresan unos rednog broja sstabele.\n")
+				continue
+			}
+			brSST := lsm.Levels[level-1]
+			if rbr < 1 || rbr > brSST {
+				fmt.Print("GRESKA! pogresan unos rednog broja sstabele.\n")
+				continue
+			}
+
+			level--
+			key1 := strconv.Itoa(level)
+			rbr--
+			key2 := strconv.Itoa(rbr)
+
+			mtFileName := "files_SSTable/merkleTreeFile_" + key1 + "_" + key2 + ".db"
+			oneFileName := "files_SSTable/oneFile_" + key1 + "_" + key2 + ".db"
+
+
+			// otvaramo prvo posebno merkle file, gledamo da li postoji
+			// -> 'postoji' = 1, ako postoji poseban (nije oneFile)
+			postoji := 1
+			_, err = os.Stat(mtFileName)
+			if os.IsNotExist(err) {
+				//fmt.Println("GRESKA! fajl ne postoji - ", mtFileName)
+				postoji = 0
+			} else if err != nil {
+				//fmt.Println("GRESKA pri otvaranju fajla: ", err)
+				postoji = 0
+			}
+
+			// ako je 'postoji' = 0, onda ne postoji poseban merkleFile
+			// -> gledamo da li postoji oneFile sa takvim levelom i rednim brojem
+			// -> 'postoji' = 2, ako postoji nije oneFile
+			if postoji == 0 {
+				_, err = os.Stat(oneFileName)
+				if os.IsNotExist(err) {
+					fmt.Print("GRESKA! ne postoji takav fajl.\n")
+					postoji = 0
+					continue
+				} else if err != nil {
+					fmt.Println("GRESKA! ne postoji takav fajl - ", err)
+					postoji = 0
+					continue
+				}
+				postoji = 2
+			}
+
+
+	// ZA VESU OVDE DA DOVRSI FUNKCIJE
+			// 'postoji' = 1 ---> ne radi se o oneFile
+			if postoji == 1 {   
+				// ucitavamo trenutni merkle te sstabele za citanje
+				mtCurrent := MerkleTree.MerkleTree{}
+				mtCurrent.Deserialize(mtFileName)
+
+				// potreban nam je filename sstabele
+				// kako bi se mogli dobiti [][]byte da napravimo novi merkle
+					// -> sstableFileName := "files_SSTable/dataFile_" + key1 + "_" + key2 + ".db"
+
+				// 'data' je [][]byte iz sstabele
+					// data := readBytesFromSSTable(sstableFileName)
+
+					// -> mtNew := MerkleTree.MerkleTree{}
+					// -> mtNew.Init(data)
+
+					// arrayOfDiffPoints := mtCurrent.Compare(mtNew)   // []DiffPoint
+				// dalje cu ja ispisati sta su greske navodno, a moze se ispisati i
+				// cijela promjenljiva cini mi se
+ 
+
+			// 'postoji' = 2 ---> u pitanju je oneFile	
+			} else {          
+				// vec smo pokusali otvoriti, znaci da postoji
+				// treba izvuci merkle dio iz tog oneFile
+
+			// oneFileName := "files_SSTable/oneFile_" + key1 + "_" + key2 + ".db"
+
+				// mt := readMerkleFromOneFile(oneFileName)   --> dobijamo cijeli merkle
+
+			//	'data' je [][]byte iz oneFile sstabele
+				// data := readSSTableDataFromOneFile(oneFileName)  --> dobijamo [][]byte
+
+				// -> mtNew := MerkleTree.MerkleTree{}
+					// -> mtNew.Init(data)
+
+					// arrayOfDiffPoints := mtCurrent.Compare(mtNew)   // []DiffPoint
+				// dalje cu ja ispisati sta su greske navodno, a moze se ispisati i
+				// cijela promjenljiva cini mi se
+			}
+
 
 		case 'x':
 			break
