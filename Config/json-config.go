@@ -26,12 +26,12 @@ type Config struct {
 	T                       int    `json:"t"`           //kolikoo se povecava svaki level
 	TokenBucketSize         int    `json:"token_bucket_maxsize"`
 	TokenBucketInterval     string `json:"token_bucket_interval"`
-	DegreeOfDilutionSummary int  `json:"degree_of_dilution_summary"` // stepen proredjenosti u summaryfile sstabla
-	DegreeOfDilutionIndex   int  `json:"degree_of_dilution_index"`
-	PageSize                int  `json:"page_size"`
-	Compression             bool `json:"compression"`
-	SizedCompaction         bool `json:"sized_compaction"`
-	OneFile                 bool `json:"one_file"`
+	DegreeOfDilutionSummary int    `json:"degree_of_dilution_summary"` // stepen proredjenosti u summaryfile sstabla
+	DegreeOfDilutionIndex   int    `json:"degree_of_dilution_index"`
+	PageSize                int    `json:"page_size"`
+	Compression             bool   `json:"compression"`
+	SizedCompaction         bool   `json:"sized_compaction"`
+	OneFile                 bool   `json:"one_file"`
 }
 
 type LSMTree struct {
@@ -53,7 +53,7 @@ func ConfigInst() (Config, error) {
 	configData, err := os.ReadFile("config.json") // ako ne postoji popuniti config default vrednostima i vratiti ga
 	if err != nil {
 		// Tamara: return Config{5000, 1000, "skiplist", 10, 100, 5, 10, 10, 15, "1m", 5, 4, 10, false, false}, nil // iako mozda ne treba nil bas
-		return Config{5000, 1000, "skiplist", 10, 100, 5, 10, 10, 15, "1m", 5, 4, 10, false, true, false}, nil // iako mozda ne treba nil bas
+		return Config{5000, 1000, "skiplist", 10, 100, 5, 10, 10, 15, "1m", 5, 4, 10, true, true, false}, nil // iako mozda ne treba nil bas
 		log.Fatal(err)
 	}
 

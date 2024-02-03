@@ -54,9 +54,10 @@ func main() {
 
 	// MEMTABLE
 	mt := Memtable.NMemtables{}
-	mt.Init(conf.MemtableStructure, int(conf.MemtableSize), conf.MemtableNumber, lsm, conf.DegreeOfDilutionSummary, conf.DegreeOfDilutionIndex, conf.Compression, &dict1, &dict2)
+	println("onefile ", conf.OneFile)
+	println("size ", conf.SizedCompaction)
+	mt.Init(conf.MemtableStructure, int(conf.MemtableSize), conf.MemtableNumber, lsm, conf.DegreeOfDilutionSummary, conf.DegreeOfDilutionIndex, conf.OneFile, conf.SizedCompaction, conf.Compression, &dict1, &dict2)
 
-	
 	// interval moze biti "1m", "1h", "3h", "1d"  itd... (u configu)
 	interval, err := time.ParseDuration(conf.TokenBucketInterval)
 	if err != nil {
@@ -65,8 +66,7 @@ func main() {
 	}
 	tb := TokenBucket.TokenBucket{}
 	tb.Init(conf.TokenBucketSize, interval)
-//u config.json "token_bucket_interval": "1m",
-
+	//u config.json "token_bucket_interval": "1m",
 
 	/*tbBytes, found := Get(wal, &mt, cache, "tb_token_bucket", &tb, lsm, true)
 	if found {
@@ -81,7 +81,6 @@ func main() {
 		// ne treba se nista raditi
 	}
 	*/
-	
 
 	/*tb := TokenBucket.TokenBucket{}
 	tb.Init(conf.TokenBucketSize, time.Minute)*/
