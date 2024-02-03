@@ -23,7 +23,7 @@ import (
 	"strings"
 )
 
-func Get(memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *TokenBucket.TokenBucket, lsm *Config.LSMTree, comp bool, dict *map[int]string) ([]byte, bool) {
+func Get(memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *TokenBucket.TokenBucket, lsm *Config.LSMTree, comp bool, dict *map[int]string, oneFile bool) ([]byte, bool) {
 
 	ok := tb.ConsumeToken()
 	if !ok {
@@ -43,36 +43,38 @@ func Get(memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *T
 		fmt.Println("Pronađeno u cache.")
 		return data, true
 	}
-	/*
-	foundBF, fileBF := SearchTroughBloomFiltersOneFile(key, lsm)
-	println("bf ", foundBF)
-	if foundBF {
-		foundValue := SSTable.GetFromOneFile(key, lsm.OneFilesNames[fileBF])
-		if reflect.DeepEqual(foundValue, []byte{}) {
-			println("prazno")
-			return nil, false
+
+	if oneFile {
+		foundBF, fileBF := SearchTroughBloomFiltersOneFile(key, lsm)
+		println("bf ", foundBF, " filename ", fileBF)
+		if foundBF {
+			foundValue := SSTable.GetFromOneFile(key, lsm.OneFilesNames[fileBF])
+			if reflect.DeepEqual(foundValue, []byte{}) {
+				println("prazno")
+				return nil, false
+			}
+
+			cache.Insert(key, foundValue) // dodavanje u cache
+			return foundValue, true       // foundValue prazno nesto bukvalno nista sad prvi put kad sam gledao?
+
 		}
+	} else {
+		foundBF, fileBF := SearchTroughBloomFilters(key, lsm) // trazi u disku
+		if foundBF {                                          // ovde nesto potencijalno ne valja, mozda treba dodati putanje u bloomFilterFilesNames?
+			fmt.Println("Mozda postoji na disku.")
+			//ucitavamo summary i index fajlove za sstable u kojem je mozda element (saznali preko bloomfiltera)
+			summaryFileName := lsm.SummaryFilesNames[fileBF]
+			indexFileName := lsm.IndexFilesNames[fileBF]
+			foundValue := SSTable.Get(key, summaryFileName, indexFileName, lsm.DataFilesNames[fileBF], comp, dict)
 
-		cache.Insert(key, foundValue) // dodavanje u cache
-		return foundValue, true       // foundValue prazno nesto bukvalno nista sad prvi put kad sam gledao?
+			if reflect.DeepEqual(foundValue, []byte{}) {
+				return nil, false
+			}
 
+			cache.Insert(key, foundValue) // dodavanje u cache
+			return foundValue, true       // foundValue prazno nesto bukvalno nista sad prvi put kad sam gledao?
+		}
 	}
-	*/
-	foundBF, fileBF := SearchTroughBloomFilters(key, lsm) // trazi u disku
-	  if foundBF {                                          // ovde nesto potencijalno ne valja, mozda treba dodati putanje u bloomFilterFilesNames?
-	      fmt.Println("Mozda postoji na disku.")
-	      //ucitavamo summary i index fajlove za sstable u kojem je mozda element (saznali preko bloomfiltera)
-	      summaryFileName := lsm.SummaryFilesNames[fileBF]
-	      indexFileName := lsm.IndexFilesNames[fileBF]
-	      foundValue := SSTable.Get(key, summaryFileName, indexFileName, lsm.DataFilesNames[fileBF], comp, dict)
-
-	      if reflect.DeepEqual(foundValue, []byte{}) {
-	          return nil, false
-	      }
-
-	      cache.Insert(key, foundValue) // dodavanje u cache
-	      return foundValue, true       // foundValue prazno nesto bukvalno nista sad prvi put kad sam gledao?
-	  }
 
 	return nil, false
 }
@@ -122,6 +124,7 @@ func SearchTroughBloomFiltersOneFile(key string, lsm *Config.LSMTree) (bool, int
 		_, err := file.Read(bfSizeBytes)
 		bfSize := int64(binary.LittleEndian.Uint64(bfSizeBytes))
 		bfBytes := make([]byte, bfSize)
+		_, err = file.Read(bfBytes)
 		//citanje bf
 		err = bf.FromBytes(bfBytes)
 		//trazenje u bf
@@ -404,7 +407,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 
 						num, n := binary.Uvarint(info[SSTable.TIMESTAMP_START:])
 
-						tombstone := info[SSTable.TIMESTAMP_START + n]
+						tombstone := info[SSTable.TIMESTAMP_START+n]
 
 						if tombstone == 1 {
 							info = make([]byte, 10)
@@ -433,7 +436,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 
 							continue
 						}
-						
+
 						position += SSTable.TIMESTAMP_START + n + 1
 						_, err = file.Seek(int64(position), 0)
 						if err != nil {
@@ -566,7 +569,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 			keys := make([]string, pageSize)
 			vals := make([][]byte, pageSize)
 
-			for ;pageNum > 0;pageNum-- {
+			for ; pageNum > 0; pageNum-- {
 				keys = make([]string, pageSize)
 				vals = make([][]byte, pageSize)
 
@@ -685,7 +688,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 
 											num, n := binary.Uvarint(info[SSTable.TIMESTAMP_START:])
 
-											tombstone := info[SSTable.TIMESTAMP_START + n]
+											tombstone := info[SSTable.TIMESTAMP_START+n]
 
 											if tombstone == 1 {
 												info = make([]byte, 10)
@@ -714,7 +717,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 
 												continue
 											}
-											
+
 											indexes[index] += SSTable.TIMESTAMP_START + n + 1
 											_, err = file.Seek(int64(indexes[index]), 0)
 											if err != nil {
