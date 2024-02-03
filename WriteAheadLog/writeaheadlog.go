@@ -144,10 +144,17 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 
 			if entry.Tombstone {
 				//ako je operacija brisanja
-				_, index, lwm := mem.Delete(entry.Transaction.Key) // dodao za lwm i index kod brisanja? jel treba? ja mislim da je okej
+				did, index, lwm := mem.Delete(entry.Transaction.Key) // dodao za lwm i index kod brisanja? jel treba? ja mislim da je okej
+				
+				if !did { // novo
+					index = mem.R
+					mem.AddAndDelete(entry.Transaction.Key, entry.Transaction.Value)
+				}
+
 				if lwm != -1 {
 					wal.lowWaterMark = lwm
 				}
+				
 				wal.currentMemIndex = int64(index)
 
 			} else {

@@ -135,6 +135,39 @@ func main() {
 		Put(wal, &mt, cache, key, value, &tb)
 	}
 	*/
+	/*
+	for i := 1;i < 50;i++ {
+		key := "test" + strconv.Itoa(i)
+		value := []byte(strconv.Itoa(i))
+	
+		done := Put(wal, &mt, cache, key, value, &tb)
+		
+		if i % 4 == 0 {
+			_, done := Delete(wal, &mt, cache, key, &tb, lsm, conf.Compression, &dict1)
+	
+			if !done {
+				fmt.Println("Neuspesno brisanje!")
+			}
+		}
+	
+		if done {
+			fmt.Printf("Uspesno dodat/azuriran kljuc %s!\n", key)
+		} else {
+			fmt.Printf("GRESKA! Neuspesno dodavanje kljuca %s!\n", key)
+		}
+	}
+	*/
+	for i := 1;i < 55;i++ {
+		key := "test" + strconv.Itoa(i)
+	
+		elem, done := Get(&mt, cache, key, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
+	
+		if done {
+			fmt.Printf("Vrednost pod kljucem %s: %s\n", key, elem)
+		} else {
+			fmt.Printf("GRESKA! Neuspesno dobavljanje kljuca %s!\n", key)
+		}
+	}
 
 	fmt.Println("==================DOBRODOSLI==================")
 	for {

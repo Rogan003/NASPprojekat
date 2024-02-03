@@ -199,7 +199,7 @@ func (nmt *NMemtables) AddAndDelete(key string, value []byte) int {
 // poziva se iz WAL-a ako je uspesno sve zapisano
 func (nmt *NMemtables) Delete(key string) (bool, int, int) {
 
-	data, found, primaryMemtable := nmt.Get(key)
+	data, found, primaryMemtable, _ := nmt.Get(key)
 
 	if found {
 		arr := nmt.Arr
@@ -259,11 +259,11 @@ func (nmt *NMemtables) Delete(key string) (bool, int, int) {
 }
 
 // funkcija prima kljuc i po njemu trazi podatak u memtable,
-// VRACA: string vrijednosti podatka, bool koji oznacava da li je nadjen element
+// VRACA: string vrijednosti podatka, bool koji oznacava da li je nadjen element, bool koji oznacava da li je element obrisan
 //
 //	i bool ("primary") koji oznacava da li se element nalazi u prvoj memtabeli ili u nekoj starijoj
-//	-> (ovaj poslednji bool je potreban zbog Delete)
-func (nmt *NMemtables) Get(key string) ([]byte, bool, bool) {
+//	-> (ovaj pretposlednji bool je potreban zbog Delete)
+func (nmt *NMemtables) Get(key string) ([]byte, bool, bool, bool) {
 
 	arr := nmt.Arr
 	r := nmt.R // pretragu pocinjemo od prve aktivne, pa prelazimo dalje na starije
@@ -272,7 +272,7 @@ func (nmt *NMemtables) Get(key string) ([]byte, bool, bool) {
 		memtable := arr[r]
 		if memtable.empty && r != nmt.R { // ako je naredna memtabela prazna, ni sledece nisu popunjene, nema potrebe dalje da gledamo
 			//fmt.Printf("Element sa kljucem %s ne postoji!\n", key)
-			return []byte{}, false, false
+			return []byte{}, false, false, false
 		}
 		if memtable.version == "skiplist" {
 			// pronalazak u skip listi
@@ -280,14 +280,14 @@ func (nmt *NMemtables) Get(key string) ([]byte, bool, bool) {
 			if skipNode.Elem.Transaction.Value != nil && found {
 				//fmt.Printf("%s %d\n", skipNode.Elem.Transaction.Key, skipNode.Elem.Transaction.Value)
 				if skipNode.Elem.Tombstone {
-					return []byte{}, false, false
+					return []byte{}, false, false, true
 				}
 
 				if r == nmt.R {
-					return skipNode.Elem.Transaction.Value, true, true
+					return skipNode.Elem.Transaction.Value, true, true, false
 
 				} else {
-					return skipNode.Elem.Transaction.Value, true, false
+					return skipNode.Elem.Transaction.Value, true, false, false
 				}
 			}
 
@@ -297,14 +297,14 @@ func (nmt *NMemtables) Get(key string) ([]byte, bool, bool) {
 			if elem.Transaction.Value != nil && found {
 				//fmt.Printf("%s %d\n", elem.Transaction.Key, elem.Transaction.Value)
 				if elem.Tombstone {
-					return []byte{}, false, false
+					return []byte{}, false, false, true
 				}
 
 				if r == nmt.R {
-					return elem.Transaction.Value, true, true
+					return elem.Transaction.Value, true, true, false
 
 				} else {
-					return elem.Transaction.Value, true, false
+					return elem.Transaction.Value, true, false, false
 				}
 			}
 
@@ -313,13 +313,13 @@ func (nmt *NMemtables) Get(key string) ([]byte, bool, bool) {
 			if elem != nil {
 				//fmt.Printf("%s %d\n", elem.Transaction.Key, elem.Transaction.Value)
 				if elem.Tombstone {
-					return []byte{}, false, false
+					return []byte{}, false, false, true
 				}
 
 				if r == nmt.R {
-					return elem.Transaction.Value, true, true
+					return elem.Transaction.Value, true, true, false
 				} else {
-					return elem.Transaction.Value, true, false
+					return elem.Transaction.Value, true, false, false
 				}
 			}
 		}
@@ -331,7 +331,7 @@ func (nmt *NMemtables) Get(key string) ([]byte, bool, bool) {
 	}
 
 	//fmt.Printf("Element sa kljucem %s ne postoji!\n", key)
-	return []byte{}, false, false
+	return []byte{}, false, false, false
 }
 
 // funkcija koja radi flush na disk (sstable)
@@ -531,9 +531,9 @@ func (m *Memtable) flushToDisk(lsm *Config.LSMTree, dil_s int, dil_i int, oneFil
 	//KOMPAKCIJA
 	if sizeComp {
 		println("Usao1")
-		SSTable.SizeTieredCompaction(*lsm, dil_s, dil_i, oneFile, comp, dict1, dict2)
+		//SSTable.SizeTieredCompaction(*lsm, dil_s, dil_i, oneFile, comp, dict1, dict2)
 	} else {
 		println("Usao2")
-		SSTable.LevelTieredCompaction(*lsm, dil_s, dil_i, oneFile, comp, dict1, dict2)
+		//SSTable.LevelTieredCompaction(*lsm, dil_s, dil_i, oneFile, comp, dict1, dict2)
 	}
 }

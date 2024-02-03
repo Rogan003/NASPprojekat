@@ -28,10 +28,14 @@ func Get(memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *T
 		return nil, false
 	}
 
-	data, found, _ := memtable.Get(key)
+	data, found, _, deleted := memtable.Get(key)
 	if found {
 		fmt.Println("Pronađeno u Memtable.")
 		return data, true
+	}
+
+	if deleted {
+		return nil, false
 	}
 
 	// u cache nema provera tombstone???
@@ -56,20 +60,27 @@ func Get(memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *T
 
 		}
 	} else {
-		foundBF, fileBF := SearchTroughBloomFilters(key, lsm) // trazi u disku
+		foundBF, fileBFIn := SearchTroughBloomFilters(key, lsm) // trazi u disku
 		if foundBF {                                          // ovde nesto potencijalno ne valja, mozda treba dodati putanje u bloomFilterFilesNames?
 			fmt.Println("Mozda postoji na disku.")
-			//ucitavamo summary i index fajlove za sstable u kojem je mozda element (saznali preko bloomfiltera)
-			summaryFileName := lsm.SummaryFilesNames[fileBF]
-			indexFileName := lsm.IndexFilesNames[fileBF]
-			foundValue := SSTable.Get(key, summaryFileName, indexFileName, lsm.DataFilesNames[fileBF], comp, dict)
+			
+			for _, fileBF := range fileBFIn { // NIJE ISTO DA LI GA JE PRVO PRONASAO OBRISANOG ILI NE, jako vazno!
+				//ucitavamo summary i index fajlove za sstable u kojem je mozda element (saznali preko bloomfiltera)
+				summaryFileName := lsm.SummaryFilesNames[fileBF]
+				indexFileName := lsm.IndexFilesNames[fileBF]
+				foundValue, del := SSTable.Get(key, summaryFileName, indexFileName, lsm.DataFilesNames[fileBF], comp, dict)
 
-			if reflect.DeepEqual(foundValue, []byte{}) {
-				return nil, false
+				if del {
+					return nil, false
+				}
+
+				if reflect.DeepEqual(foundValue, []byte{}) {
+					continue
+				}
+
+				cache.Insert(key, foundValue) // dodavanje u cache
+				return foundValue, true       // foundValue prazno nesto bukvalno nista sad prvi put kad sam gledao?
 			}
-
-			cache.Insert(key, foundValue) // dodavanje u cache
-			return foundValue, true       // foundValue prazno nesto bukvalno nista sad prvi put kad sam gledao?
 		}
 	}
 
@@ -117,22 +128,28 @@ func SearchTroughBloomFiltersOneFile(key string, lsm *Config.LSMTree) (bool, int
 }
 
 // trazenje elementa sa nekim kljucem u svim bloomfilterima
-func SearchTroughBloomFilters(key string, lsm *Config.LSMTree) (bool, int) {
+func SearchTroughBloomFilters(key string, lsm *Config.LSMTree) (bool, []int) {
 
 	bf := BloomFilter.BloomFilter{}
+	indexes := make([]int, 0)
 	// kada se ponovo pokrene ne prepoznaje da postoji bilo sta u nizu
 	for i := 0; i < len(lsm.BloomFilterFilesNames); i++ {
 		err := bf.Deserialize(lsm.BloomFilterFilesNames[i])
 		if err != nil && err != io.EOF {
-			return false, -1
+			return false, []int{}
 		}
 		found := bf.Check_elem([]byte(key))
 		if found {
-			return found, i
+			indexes = append(indexes, i)
 		}
 
 	}
-	return false, -1
+
+	if len(indexes) > 0 {
+		return true, indexes
+	}
+
+	return false, []int{}
 }
 
 func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize int, lsm *Config.LSMTree, comp bool, dict *map[int]string, pageNum int) {
@@ -904,11 +921,15 @@ func Delete(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.
 	}
 
 	// nasli smo ga u memtable
-	data, found, _ := memtable.Get(key)
+	data, found, _, deleted := memtable.Get(key)
 	if found {
 		fmt.Println("Pronađeno u memtable.")
 		WriteAheadLog.Delete(WAL, memtable, key) // da li ovo samo ako radi sa memtable? ima mi smisla ali eto nek bude note
 		return data, true
+	}
+
+	if deleted {
+		return nil, false
 	}
 
 	// ako je u cache, onda je i na disku, brisemo u cache ako postoji
@@ -922,23 +943,30 @@ func Delete(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.
 	}
 
 	// provjeravamo disk
-	foundBF, fileBF := SearchTroughBloomFilters(key, lsm) // trazi u disku
-	if foundBF {
+	foundBF, fileBFIn := SearchTroughBloomFilters(key, lsm) // trazi u disku
+	if foundBF {                                          // ovde nesto potencijalno ne valja, mozda treba dodati putanje u bloomFilterFilesNames?
 		fmt.Println("Mozda postoji na disku.")
-		//ucitavamo summary i index fajlove za sstable u kojem je mozda element (saznali preko bloomfiltera)
-		summaryFileName := lsm.SummaryFilesNames[fileBF]
-		indexFileName := lsm.IndexFilesNames[fileBF]
-		foundValue := SSTable.Get(key, summaryFileName, indexFileName, lsm.DataFilesNames[fileBF], comp, dict)
+			
+		for _, fileBF := range fileBFIn {
+			//ucitavamo summary i index fajlove za sstable u kojem je mozda element (saznali preko bloomfiltera)
+			summaryFileName := lsm.SummaryFilesNames[fileBF]
+			indexFileName := lsm.IndexFilesNames[fileBF]
+			foundValue, del := SSTable.Get(key, summaryFileName, indexFileName, lsm.DataFilesNames[fileBF], comp, dict)
 
-		if reflect.DeepEqual(foundValue, []byte{}) {
-			return nil, false
+			if del {
+				return nil, false
+			}
+
+			if reflect.DeepEqual(foundValue, []byte{}) {
+				continue
+			}
+
+			memtable.AddAndDelete(key, foundValue)
+			// *** da li treba dodati pa obrisati u memtable, ako je tombstone pronadjenog u sstable = true?
+			// kako provjeriti tombstone iz sstable Get()?
+
+			return foundValue, true
 		}
-
-		memtable.AddAndDelete(key, foundValue)
-		// *** da li treba dodati pa obrisati u memtable, ako je tombstone pronadjenog u sstable = true?
-		// kako provjeriti tombstone iz sstable Get()?
-
-		return foundValue, true
 	}
 
 	return nil, false
