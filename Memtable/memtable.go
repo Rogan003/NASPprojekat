@@ -455,7 +455,7 @@ func (m *Memtable) flushToDisk(lsm *Config.LSMTree, dil_s int, dil_i int, oneFil
 			return
 		}
 
-		lsm.OneFilesNames = append(lsm.OneFilesNames, OneFileName)
+		lsm.OneFilesNames = append([]string{OneFileName}, lsm.OneFilesNames...)
 
 		SSTable.MakeDataOneFile(m.GetSortedElems(), OneFileName, dil_s, dil_i, comp, dict1, dict2)
 		lsm.Levels[0]++
@@ -511,11 +511,11 @@ func (m *Memtable) flushToDisk(lsm *Config.LSMTree, dil_s int, dil_i int, oneFil
 		}
 
 		//novi fajlovi se dodaju u liste sa imenima svih fajlova koji cine lsm tree
-		lsm.DataFilesNames = append(lsm.DataFilesNames, DataFileName)
-		lsm.IndexFilesNames = append(lsm.IndexFilesNames, IndexFileName)
-		lsm.SummaryFilesNames = append(lsm.SummaryFilesNames, SummaryFileName)
-		lsm.BloomFilterFilesNames = append(lsm.BloomFilterFilesNames, BloomFilterFileName)
-		lsm.MerkleTreeFilesNames = append(lsm.MerkleTreeFilesNames, MerkleTreeFileName)
+		lsm.DataFilesNames = append([]string{DataFileName}, lsm.DataFilesNames...)
+		lsm.IndexFilesNames = append([]string{IndexFileName}, lsm.IndexFilesNames...)
+		lsm.SummaryFilesNames = append([]string{SummaryFileName}, lsm.SummaryFilesNames...)
+		lsm.BloomFilterFilesNames = append([]string{BloomFilterFileName}, lsm.BloomFilterFilesNames...)
+		lsm.MerkleTreeFilesNames = append([]string{MerkleTreeFileName}, lsm.MerkleTreeFilesNames...)
 
 		//pravimo sstable, mora da se pre prosledjivanja SORTIRA MEMTABLE
 		//MORA DA SE PROSLEDI LISTA SORTIRANIH ENTYJA A NE MEMTABLE

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 	"strconv"
+	"sort"
+	"path/filepath"
 )
 
 type Config struct {
@@ -154,6 +156,138 @@ func NewLMSTree(Config Config) *LSMTree {
 			l[lvl - 1]++
 		}
 	}
+
+	sort.Slice(filterFile, func(i, j int) bool {
+
+		str1 := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(filterFile[i]), "bloomFilterFile_"), ".db")
+		str2 := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(filterFile[j]), "bloomFilterFile_"), ".db")
+
+		substrings1 := strings.Split(str1, "_")
+		level1, _ := strconv.Atoi(substrings1[0])
+		num1, _ := strconv.Atoi(substrings1[1])
+
+		substrings2 := strings.Split(str2, "_")
+		level2, _ := strconv.Atoi(substrings2[0])
+		num2, _ := strconv.Atoi(substrings2[1])
+
+		if level1 < level2 {
+			return true
+		} else if level1 > level2 {
+			return false
+		}
+
+		return num1 > num2
+	})
+
+	sort.Slice(merkleFile, func(i, j int) bool {
+
+		str1 := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(merkleFile[i]), "merkleTreeFile_"), ".db")
+		str2 := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(merkleFile[j]), "merkleTreeFile_"), ".db")
+
+		substrings1 := strings.Split(str1, "_")
+		level1, _ := strconv.Atoi(substrings1[0])
+		num1, _ := strconv.Atoi(substrings1[1])
+
+		substrings2 := strings.Split(str2, "_")
+		level2, _ := strconv.Atoi(substrings2[0])
+		num2, _ := strconv.Atoi(substrings2[1])
+
+		if level1 < level2 {
+			return true
+		} else if level1 > level2 {
+			return false
+		}
+
+		return num1 > num2
+	})
+
+	sort.Slice(dataFile, func(i, j int) bool {
+
+		str1 := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(dataFile[i]), "dataFile_"), ".db")
+		str2 := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(dataFile[j]), "dataFile_"), ".db")
+
+		substrings1 := strings.Split(str1, "_")
+		level1, _ := strconv.Atoi(substrings1[0])
+		num1, _ := strconv.Atoi(substrings1[1])
+
+		substrings2 := strings.Split(str2, "_")
+		level2, _ := strconv.Atoi(substrings2[0])
+		num2, _ := strconv.Atoi(substrings2[1])
+
+		if level1 < level2 {
+			return true
+		} else if level1 > level2 {
+			return false
+		}
+
+		return num1 > num2
+	})
+
+	sort.Slice(indexFile, func(i, j int) bool {
+
+		str1 := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(indexFile[i]), "indexFile_"), ".db")
+		str2 := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(indexFile[j]), "indexFile_"), ".db")
+
+		substrings1 := strings.Split(str1, "_")
+		level1, _ := strconv.Atoi(substrings1[0])
+		num1, _ := strconv.Atoi(substrings1[1])
+
+		substrings2 := strings.Split(str2, "_")
+		level2, _ := strconv.Atoi(substrings2[0])
+		num2, _ := strconv.Atoi(substrings2[1])
+
+		if level1 < level2 {
+			return true
+		} else if level1 > level2 {
+			return false
+		}
+
+		return num1 > num2
+	})
+
+	sort.Slice(summaryFile, func(i, j int) bool {
+
+		str1 := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(summaryFile[i]), "summaryFile_"), ".db")
+		str2 := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(summaryFile[j]), "summaryFile_"), ".db")
+
+		substrings1 := strings.Split(str1, "_")
+		level1, _ := strconv.Atoi(substrings1[0])
+		num1, _ := strconv.Atoi(substrings1[1])
+
+		substrings2 := strings.Split(str2, "_")
+		level2, _ := strconv.Atoi(substrings2[0])
+		num2, _ := strconv.Atoi(substrings2[1])
+
+		if level1 < level2 {
+			return true
+		} else if level1 > level2 {
+			return false
+		}
+
+		return num1 > num2
+	})
+
+	sort.Slice(oneFile, func(i, j int) bool {
+
+		str1 := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(oneFile[i]), "oneFile_"), ".db")
+		str2 := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(oneFile[j]), "oneFile_"), ".db")
+
+		substrings1 := strings.Split(str1, "_")
+		level1, _ := strconv.Atoi(substrings1[0])
+		num1, _ := strconv.Atoi(substrings1[1])
+
+		substrings2 := strings.Split(str2, "_")
+		level2, _ := strconv.Atoi(substrings2[0])
+		num2, _ := strconv.Atoi(substrings2[1])
+
+		if level1 < level2 {
+			return true
+		} else if level1 > level2 {
+			return false
+		}
+
+		return num1 > num2
+	})
 
 	return &LSMTree{
 		Levels:                l,

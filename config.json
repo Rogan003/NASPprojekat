@@ -7,11 +7,11 @@
 	"level_count": 3,
 	"level_num": 3,
 	"t":10,
-	"token_bucket_maxsize": 15,
+	"token_bucket_maxsize": 150,
 	
 	"degree_of_dilution_summary": 3,
 	"degree_of_dilution_index": 2,
 	"page_size" : 2,
-	"compression" : true,
+	"compression" : false,
 	"one_file" : false
 }
