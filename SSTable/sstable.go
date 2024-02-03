@@ -95,6 +95,415 @@ func make_merkle(elems []*Config.Entry, filePath string, comp bool, dict1 *map[i
 	mt.Serialize(filePath)
 }
 
+func DataFileToBytes(DataFileName string, comp bool) [][]byte {
+
+	retVal := make([][]byte, 0)
+
+	file, err := os.OpenFile(DataFileName, os.O_RDWR, 0777)
+	if err != nil {
+		log.Fatal(err)
+		return [][]byte{}
+	}
+	defer file.Close()
+
+	var position int64 = 0
+
+	_, err = file.Seek(position, 0)
+	if err != nil {
+		log.Fatal(err)
+		return [][]byte{}
+	}
+
+	for {
+		byteData := make([]byte, 0)
+
+		if comp {
+			_, err = file.Seek(position, 0)
+			if err != nil {
+				break
+			}
+
+			info := make([]byte, KEY_SIZE_START)
+			_, err = file.Read(info)
+			if err != nil {
+				break
+			}
+
+			num, n := binary.Uvarint(info[TIMESTAMP_START:])
+
+			tombstone := info[TIMESTAMP_START+n]
+
+			byteData = append(byteData, info[:TIMESTAMP_START + n + 1]...)
+
+			if tombstone == 1 {
+				info = make([]byte, 10)
+
+				position += int64(TIMESTAMP_START + n + 1)
+				_, err = file.Seek(position, 0)
+				if err != nil {
+					break
+				}
+
+				_, err = file.Read(info)
+				if err != nil {
+					break
+				}
+
+				_, n := binary.Uvarint(info)
+
+				byteData = append(byteData, info[:n]...)
+
+				position += int64(n)
+
+				continue
+			}
+
+			position += int64(TIMESTAMP_START + n + 1)
+			_, err = file.Seek(position, 0)
+			if err != nil {
+				break
+			}
+
+			info = make([]byte, VALUE_SIZE_SIZE)
+
+			_, err = file.Read(info)
+			if err != nil {
+				break
+			}
+
+			num, n = binary.Uvarint(info)
+			value_size := num
+
+			byteData = append(byteData, info[:n]...)
+
+			position += int64(n)
+			_, err = file.Seek(position, 0)
+			if err != nil {
+				break
+			}
+
+			info = make([]byte, 10)
+
+			_, err = file.Read(info)
+			if err != nil {
+				break
+			}
+
+			num, n = binary.Uvarint(info)
+			
+			byteData = append(byteData, info[:n]...)
+
+			position += int64(n)
+			_, err = file.Seek(position, 0)
+			if err != nil {
+				break
+			}
+
+			data := make([]byte, value_size)
+			_, err = file.Read(data)
+			if err != nil {
+				break
+			}
+
+			byteData = append(byteData, data...)
+
+			position += int64(value_size)
+
+		} else {
+			// cita bajtove podatka DO key i value u info
+			// CRC (4B)   | Timestamp (8B) | Tombstone(1B) | Key Size (8B) | Value Size (8B)
+			info := make([]byte, KEY_SIZE_START)
+			_, err = file.Read(info)
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+
+				break
+			}
+
+			byteData = append(byteData, info...)
+
+			tombstone := info[TOMBSTONE_START] // jel ovo sad prepoznaje obrisane
+
+			//ako je tombstone 1 ne citaj dalje
+			if tombstone == 1 {
+				info3 := make([]byte, KEY_SIZE_SIZE)
+				_, err = file.Read(info3)
+				if err != nil {
+					break
+				}
+
+				byteData = append(byteData, info3...)
+
+				key_size := binary.LittleEndian.Uint64(info3)
+
+				// cita bajtove podatka, odnosno key data
+				data := make([]byte, key_size)
+				_, err = file.Read(data)
+				if err != nil {
+					break
+				}
+				
+				byteData = append(byteData, data...)
+
+				continue
+			}
+			//ako je tombstone 0 onda citaj sve
+			info2 := make([]byte, KEY_START-KEY_SIZE_START)
+			_, err = file.Read(info2)
+			if err != nil {
+				break
+			}
+
+			byteData = append(byteData, info2...)
+
+			key_size := binary.LittleEndian.Uint64(info2[:KEY_SIZE_SIZE])
+			value_size := binary.LittleEndian.Uint64(info2[KEY_SIZE_SIZE:])
+
+			// cita bajtove podatka, odnosno key i value u data
+			//| Key | Value |
+			data := make([]byte, key_size+value_size)
+			_, err = file.Read(data)
+			if err != nil {
+				break
+			}
+
+			byteData = append(byteData, data...)
+
+		}
+
+		retVal = append(retVal, byteData)
+	}
+
+	return retVal
+
+}
+
+func OneFileDataToBytes(OneFileName string, comp bool) [][]byte {
+
+	retVal := make([][]byte, 0)
+
+	file, _ := os.OpenFile(OneFileName, os.O_RDONLY, 0777)
+	file.Seek(KEY_SIZE_SIZE, 0)
+
+	indexOffsetBytes := make([]byte, KEY_SIZE_SIZE)
+
+	_, _ = file.Read(indexOffsetBytes)
+
+	indexOffset := binary.LittleEndian.Uint64(indexOffsetBytes)
+
+	dataOffsetBytes := make([]byte, KEY_SIZE_SIZE)
+
+	_, _ = file.Read(dataOffsetBytes)
+
+	dataOffset := binary.LittleEndian.Uint64(dataOffsetBytes)
+
+	position := int64(dataOffset)
+
+	for position < int64(indexOffset) {
+		file.Seek(int64(position), 0)
+
+		byteData := make([]byte, 0)
+
+		if comp { // zakomentarisati dok ne budu svuda primenjene
+			_, err := file.Seek(position, 0)
+			if err != nil {
+				break
+			}
+
+			info := make([]byte, KEY_SIZE_START)
+			_, err = file.Read(info)
+			if err != nil {
+				break
+			}
+
+			num, n := binary.Uvarint(info[TIMESTAMP_START:])
+
+			tombstone := info[TIMESTAMP_START+n]
+
+			byteData = append(byteData, info[:TIMESTAMP_START + n + 1]...)
+
+			if tombstone == 1 {
+				info = make([]byte, 10)
+
+				position += int64(TIMESTAMP_START + n + 1)
+				_, err = file.Seek(position, 0)
+				if err != nil {
+					break
+				}
+
+				_, err = file.Read(info)
+				if err != nil {
+					break
+				}
+
+				_, n := binary.Uvarint(info)
+
+				byteData = append(byteData, info[:n]...)
+
+				position += int64(n)
+
+				continue
+			}
+
+			position += int64(TIMESTAMP_START + n + 1)
+			_, err = file.Seek(position, 0)
+			if err != nil {
+				break
+			}
+
+			info = make([]byte, VALUE_SIZE_SIZE)
+
+			_, err = file.Read(info)
+			if err != nil {
+				break
+			}
+
+			num, n = binary.Uvarint(info)
+			value_size := num
+
+			byteData = append(byteData, info[:n]...)
+
+			position += int64(n)
+			_, err = file.Seek(position, 0)
+			if err != nil {
+				break
+			}
+
+			info = make([]byte, 10)
+
+			_, err = file.Read(info)
+			if err != nil {
+				break
+			}
+
+			num, n = binary.Uvarint(info)
+			
+			byteData = append(byteData, info[:n]...)
+
+			position += int64(n)
+			_, err = file.Seek(position, 0)
+			if err != nil {
+				break
+			}
+
+			data := make([]byte, value_size)
+			_, err = file.Read(data)
+			if err != nil {
+				break
+			}
+
+			byteData = append(byteData, data...)
+
+			position += int64(value_size)
+
+		} else {
+			// cita bajtove podatka DO key i value u info
+			// CRC (4B)   | Timestamp (8B) | Tombstone(1B) | Key Size (8B) | Value Size (8B)
+			info := make([]byte, KEY_SIZE_START)
+			_, err := file.Read(info)
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+
+				break
+			}
+
+			byteData = append(byteData, info...)
+
+			tombstone := info[TOMBSTONE_START] // jel ovo sad prepoznaje obrisane
+
+			//ako je tombstone 1 ne citaj dalje
+			if tombstone == 1 {
+				info3 := make([]byte, KEY_SIZE_SIZE)
+				_, err = file.Read(info3)
+				if err != nil {
+					break
+				}
+
+				byteData = append(byteData, info3...)
+
+				key_size := binary.LittleEndian.Uint64(info3)
+
+				// cita bajtove podatka, odnosno key data
+				data := make([]byte, key_size)
+				_, err = file.Read(data)
+				if err != nil {
+					break
+				}
+				
+				byteData = append(byteData, data...)
+
+				position += int64(VALUE_SIZE_START) + int64(key_size)
+
+				continue
+			}
+			//ako je tombstone 0 onda citaj sve
+			info2 := make([]byte, KEY_START-KEY_SIZE_START)
+			_, err = file.Read(info2)
+			if err != nil {
+				break
+			}
+
+			byteData = append(byteData, info2...)
+
+			key_size := binary.LittleEndian.Uint64(info2[:KEY_SIZE_SIZE])
+			value_size := binary.LittleEndian.Uint64(info2[KEY_SIZE_SIZE:])
+
+			// cita bajtove podatka, odnosno key i value u data
+			//| Key | Value |
+			data := make([]byte, key_size+value_size)
+			_, err = file.Read(data)
+			if err != nil {
+				break
+			}
+
+			byteData = append(byteData, data...)
+
+			position += int64(KEY_START) + int64(key_size) + int64(value_size)
+
+		}
+
+		retVal = append(retVal, byteData)
+	}
+
+	return retVal
+
+}
+
+func OneFileMerkle(OneFileName string) *MerkleTree.MerkleTree {
+	file, _ := os.OpenFile(OneFileName, os.O_RDONLY, 0777)
+	file.Seek(3 * KEY_SIZE_SIZE, 0)
+
+	bfSizeBytes := make([]byte, KEY_SIZE_SIZE)
+
+	_, _ = file.Read(bfSizeBytes)
+
+	bfSize := binary.LittleEndian.Uint64(bfSizeBytes)
+
+	file.Seek(int64(bfSize), 1)
+
+	merkleSizeBytes := make([]byte, KEY_SIZE_SIZE)
+	_, _ = file.Read(merkleSizeBytes)
+
+	merkleSize := binary.LittleEndian.Uint64(merkleSizeBytes)
+
+	merkleBytes := make([]byte, merkleSize)
+	_, _ = file.Read(merkleBytes)
+
+	mt := MerkleTree.MerkleTree{}
+
+	err := mt.FromBytes(merkleBytes)
+
+	if err != nil {
+		return nil
+	}
+
+	return &mt
+}
+
 func GetFromOneFile(key string, FileName string) []byte {
 
 	//iz summary citamo opseg kljuceva u sstable (prvi i poslendji)

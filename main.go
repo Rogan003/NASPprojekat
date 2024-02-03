@@ -19,7 +19,7 @@ import (
 	"NASPprojekat/Memtable"
 	"NASPprojekat/WriteAheadLog"
 
-	//"NASPprojekat/SSTable"
+	"NASPprojekat/SSTable"
 	//"NASPprojekat/engine.go"
 	"NASPprojekat/TokenBucket"
 )
@@ -844,13 +844,13 @@ func main() {
 
 				// potreban nam je filename sstabele
 				// kako bi se mogli dobiti [][]byte da napravimo novi merkle
-					// -> sstableFileName := "files_SSTable/dataFile_" + key1 + "_" + key2 + ".db"
+				sstableFileName := "files_SSTable/dataFile_" + key1 + "_" + key2 + ".db"
 
 				// 'data' je [][]byte iz sstabele
-					// data := readBytesFromSSTable(sstableFileName)
+				data := SSTable.DataFileToBytes(sstableFileName, conf.Compression)
 
-					// -> mtNew := MerkleTree.MerkleTree{}
-					// -> mtNew.Init(data)
+				mtNew := MerkleTree.MerkleTree{}
+				mtNew.Init(data)
 
 					// arrayOfDiffPoints := mtCurrent.Compare(mtNew)   // []DiffPoint
 				// dalje cu ja ispisati sta su greske navodno, a moze se ispisati i
@@ -862,15 +862,15 @@ func main() {
 				// vec smo pokusali otvoriti, znaci da postoji
 				// treba izvuci merkle dio iz tog oneFile
 
-			// oneFileName := "files_SSTable/oneFile_" + key1 + "_" + key2 + ".db"
+				oneFileName := "files_SSTable/oneFile_" + key1 + "_" + key2 + ".db"
 
-				// mt := readMerkleFromOneFile(oneFileName)   --> dobijamo cijeli merkle
+				// mt := SSTable.OneFileMerkle(oneFileName)   // --> dobijamo cijeli merkle
 
-			//	'data' je [][]byte iz oneFile sstabele
-				// data := readSSTableDataFromOneFile(oneFileName)  --> dobijamo [][]byte
+				//	'data' je [][]byte iz oneFile sstabele
+				data := SSTable.OneFileDataToBytes(oneFileName, conf.Compression)  // --> dobijamo [][]byte
 
-				// -> mtNew := MerkleTree.MerkleTree{}
-					// -> mtNew.Init(data)
+				mtNew := MerkleTree.MerkleTree{}
+				mtNew.Init(data)
 
 					// arrayOfDiffPoints := mtCurrent.Compare(mtNew)   // []DiffPoint
 				// dalje cu ja ispisati sta su greske navodno, a moze se ispisati i
