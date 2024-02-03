@@ -294,7 +294,7 @@ func (nmt *NMemtables) Get(key string) ([]byte, bool, bool, bool) {
 		} else if memtable.version == "hashmap" {
 			// pronalazak u hashmapi
 			elem, found := memtable.hashmap[key]
-			if elem.Transaction.Value != nil && found {
+			if found && elem.Transaction.Value != nil {
 				//fmt.Printf("%s %d\n", elem.Transaction.Key, elem.Transaction.Value)
 				if elem.Tombstone {
 					return []byte{}, false, false, true

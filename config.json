@@ -1,7 +1,7 @@
 {
 	"wal_size": 1000,
 	"memtable_size": 3,
-	"memtable_structure": "skiplist",
+	"memtable_structure": "hashmap",
 	"memtable_number": 3,
 	"cache_capacity": 10,
 	"level_count": 3,
