@@ -31,18 +31,30 @@ func main() {
 		return
 	}
 
-	var dict map[string]int
+	var dict1 map[int]string
 
-	err = Config.ReadDictionary(&dict)
+	err = Config.ReadDictionary(&dict1)
 
 	if err != nil {
 		return
 	}
+	
+	defer Config.SaveDictionary(&dict1)
+
+	var dict2 map[string]int
+
+	err = Config.ReadDictionary2(&dict2)
+
+	if err != nil {
+		return
+	}
+	
+	defer Config.SaveDictionary2(&dict2)
 
 	lsm := Config.NewLMSTree(conf)
 
 	mt := Memtable.NMemtables{}
-	mt.Init(conf.MemtableStructure, int(conf.MemtableSize), conf.MemtableNumber, lsm, conf.DegreeOfDilutionSummary, conf.DegreeOfDilutionIndex)
+	mt.Init(conf.MemtableStructure, int(conf.MemtableSize), conf.MemtableNumber, lsm, conf.DegreeOfDilutionSummary, conf.DegreeOfDilutionIndex, conf.Compression, &dict1, &dict2)
 
 	tb := TokenBucket.TokenBucket{}
 	tb.Init(conf.TokenBucketSize, time.Minute)
@@ -140,7 +152,7 @@ func main() {
 				continue
 			}
 
-			elem, done := Get(&mt, cache, key, &tb, lsm)
+			elem, done := Get(&mt, cache, key, &tb, lsm, conf.Compression, &dict1)
 
 			if done {
 				fmt.Printf("Vrednost pod kljucem %s: %s\n", key, elem)
@@ -158,7 +170,7 @@ func main() {
 				continue
 			}
 
-			_, done := Delete(wal, &mt, cache, key, &tb, lsm)
+			_, done := Delete(wal, &mt, cache, key, &tb, lsm, conf.Compression, &dict1)
 
 			if done {
 				fmt.Printf("Uspesno obrisan element pod kljucem %s!\n", key)
@@ -183,13 +195,14 @@ func main() {
 					break
 				}
 
-				switch optionbf { // da li je bolje da se dodavanje u instancu i provera postojanja vrse u jednom istom delu?
+				switch optionbf {
 				case "1":
 					fmt.Println("Unesite kljuc bf: ")
 					scanner.Scan()
 					key := scanner.Text()
 					key_real := "bf_" + key
-					_, done := Get(&mt, cache, key_real, &tb, lsm)
+
+					_, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1)
 
 					if done {
 						fmt.Println("Greska! BF sa datim kljucem vec postoji!")
@@ -231,7 +244,7 @@ func main() {
 					scanner.Scan()
 					key := scanner.Text()
 					key_real := "bf_" + key
-					elem, done := Get(&mt, cache, key_real, &tb, lsm)
+					elem, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1)
 
 					if done {
 						bf, err := DecodeBF(elem)
@@ -271,7 +284,7 @@ func main() {
 					scanner.Scan()
 					key := scanner.Text()
 					key_real := "bf_" + key
-					elem, done := Get(&mt, cache, key_real, &tb, lsm)
+					elem, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1)
 
 					if done {
 						bf, err := DecodeBF(elem)
@@ -302,7 +315,7 @@ func main() {
 					scanner.Scan()
 					key := scanner.Text()
 					key_real := "bf_" + key
-					_, done := Delete(wal, &mt, cache, key_real, &tb, lsm)
+					_, done := Delete(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1)
 
 					if done {
 						fmt.Printf("Uspesno obrisan element pod kljucem %s!\n", key)
@@ -337,7 +350,7 @@ func main() {
 					scanner.Scan()
 					key := scanner.Text()
 					key_real := "hll_" + key
-					_, done := Get(&mt, cache, key_real, &tb, lsm)
+					_, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1)
 
 					if done {
 						fmt.Println("Greska! HLL sa datim kljucem vec postoji! ")
@@ -371,7 +384,7 @@ func main() {
 					scanner.Scan()
 					key := scanner.Text()
 					key_real := "hll_" + key
-					elem, done := Get(&mt, cache, key_real, &tb, lsm)
+					elem, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1)
 
 					if done {
 						hll, err := DecodeHLL(elem)
@@ -411,7 +424,7 @@ func main() {
 					scanner.Scan()
 					key := scanner.Text()
 					key_real := "hll_" + key
-					elem, done := Get(&mt, cache, key_real, &tb, lsm)
+					elem, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1)
 
 					if done {
 						hll, err := DecodeHLL(elem)
@@ -433,7 +446,7 @@ func main() {
 					scanner.Scan()
 					key := scanner.Text()
 					key_real := "hll_" + key
-					_, done := Delete(wal, &mt, cache, key_real, &tb, lsm)
+					_, done := Delete(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1)
 
 					if done {
 						fmt.Printf("Uspesno obrisan element pod kljucem %s!\n", key)
@@ -466,7 +479,7 @@ func main() {
 				scanner.Scan()
 				key := scanner.Text()
 				key_real := "cms_" + key
-				_, done := Get(&mt, cache, key_real, &tb, lsm)
+				_, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1)
 
 				if done {
 					fmt.Println("Greska! CMS sa datim kljucem vec postoji!")
@@ -504,7 +517,7 @@ func main() {
 				scanner.Scan()
 				key := scanner.Text()
 				key_real := "cms_" + key
-				elem, done := Get(&mt, cache, key_real, &tb, lsm)
+				elem, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1)
 
 				if done {
 					cms, err := DecodeCMS(elem)
@@ -542,7 +555,7 @@ func main() {
 				scanner.Scan()
 				key := scanner.Text()
 				key_real := "cms_" + key
-				elem, done := Get(&mt, cache, key_real, &tb, lsm)
+				elem, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1)
 
 				if done {
 					cms, err := DecodeCMS(elem)
@@ -568,7 +581,7 @@ func main() {
 				scanner.Scan()
 				key := scanner.Text()
 				key_real := "cms_" + key
-				_, done := Delete(wal, &mt, cache, key_real, &tb, lsm)
+				_, done := Delete(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1)
 				if done {
 					fmt.Printf("Uspesno obrisan element pod kljucem %s!\n", key)
 				} else {
@@ -595,7 +608,7 @@ func main() {
 				scanner.Scan()
 				text := scanner.Text()
 				key_real := "sh_" + text
-				_, done := Get(&mt, cache, key_real, &tb, lsm)
+				_, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1)
 				if done {
 					fmt.Println("Greska! Text vec postoji!")
 					continue
@@ -613,7 +626,7 @@ func main() {
 				scanner.Scan()
 				text1 := scanner.Text()
 				key_real1 := "sh_" + text1
-				elem1, done1 := Get(&mt, cache, key_real1, &tb, lsm)
+				elem1, done1 := Get(&mt, cache, key_real1, &tb, lsm, conf.Compression, &dict1)
 				var textBytes1 [16]byte
 				if done1 {
 					copy(textBytes1[:], elem1)
@@ -625,7 +638,7 @@ func main() {
 				scanner.Scan()
 				text2 := scanner.Text()
 				key_real2 := "sh_" + text2
-				elem2, done2 := Get(&mt, cache, key_real2, &tb, lsm)
+				elem2, done2 := Get(&mt, cache, key_real2, &tb, lsm, conf.Compression, &dict1)
 				var textBytes2 [16]byte
 				if done2 {
 					copy(textBytes2[:], elem2)
@@ -645,13 +658,13 @@ func main() {
 			fmt.Scanf("%s", &key1)
 			fmt.Printf("Unesite drugi kljuc: ")
 			fmt.Scanf("%s", &key2)
-			RangeScan(&mt, key1, key2, conf.PageSize, lsm)
+			RangeScan(&mt, key1, key2, conf.PageSize, lsm, conf.Compression, &dict1)
 
 		case 9:
 			var key string
 			fmt.Printf("Unesite prefiks za skeniranje: ")
 			fmt.Scanf("%s", &key)
-			PrefixScan(&mt, key, conf.PageSize, lsm)
+			PrefixScan(&mt, key, conf.PageSize, lsm, conf.Compression, &dict1)
 
 		case 10:
 			fmt.Println("Unesite opseg za iteriranje: ")
@@ -660,13 +673,13 @@ func main() {
 			fmt.Scanf("%s", &key1)
 			fmt.Printf("Unesite drugi kljuc: ")
 			fmt.Scanf("%s", &key2)
-			RangeIter(&mt, key1, key2, lsm)
+			RangeIter(&mt, key1, key2, lsm, conf.Compression, &dict1)
 
 		case 11:
 			var key string
 			fmt.Printf("Unesite prefiks za iteriranje: ")
 			fmt.Scanf("%s", &key)
-			PrefixIter(&mt, key, lsm)
+			PrefixIter(&mt, key, lsm, conf.Compression, &dict1)
 
 		case 'x':
 			break
@@ -675,12 +688,13 @@ func main() {
 			fmt.Println("Nepostojeca opcija. Pokusajte ponovo.")
 		}
 	}
-
+	/*
 	err = Config.SaveDictionary(&dict)
 
 	if err != nil {
 		return
 	}
+	*/
 }
 
 // hll :=HyperLogLog.Init(10)

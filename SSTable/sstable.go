@@ -78,14 +78,14 @@ func make_filter(elems []*Config.Entry, numElems int, filePath string) {
 	bf.Serialize(filePath)
 }
 
-func make_merkle(elems []*Config.Entry, filePath string) {
+func make_merkle(elems []*Config.Entry, filePath string, comp bool, dict1 *map[int]string, dict2 *map[string]int) {
 	// flag: Tamara
 	// elems = nodes
 	// pretvoriti niz elems u niz bajtova
 	var data [][]byte
 
 	for _, entry := range elems {
-		bytesData := NodeToBytes(*entry)
+		bytesData := NodeToBytes(*entry, comp, dict1, dict2)
 		data = append(data, bytesData)
 	}
 
@@ -172,7 +172,7 @@ func GetFromOneFile(key string, FileName string) []byte {
 }
 
 // preko kljuca trazimo u summaryFile poziciju za nas klju u indexFile iz kog kasnije dobijamo poziicju naseg kljuca i vrednosti u dataFile
-func Get(key string, SummaryFileName string, IndexFileName string, DataFileName string) []byte {
+func Get(key string, SummaryFileName string, IndexFileName string, DataFileName string, comp bool, dict *map[int]string) []byte {
 
 	//iz summary citamo opseg kljuceva u sstable (prvi i poslendji)
 	sumarryFile, _ := os.OpenFile(SummaryFileName, os.O_RDWR, 0777)
@@ -203,7 +203,7 @@ func Get(key string, SummaryFileName string, IndexFileName string, DataFileName 
 					fmt.Println("sstable: Nije pronadjen key")
 					break
 				}
-				_, data, _ := ReadData(int64(dataPosition), DataFileName, key)
+				_, data, _ := ReadData(int64(dataPosition), DataFileName, key, comp, dict)
 				return data
 			} else {
 				// citanje pozicije za taj kljuc u indexFile
@@ -220,7 +220,7 @@ func Get(key string, SummaryFileName string, IndexFileName string, DataFileName 
 							sumarryFile.Close()
 							break
 						}
-						_, data, _ := ReadData(int64(dataPosition), DataFileName, key)
+						_, data, _ := ReadData(int64(dataPosition), DataFileName, key, comp, dict)
 						return data
 					}
 					fmt.Println(err)
@@ -406,7 +406,7 @@ func LoadSummary(summary *os.File) *SStableSummary {
 	}
 }
 
-func ReadAnyData(position int64, DataFileName string) ([]byte, []byte, bool) {
+func ReadAnyData(position int64, DataFileName string, comp bool, dict1 *map[int]string) ([]byte, []byte, bool) {
 	file, err := os.OpenFile(DataFileName, os.O_RDWR, 0777)
 	if err != nil {
 		log.Fatal(err)
@@ -419,40 +419,107 @@ func ReadAnyData(position int64, DataFileName string) ([]byte, []byte, bool) {
 		log.Fatal(err)
 		return []byte{}, []byte{}, false
 	}
-	// cita bajtove podatka DO key i value u info
-	// CRC (4B)   | Timestamp (8B) | Tombstone(1B) | Key Size (8B) | Value Size (8B)
-	info := make([]byte, KEY_SIZE_START)
-	_, err = file.Read(info)
-	if err != nil {
-		return []byte{}, []byte{}, true // mozda neka prijava gresaka npr za kraj fajla?
-	}
+	
+	if comp {
+		info := make([]byte, KEY_SIZE_START)
+		_, err = file.Read(info)
+		if err != nil && err != io.EOF {
+			return []byte{}, []byte{}, true
+		}
 
-	tombstone := info[TOMBSTONE_START] // jel ovo sad prepoznaje obrisane
+		num, n := binary.Uvarint(info[TIMESTAMP_START:])
 
-	//ako je tombstone 1 ne citaj dalje
-	if tombstone == 1 {
-		return []byte{}, []byte{}, false
-	}
-	//ako je tombstone 0 onda citaj sve
-	info2 := make([]byte, KEY_START-KEY_SIZE_START)
-	_, err = file.Read(info2)
-	if err != nil {
-		return []byte{}, []byte{}, false // mozda neka prijava gresaka npr za kraj fajla?
-	}
+		tombstone := info[TIMESTAMP_START + n]
 
-	key_size := binary.LittleEndian.Uint64(info2[:KEY_SIZE_SIZE])
-	value_size := binary.LittleEndian.Uint64(info2[KEY_SIZE_SIZE:])
+		if tombstone == 1 {
+			return []byte{}, []byte{}, false
+		}
+		
+		position += int64(TIMESTAMP_START + n + 1)
+		_, err = file.Seek(position, 0)
+		if err != nil {
+			log.Fatal(err)
+			return []byte{}, []byte{}, false
+		}
 
-	// cita bajtove podatka, odnosno key i value u data
-	//| Key | Value |
-	data := make([]byte, key_size+value_size)
-	_, err = file.Read(data)
-	if err != nil {
-		return []byte{}, []byte{}, false // mozda neka prijava gresaka npr za kraj fajla?
+		info = make([]byte, VALUE_SIZE_SIZE)
+
+		_, err = file.Read(info)
+		if err != nil {
+			return []byte{}, []byte{}, true
+		}
+
+		num, n = binary.Uvarint(info)
+		value_size := num
+
+		position += int64(n)
+		_, err = file.Seek(position, 0)
+		if err != nil {
+			log.Fatal(err)
+			return []byte{}, []byte{}, false
+		}
+
+		info = make([]byte, 10)
+
+		_, err = file.Read(info)
+		if err != nil {
+			return []byte{}, []byte{}, true
+		}
+
+		num, n = binary.Uvarint(info)
+		key := (*dict1)[int(num)]
+
+		position += int64(n)
+		_, err = file.Seek(position, 0)
+		if err != nil {
+			log.Fatal(err)
+			return []byte{}, []byte{}, false
+		}
+
+		data := make([]byte, value_size)
+		_, err = file.Read(data)
+		if err != nil {
+			return []byte{}, []byte{}, false // mozda neka prijava gresaka npr za kraj fajla?
+		}
+
+		return []byte(key), data, false
+
+	} else {
+		// cita bajtove podatka DO key i value u info
+		// CRC (4B)   | Timestamp (8B) | Tombstone(1B) | Key Size (8B) | Value Size (8B)
+		info := make([]byte, KEY_SIZE_START)
+		_, err = file.Read(info)
+		if err != nil && err != io.EOF {
+			return []byte{}, []byte{}, true // mozda neka prijava gresaka npr za kraj fajla?
+		}
+
+		tombstone := info[TOMBSTONE_START] // jel ovo sad prepoznaje obrisane
+
+		//ako je tombstone 1 ne citaj dalje
+		if tombstone == 1 {
+			return []byte{}, []byte{}, false
+		}
+		//ako je tombstone 0 onda citaj sve
+		info2 := make([]byte, KEY_START-KEY_SIZE_START)
+		_, err = file.Read(info2)
+		if err != nil {
+			return []byte{}, []byte{}, false // mozda neka prijava gresaka npr za kraj fajla?
+		}
+
+		key_size := binary.LittleEndian.Uint64(info2[:KEY_SIZE_SIZE])
+		value_size := binary.LittleEndian.Uint64(info2[KEY_SIZE_SIZE:])
+
+		// cita bajtove podatka, odnosno key i value u data
+		//| Key | Value |
+		data := make([]byte, key_size+value_size)
+		_, err = file.Read(data)
+		if err != nil {
+			return []byte{}, []byte{}, false // mozda neka prijava gresaka npr za kraj fajla?
+		}
+		key := data[:key_size]
+		val := data[key_size : key_size+value_size]
+		return key, val, false
 	}
-	key := data[:key_size]
-	val := data[key_size : key_size+value_size]
-	return key, val, false
 }
 
 func ReadDataOneFile(position int64, endPosition int64, DataFileName string, realKey string) ([]byte, []byte, bool) {
@@ -544,7 +611,7 @@ func ReadDataOneFile(position int64, endPosition int64, DataFileName string, rea
 	}
 }
 
-func ReadData(position int64, DataFileName string, realKey string) ([]byte, []byte, bool) {
+func ReadData(position int64, DataFileName string, realKey string, comp bool, dict1 *map[int]string) ([]byte, []byte, bool) {
 	file, err := os.OpenFile(DataFileName, os.O_RDWR, 0777)
 	if err != nil {
 		log.Fatal(err)
@@ -559,69 +626,171 @@ func ReadData(position int64, DataFileName string, realKey string) ([]byte, []by
 	}
 
 	for {
-		// cita bajtove podatka DO key i value u info
-		// CRC (4B)   | Timestamp (8B) | Tombstone(1B) | Key Size (8B) | Value Size (8B)
-		info := make([]byte, KEY_SIZE_START)
-		_, err = file.Read(info)
-		if err != nil {
-			if err == io.EOF {
-				return []byte{}, []byte{}, true // mozda neka prijava gresaka npr za kraj fajla?
+		if comp {
+			_, err = file.Seek(position, 0)
+			if err != nil {
+				log.Fatal(err)
+				return []byte{}, []byte{}, false
 			}
 
-			return []byte{}, []byte{}, false
-		}
+			info := make([]byte, KEY_SIZE_START)
+			_, err = file.Read(info)
+			if err != nil {
+				return []byte{}, []byte{}, true
+			}
 
-		tombstone := info[TOMBSTONE_START] // jel ovo sad prepoznaje obrisane
+			num, n := binary.Uvarint(info[TIMESTAMP_START:])
 
-		//ako je tombstone 1 ne citaj dalje
-		if tombstone == 1 {
-			info3 := make([]byte, KEY_SIZE_SIZE)
-			_, err = file.Read(info3)
+			tombstone := info[TIMESTAMP_START + n]
+
+			if tombstone == 1 {
+				info = make([]byte, 10)
+
+				position += int64(TIMESTAMP_START + n + 1)
+				_, err = file.Seek(position, 0)
+				if err != nil {
+					log.Fatal(err)
+					return []byte{}, []byte{}, false
+				}
+
+				_, err = file.Read(info)
+				if err != nil {
+					return []byte{}, []byte{}, true
+				}
+
+				num, n := binary.Uvarint(info)
+				position += int64(n)
+				key := (*dict1)[int(num)]
+				
+				if key >= realKey {
+					return []byte{}, []byte{}, false
+				}
+
+				continue
+			}
+			
+			position += int64(TIMESTAMP_START + n + 1)
+			_, err = file.Seek(position, 0)
+			if err != nil {
+				log.Fatal(err)
+				return []byte{}, []byte{}, false
+			}
+
+			info = make([]byte, VALUE_SIZE_SIZE)
+
+			_, err = file.Read(info)
+			if err != nil {
+				return []byte{}, []byte{}, true
+			}
+
+			num, n = binary.Uvarint(info)
+			value_size := num
+
+			position += int64(n)
+			_, err = file.Seek(position, 0)
+			if err != nil {
+				log.Fatal(err)
+				return []byte{}, []byte{}, false
+			}
+
+			info = make([]byte, 10)
+
+			_, err = file.Read(info)
+			if err != nil {
+				return []byte{}, []byte{}, true
+			}
+
+			num, n = binary.Uvarint(info)
+			key := (*dict1)[int(num)]
+
+			position += int64(n)
+			_, err = file.Seek(position, 0)
+			if err != nil {
+				log.Fatal(err)
+				return []byte{}, []byte{}, false
+			}
+
+			data := make([]byte, value_size)
+			_, err = file.Read(data)
+			if err != nil {
+				return []byte{}, []byte{}, false
+			}
+
+			if key == realKey {
+				return []byte(key), data, false
+			} else if realKey < key {
+				return []byte{}, []byte{}, false
+			}
+
+			position += int64(value_size)
+
+		} else {
+			// cita bajtove podatka DO key i value u info
+			// CRC (4B)   | Timestamp (8B) | Tombstone(1B) | Key Size (8B) | Value Size (8B)
+			info := make([]byte, KEY_SIZE_START)
+			_, err = file.Read(info)
+			if err != nil {
+				if err == io.EOF {
+					return []byte{}, []byte{}, true // mozda neka prijava gresaka npr za kraj fajla?
+				}
+
+				return []byte{}, []byte{}, false
+			}
+
+			tombstone := info[TOMBSTONE_START] // jel ovo sad prepoznaje obrisane
+
+			//ako je tombstone 1 ne citaj dalje
+			if tombstone == 1 {
+				info3 := make([]byte, KEY_SIZE_SIZE)
+				_, err = file.Read(info3)
+				if err != nil {
+					return []byte{}, []byte{}, false // mozda neka prijava gresaka npr za kraj fajla?
+				}
+
+				key_size := binary.LittleEndian.Uint64(info3)
+
+				// cita bajtove podatka, odnosno key data
+				data := make([]byte, key_size)
+				_, err = file.Read(data)
+				if err != nil {
+					return []byte{}, []byte{}, false // mozda neka prijava gresaka npr za kraj fajla?
+				}
+				key := data[:key_size]
+
+				if string(key) >= realKey {
+					return []byte{}, []byte{}, false
+				}
+
+				continue
+			}
+			//ako je tombstone 0 onda citaj sve
+			info2 := make([]byte, KEY_START-KEY_SIZE_START)
+			_, err = file.Read(info2)
 			if err != nil {
 				return []byte{}, []byte{}, false // mozda neka prijava gresaka npr za kraj fajla?
 			}
 
-			key_size := binary.LittleEndian.Uint64(info3)
+			key_size := binary.LittleEndian.Uint64(info2[:KEY_SIZE_SIZE])
+			value_size := binary.LittleEndian.Uint64(info2[KEY_SIZE_SIZE:])
 
-			// cita bajtove podatka, odnosno key data
-			data := make([]byte, key_size)
+			// cita bajtove podatka, odnosno key i value u data
+			//| Key | Value |
+			data := make([]byte, key_size+value_size)
 			_, err = file.Read(data)
 			if err != nil {
 				return []byte{}, []byte{}, false // mozda neka prijava gresaka npr za kraj fajla?
 			}
 			key := data[:key_size]
+			val := data[key_size : key_size+value_size]
 
-			if string(key) <= realKey {
+			if string(key) == realKey {
+				return key, val, false
+			} else if realKey < string(key) {
 				return []byte{}, []byte{}, false
 			}
 
-			continue
-		}
-		//ako je tombstone 0 onda citaj sve
-		info2 := make([]byte, KEY_START-KEY_SIZE_START)
-		_, err = file.Read(info2)
-		if err != nil {
-			return []byte{}, []byte{}, false // mozda neka prijava gresaka npr za kraj fajla?
 		}
 
-		key_size := binary.LittleEndian.Uint64(info2[:KEY_SIZE_SIZE])
-		value_size := binary.LittleEndian.Uint64(info2[KEY_SIZE_SIZE:])
-
-		// cita bajtove podatka, odnosno key i value u data
-		//| Key | Value |
-		data := make([]byte, key_size+value_size)
-		_, err = file.Read(data)
-		if err != nil {
-			return []byte{}, []byte{}, false // mozda neka prijava gresaka npr za kraj fajla?
-		}
-		key := data[:key_size]
-		val := data[key_size : key_size+value_size]
-
-		if string(key) == realKey {
-			return key, val, false
-		} else if realKey < string(key) {
-			return []byte{}, []byte{}, false
-		}
 	}
 }
 
@@ -630,53 +799,118 @@ func CRC32(data []byte) uint32 {
 }
 
 // funkcija koja pretvara node tj entry u bajtove
-func NodeToBytes(node Config.Entry) []byte { //pretvara node u bajtove
+func NodeToBytes(node Config.Entry, comp bool, dict1 *map[int]string, dict2 *map[string]int) []byte { //pretvara node u bajtove
 	var data []byte
 
 	crcb := make([]byte, CRC_SIZE)
 	binary.LittleEndian.PutUint32(crcb, node.Crc)
 	data = append(data, crcb...) //dodaje se CRC
 
-	sec := node.Timestamp
-	secb := make([]byte, TIMESTAMP_SIZE)
-	binary.LittleEndian.PutUint64(secb, uint64(sec))
-	data = append(data, secb...) //dodaje se Timestamp
+	if comp {
+		buf := make([]byte, TIMESTAMP_SIZE)
+		n := binary.PutUvarint(buf, uint64(node.Timestamp))
+		data = append(data, buf[:n]...)
 
-	//1 - deleted; 0 - not deleted
-	//dodaje se Tombstone
-	if node.Tombstone {
-		//ako je tombstone 1 onda bez value size i value
-		var delb byte = 1
-		data = append(data, delb)
-		keyb := []byte(node.Transaction.Key)
-		keybs := make([]byte, KEY_SIZE_SIZE)
-		binary.LittleEndian.PutUint64(keybs, uint64(len(keyb)))
-		//upisujemo key size i key
-		data = append(data, keybs...)
-		data = append(data, keyb...)
+		//1 - deleted; 0 - not deleted
+		//dodaje se Tombstone
+		if node.Tombstone {
+			//ako je tombstone 1 onda bez value size i value
+			var delb byte = 1
+			data = append(data, delb)
+
+			val, ok := (*dict2)[node.Transaction.Key]
+
+			if ok {
+				buf = make([]byte, 10)
+				n := binary.PutUvarint(buf, uint64(val))
+				data = append(data, buf[:n]...)
+
+			} else {
+				val = len(*dict1)
+				(*dict1)[len(*dict1)] = node.Transaction.Key
+				(*dict2)[node.Transaction.Key] = val
+
+				buf = make([]byte, 10)
+				n := binary.PutUvarint(buf, uint64(val))
+				data = append(data, buf[:n]...)
+
+			}
+	
+		} else {
+			// zapisme tomb, pa valsize, pa key, pa value
+			var delb byte = 0
+			data = append(data, delb)
+
+			valuebs := make([]byte, VALUE_SIZE_SIZE)
+			n := binary.PutUvarint(valuebs, uint64(len(node.Transaction.Value)))
+
+			data = append(data, valuebs[:n]...)
+			
+			val, ok := (*dict2)[node.Transaction.Key]
+
+			if ok {
+				buf = make([]byte, 10)
+				n := binary.PutUvarint(buf, uint64(val))
+				data = append(data, buf[:n]...)
+
+			} else {
+				val = len(*dict1)
+				(*dict1)[len(*dict1)] = node.Transaction.Key
+				(*dict2)[node.Transaction.Key] = val
+
+				buf = make([]byte, 10)
+				n := binary.PutUvarint(buf, uint64(val))
+				data = append(data, buf[:n]...)
+
+			}
+
+			data = append(data, node.Transaction.Value...)
+
+		}
 
 	} else {
-		//ako je tombstone 0 onda sa svim kao u WALu
-		var delb byte = 0
-		data = append(data, delb)
-		keyb := []byte(node.Transaction.Key)
-		keybs := make([]byte, KEY_SIZE_SIZE)
-		binary.LittleEndian.PutUint64(keybs, uint64(len(keyb)))
-		valuebs := make([]byte, VALUE_SIZE_SIZE)
-		binary.LittleEndian.PutUint64(valuebs, uint64(len(node.Transaction.Value)))
+		sec := node.Timestamp
+		secb := make([]byte, TIMESTAMP_SIZE)
+		binary.LittleEndian.PutUint64(secb, uint64(sec))
+		data = append(data, secb...) //dodaje se Timestamp
+	
+		//1 - deleted; 0 - not deleted
+		//dodaje se Tombstone
+		if node.Tombstone {
+			//ako je tombstone 1 onda bez value size i value
+			var delb byte = 1
+			data = append(data, delb)
+			keyb := []byte(node.Transaction.Key)
+			keybs := make([]byte, KEY_SIZE_SIZE)
+			binary.LittleEndian.PutUint64(keybs, uint64(len(keyb)))
+			//upisujemo key size i key
+			data = append(data, keybs...)
+			data = append(data, keyb...)
+	
+		} else {
+			//ako je tombstone 0 onda sa svim kao u WALu
+			var delb byte = 0
+			data = append(data, delb)
+			keyb := []byte(node.Transaction.Key)
+			keybs := make([]byte, KEY_SIZE_SIZE)
+			binary.LittleEndian.PutUint64(keybs, uint64(len(keyb)))
+			valuebs := make([]byte, VALUE_SIZE_SIZE)
+			binary.LittleEndian.PutUint64(valuebs, uint64(len(node.Transaction.Value)))
+	
+			//dodaju se Key Size i Value Size
+			data = append(data, keybs...)
+			data = append(data, valuebs...)
+			//dodaju se Key i Value
+			data = append(data, keyb...)
+			data = append(data, node.Transaction.Value...)
+		}
 
-		//dodaju se Key Size i Value Size
-		data = append(data, keybs...)
-		data = append(data, valuebs...)
-		//dodaju se Key i Value
-		data = append(data, keyb...)
-		data = append(data, node.Transaction.Value...)
 	}
 
 	return data
 }
 
-func MakeDataOneFile(nodes []*Config.Entry, FileName string, dil_s int, dil_i int) error {
+func MakeDataOneFile(nodes []*Config.Entry, FileName string, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) error {
 	file, err := os.OpenFile(FileName, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0777)
 	if err != nil {
 		panic(err)
@@ -714,7 +948,7 @@ func MakeDataOneFile(nodes []*Config.Entry, FileName string, dil_s int, dil_i in
 	var data [][]byte
 
 	for _, entry := range nodes {
-		bytesData := NodeToBytes(*entry)
+		bytesData := NodeToBytes(*entry, comp, dict1, dict2)
 		data = append(data, bytesData)
 	}
 
@@ -735,7 +969,7 @@ func MakeDataOneFile(nodes []*Config.Entry, FileName string, dil_s int, dil_i in
 		position, _ := FileLength(file)
 		offsetList = append(offsetList, position)
 		// cvor se upisuje u Data deo fajla
-		_, err = file.Write(NodeToBytes(*node))
+		_, err = file.Write(NodeToBytes(*node, comp, dict1, dict2))
 		if err != nil {
 			return err
 		}
@@ -800,7 +1034,7 @@ func MakeDataOneFile(nodes []*Config.Entry, FileName string, dil_s int, dil_i in
 
 }
 
-func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, SummaryFileName string, BloomFileName string, MerkleFileName string, dil_sum int, dil_ind int) {
+func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, SummaryFileName string, BloomFileName string, MerkleFileName string, dil_sum int, dil_ind int, comp bool, dict1 *map[int]string, dict2 *map[string]int) {
 	indexFile, err := os.OpenFile(IndexFileName, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0777)
 	if err != nil {
 		panic(err)
@@ -828,7 +1062,7 @@ func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, 
 
 	// pravi se merkle tree
 	// flag: Tamara
-	//make_merkle(nodes, MerkleFileName)
+	//make_merkle(nodes, MerkleFileName, comp)
 
 	file, err := os.OpenFile(DataFileName, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0777)
 	if err != nil {
@@ -841,7 +1075,7 @@ func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, 
 	for _, node := range nodes {
 		position, _ := FileLength(file)
 		// cvor se upisuje u DataFile
-		_, err = file.Write(NodeToBytes(*node))
+		_, err = file.Write(NodeToBytes(*node, comp, dict1, dict2))
 		if err != nil {
 			return
 		}
@@ -865,30 +1099,30 @@ func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, 
 }
 
 // sizeTierdCompaction
-func SizeTieredCompaction(lsm Config.LSMTree, dil_s int, dil_i int, oneFile bool) {
+func SizeTieredCompaction(lsm Config.LSMTree, dil_s int, dil_i int, oneFile bool, comp bool, dict1 *map[int]string, dict2 *map[string]int) {
 	if lsm.Levels[0] == lsm.MaxSSTables {
 		if oneFile {
-			mergeOneFile(1, lsm, dil_s, dil_i)
+			mergeOneFile(1, lsm, dil_s, dil_i, comp, dict1, dict2)
 		} else {
-			merge(1, lsm, dil_s, dil_i)
+			merge(1, lsm, dil_s, dil_i, comp, dict1, dict2)
 		}
 	}
 }
 
-func mergeOneFile(level int, lsm Config.LSMTree, dil_s int, dil_i int) {
+func mergeOneFile(level int, lsm Config.LSMTree, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) {
 	br := lsm.Levels[level] + 1
 	sstableFile, _ := os.Create("files_SSTable/oneFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".db")
 
 	lsm.OneFilesNames = append(lsm.DataFilesNames, sstableFile.Name())
-	mergeOneFiles(level, sstableFile, lsm, dil_s, dil_i)
+	mergeOneFiles(level, sstableFile, lsm, dil_s, dil_i, comp, dict1, dict2)
 	lsm.Levels[level-1] = 0
 	lsm.Levels[level]++
 	if lsm.Levels[level] == lsm.MaxSSTables && level != lsm.CountOfLevels { // proverava broj fajlova na sledećem nivou, i ne treba da pozove merge ako je na 3. nivou tj ako je nivo 2
-		mergeOneFile(level+1, lsm, dil_s, dil_i)
+		mergeOneFile(level+1, lsm, dil_s, dil_i, comp, dict1, dict2)
 	}
 }
 
-func mergeOneFiles(level int, sstableFile *os.File, lsm Config.LSMTree, dil_s int, dil_i int) {
+func mergeOneFiles(level int, sstableFile *os.File, lsm Config.LSMTree, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) {
 
 	//otvorimo sve fajlove
 	//procitamo prvi podatak (tombstone) iz svakog od njih i njih stvaimo u listu
@@ -947,7 +1181,7 @@ func mergeOneFiles(level int, sstableFile *os.File, lsm Config.LSMTree, dil_s in
 	closeFiles(levelFiles)
 
 	//pravljenje novog sstablea od svih sstableova ovog nivoa koji su sada spojeni
-	MakeDataOneFile(sortedAllEntries, sstableFile.Name(), dil_s, dil_i)
+	MakeDataOneFile(sortedAllEntries, sstableFile.Name(), dil_s, dil_i, comp, dict1, dict2)
 
 	for i := 1; i <= lsm.MaxSSTables; i++ {
 		err = os.Remove("files_SSTable/oneFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db")
@@ -1011,7 +1245,7 @@ func readMergeOneFile(file *os.File, endposition int) *Config.Entry {
 	return &entry
 }
 
-func merge(level int, lsm Config.LSMTree, dil_s int, dil_i int) {
+func merge(level int, lsm Config.LSMTree, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) {
 	br := lsm.Levels[level] + 1
 	dataFile, _ := os.Create("files_SSTable/dataFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".db")
 	indexFile, _ := os.Create("files_SSTable/indexFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".db")
@@ -1020,11 +1254,11 @@ func merge(level int, lsm Config.LSMTree, dil_s int, dil_i int) {
 	merkleFile, _ := os.Create("files_SSTable/merkleFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".db")
 
 	lsm.DataFilesNames = append(lsm.DataFilesNames, dataFile.Name())
-	mergeFiles(level, dataFile, indexFile, summaryFile, bloomFile, merkleFile, lsm, dil_s, dil_i)
+	mergeFiles(level, dataFile, indexFile, summaryFile, bloomFile, merkleFile, lsm, dil_s, dil_i, comp, dict1, dict2)
 	lsm.Levels[level-1] = 0
 	lsm.Levels[level]++
 	if lsm.Levels[level] == lsm.MaxSSTables && level != lsm.CountOfLevels { // proverava broj fajlova na sledećem nivou, i ne treba da pozove merge ako je na 3. nivou tj ako je nivo 2
-		merge(level+1, lsm, dil_s, dil_i)
+		merge(level+1, lsm, dil_s, dil_i, comp, dict1, dict2)
 	}
 }
 
@@ -1190,7 +1424,7 @@ func removeFileName(array []string, name string) []string {
 	return append(slice2, slice1...)
 }
 
-func mergeFiles(level int, dataFile *os.File, indexFile *os.File, summaryFile *os.File, bloomFile *os.File, merkleFile *os.File, lsm Config.LSMTree, dil_s int, dil_i int) {
+func mergeFiles(level int, dataFile *os.File, indexFile *os.File, summaryFile *os.File, bloomFile *os.File, merkleFile *os.File, lsm Config.LSMTree, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) {
 
 	//otvorimo sve fajlove
 	//procitamo prvi podatak (tombstone) iz svakog od njih i njih stvaimo u listu
@@ -1232,7 +1466,7 @@ func mergeFiles(level int, dataFile *os.File, indexFile *os.File, summaryFile *o
 	closeFiles(levelFiles)
 
 	//pravljenje novog sstablea od svih sstableova ovog nivoa koji su sada spojeni
-	MakeData(sortedAllEntries, dataFile.Name(), indexFile.Name(), summaryFile.Name(), bloomFile.Name(), merkleFile.Name(), dil_s, dil_i)
+	MakeData(sortedAllEntries, dataFile.Name(), indexFile.Name(), summaryFile.Name(), bloomFile.Name(), merkleFile.Name(), dil_s, dil_i, comp, dict1, dict2)
 
 	for i := 1; i <= lsm.MaxSSTables; i++ {
 		err = os.Remove("files_SSTable/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db")

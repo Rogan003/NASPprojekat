@@ -26,6 +26,7 @@ type Config struct {
 	DegreeOfDilutionIndex   int    `json:"degree_of_dilution_index"`
 	PageSize                int    `json:"page_size"`
 	Compression             bool   `json:"compression"`
+	OneFile					bool   `json:"one_file"`
 }
 
 type LSMTree struct {
@@ -46,6 +47,7 @@ func ConfigInst() (Config, error) {
 	var config Config
 	configData, err := os.ReadFile("config.json") // ako ne postoji popuniti config default vrednostima i vratiti ga
 	if err != nil {
+		return Config{5000, 1000, "skiplist", 10, 100, 5, 10, 10, 15, 5, 4, 10, false, false}, nil // iako mozda ne treba nil bas
 		log.Fatal(err)
 	}
 
@@ -246,7 +248,7 @@ func (entry *Entry) ToByte() []byte { //pretvara iz vrednosti u bajtove
 	return data
 }
 
-func ReadDictionary(dict *map[string]int) error {
+func ReadDictionary(dict *map[int]string) error {
 	fileContent, err := ioutil.ReadFile("dictionary.json")
 	if err != nil {
 		fmt.Println("Error reading the file:", err)
@@ -261,7 +263,7 @@ func ReadDictionary(dict *map[string]int) error {
 	return nil
 }
 
-func SaveDictionary(dict *map[string]int) error {
+func SaveDictionary(dict *map[int]string) error {
 	jsonString, err := json.Marshal(*dict)
 
 	if err != nil {
@@ -270,6 +272,38 @@ func SaveDictionary(dict *map[string]int) error {
 	}
 
 	err = ioutil.WriteFile("dictionary.json", jsonString, 0644)
+
+	if err != nil {
+		fmt.Println("Error writing to file:", err)
+		return err
+	}
+	return nil
+}
+
+func ReadDictionary2(dict *map[string]int) error {
+	fileContent, err := ioutil.ReadFile("dictionary2.json")
+	if err != nil {
+		fmt.Println("Error reading the file:", err)
+		return err
+	}
+
+	err = json.Unmarshal(fileContent, dict)
+	if err != nil {
+		fmt.Println("Error unmarshalling JSON:", err)
+		return err
+	}
+	return nil
+}
+
+func SaveDictionary2(dict *map[string]int) error {
+	jsonString, err := json.Marshal(*dict)
+
+	if err != nil {
+		fmt.Println("Error marshalling JSON:", err)
+		return err
+	}
+
+	err = ioutil.WriteFile("dictionary2.json", jsonString, 0644)
 
 	if err != nil {
 		fmt.Println("Error writing to file:", err)
