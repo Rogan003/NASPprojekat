@@ -122,6 +122,14 @@ func main() {
 // TOKEN BUCKET
 // dodati
 
+	/*for i := 3; i <= 10; i++ {
+		key := "test"
+		v := strconv.Itoa(i)
+		key += string(v)
+		value := []byte(v)
+		Put(wal, &mt, cache, key, value, &tb)
+	}
+*/
 
 	fmt.Println("==================DOBRODOSLI==================")
 	for {

@@ -1,55 +1,63 @@
 package MerkleTree
 
 import (
-	"encoding/gob"
-	"os"
-	"fmt"
-	"crypto/sha1"
-	"encoding/hex"
-	"reflect"
 	"bytes"
+	"crypto/sha1"
+	"encoding/gob"
+	"encoding/hex"
+	"fmt"
+	"os"
+	"reflect"
 )
 
- 
-/* pomocna struktura koju cemo cuvati u merkletree.gob 
+/*
+	pomocna struktura koju cemo cuvati u merkletree.gob
+
 Hashes = svi hesevi nasih cvorova u MerkleTree
 L = broj cvorova u prvom/pocetnom redu, oznacava koliko smo podataka poslali
-    u MerkleTree (ubacena radi lakseg Deserialize) */
+
+	u MerkleTree (ubacena radi lakseg Deserialize)
+*/
 type Tree struct {
 	Hashes [][]byte
 	Length int
 }
 
-// MerkleTree sadrzi samo root hash 
+// MerkleTree sadrzi samo root hash
 type MerkleTree struct {
 	Root *Node
 }
 
-/* Cvor koji ubacujemo u MerkleTree
-sadrzi u sebi niz bajtova, kao i pokazivace na desni i lijevi cvor */
+/*
+	Cvor koji ubacujemo u MerkleTree
+
+sadrzi u sebi niz bajtova, kao i pokazivace na desni i lijevi cvor
+*/
 type Node struct {
-	Data []byte
-	Left *Node
+	Data  []byte
+	Left  *Node
 	Right *Node
 	Level int
-	Pos int
+	Pos   int
 }
 
-/* Struktura koja vraca gdje je razlika tokom poredjenja 2 merkle stabla
+/*
+	Struktura koja vraca gdje je razlika tokom poredjenja 2 merkle stabla
+
 Level = broj nivoa na kom se nalazi razlika (od dole gledano)
 Pos = broj cvor u kome je razlika (gledano sa lijeva na desno)
-Node1, Node2 = razlike u Node-ovima */
+Node1, Node2 = razlike u Node-ovima
+*/
 type DiffPoint struct {
 	Level int
-	Pos int
+	Pos   int
 	Node1 *Node
 	Node2 *Node
 }
 
 // pomocne globalne promjenljive radi meni lakse serijalizacije */
 var allHashes [][]byte
-var lTree int 
-
+var lTree int
 
 // MerkleTree Konstruktor
 func (mt *MerkleTree) Init(data [][]byte) {
@@ -58,36 +66,36 @@ func (mt *MerkleTree) Init(data [][]byte) {
 	lTree = 0
 	// krecemo od dole, od niza proslijedjenih podataka i pravimo pocetne donje cvorove
 	for i, v := range data {
-		if (len(v) == 0) {
+		if len(v) == 0 {
 			break
 		}
 		h := Hash(v)
-		hash := h[:]	
+		hash := h[:]
 		curNode := Node{hash, nil, nil, 0, i}
 		allHashes = append(allHashes, hash)
 		arr = append(arr, curNode)
 	}
 	// ako je duzina cvorova neparna, dodamo prazan cvor
-	if (len(arr) % 2 == 1) {
+	if len(arr)%2 == 1 {
 		h := Hash([]byte{})
 		hash := h[:]
 		lastNode := Node{hash, nil, nil, 0, len(arr)}
 		allHashes = append(allHashes, hash)
 		arr = append(arr, lastNode)
-	}	
-	lTree = len(arr)  // pomocna globalna promjenljiva
+	}
+	lTree = len(arr) // pomocna globalna promjenljiva
 
 	lvl := 1
-   // nastavljamo da gradimo MerkleTree prema gore
-	for (true) {
+	// nastavljamo da gradimo MerkleTree prema gore
+	for true {
 		cur := 0
-		arr2 := []Node{}  // arr2 je pomocni niz u koje stavljam sve cvorove iz jednog nivoa
+		arr2 := []Node{} // arr2 je pomocni niz u koje stavljam sve cvorove iz jednog nivoa
 		for i := 0; i < len(arr); i += 2 {
 			nodeLeft := arr[i]
-			nodeRight := arr[i + 1]
+			nodeRight := arr[i+1]
 			h1 := Hash(nodeLeft.Data)
 			h2 := Hash(nodeRight.Data)
-			hash1 := h1[:]	
+			hash1 := h1[:]
 			hash2 := h2[:]
 			hash3 := append(hash1, hash2...)
 			h := Hash(hash3)
@@ -97,13 +105,13 @@ func (mt *MerkleTree) Init(data [][]byte) {
 			allHashes = append(allHashes, hash)
 			arr2 = append(arr2, curNode)
 		}
-		if (len(arr2) == 1) {
+		if len(arr2) == 1 {
 			// arr2 sadrzi jedan jedini cvor, sto je u stvari root, break while(true) petlju
 			mt.Root = &arr2[0]
 			break
 		}
 		// ako je duzina cvorova u jednom nivou neparna, dodamo opet prazan na kraj
-		if (len(arr2) % 2 == 1) {
+		if len(arr2)%2 == 1 {
 			h := Hash([]byte{})
 			hash := h[:]
 			lastNode := Node{hash, nil, nil, lvl, len(arr2)}
@@ -115,20 +123,19 @@ func (mt *MerkleTree) Init(data [][]byte) {
 	}
 }
 
-
 // vraca strukturu DiffPoint koja sadrzi nivo promjene, cvor koji je izmijenjen i razlicite heseve
 func (mt1 *MerkleTree) Compare(mt2 *MerkleTree) []DiffPoint {
 	root1 := mt1.Root
 	root2 := mt2.Root
 
 	// ako su root isti -> strukture su iste, vraca nil
-	if (reflect.DeepEqual(root1.Data, root2.Data)) {
+	if reflect.DeepEqual(root1.Data, root2.Data) {
 		fmt.Println("Strukture su potpuno iste!")
 		return nil
-	} 
+	}
 
 	// root nije isti, idemo dalje
-	s := 0  	// br razlicitih nodova
+	s := 0 // br razlicitih nodova
 	stack1 := []Node{}
 	stack2 := []Node{}
 	differences := []DiffPoint{}
@@ -137,68 +144,65 @@ func (mt1 *MerkleTree) Compare(mt2 *MerkleTree) []DiffPoint {
 	s++
 	h := Hash([]byte{})
 	hash := h[:]
-	if (root1.Left != nil && !reflect.DeepEqual(root1.Left.Data, hash)) {
-		if (!reflect.DeepEqual(root1.Left.Data, root2.Left.Data)) {
+	if root1.Left != nil && !reflect.DeepEqual(root1.Left.Data, hash) {
+		if !reflect.DeepEqual(root1.Left.Data, root2.Left.Data) {
 			differences = differences[:0]
 			stack1 = append(stack1, *root1.Left)
 			stack2 = append(stack2, *root2.Left)
 		}
 	}
-	if (root1.Right != nil && !reflect.DeepEqual(root1.Right.Data, hash)) {
-		if (!reflect.DeepEqual(root1.Right.Data, root2.Right.Data)) {
+	if root1.Right != nil && !reflect.DeepEqual(root1.Right.Data, hash) {
+		if !reflect.DeepEqual(root1.Right.Data, root2.Right.Data) {
 			differences = differences[:0]
 			stack1 = append(stack1, *root1.Right)
 			stack2 = append(stack2, *root2.Right)
 		}
 	}
 
-	for (len(stack1) > 0) {
-		node1 := stack1[len(stack1) - 1]
-		stack1 = stack1[:len(stack1) - 1]
-		node2 := stack2[len(stack2) - 1]
-		stack2 = stack2[:len(stack2) - 1]
+	for len(stack1) > 0 {
+		node1 := stack1[len(stack1)-1]
+		stack1 = stack1[:len(stack1)-1]
+		node2 := stack2[len(stack2)-1]
+		stack2 = stack2[:len(stack2)-1]
 
 		d := DiffPoint{node1.Level, node1.Pos, &node1, &node2}
-		if (node1.Left == nil && node1.Right == nil && node2.Left == nil && node2.Right == nil) {
+		if node1.Left == nil && node1.Right == nil && node2.Left == nil && node2.Right == nil {
 			differences = append(differences, d)
 		}
 		s++
 		h := Hash([]byte{})
 		hash := h[:]
-		if (node1.Left != nil && !reflect.DeepEqual(node1.Left.Data, hash)) {
-			if (!reflect.DeepEqual(node1.Left.Data, node2.Left.Data)) {
+		if node1.Left != nil && !reflect.DeepEqual(node1.Left.Data, hash) {
+			if !reflect.DeepEqual(node1.Left.Data, node2.Left.Data) {
 				stack1 = append(stack1, *node1.Left)
 				stack2 = append(stack2, *node2.Left)
 			}
 		}
-		if (node1.Right != nil && !reflect.DeepEqual(node1.Right.Data, hash)) {
-			if (!reflect.DeepEqual(node1.Right.Data, node2.Right.Data)) {
+		if node1.Right != nil && !reflect.DeepEqual(node1.Right.Data, hash) {
+			if !reflect.DeepEqual(node1.Right.Data, node2.Right.Data) {
 				stack1 = append(stack1, *node1.Right)
 				stack2 = append(stack2, *node2.Right)
 			}
 		}
 	}
-	
 
 	// reversing the array
-	for i, j := 0, len(differences) - 1; i < j; i, j = i + 1, j - 1 {
+	for i, j := 0, len(differences)-1; i < j; i, j = i+1, j-1 {
 		differences[i], differences[j] = differences[j], differences[i]
 	}
 
 	return differences
 }
 
-
 // Serijalizujemo u stvari pomocnu strukturu Tree (pogledaj gore sta sadrzi)
 func (mt *MerkleTree) Serialize(fileName string) {
 	// *****VAZNO*****
-	var f = ""
+	//var f = ""
 	//f += "files%c"
-	f += fileName
+	//f += fileName
 	/* ako testiramo ovde, iz custom maina, onda dodati: "../files%" ("../" ispred files) */
-	filePath := fmt.Sprintf(f, os.PathSeparator)
-	file, err := os.OpenFile(filePath, os.O_RDWR | os.O_CREATE, 0666)
-	if(err != nil) {
+	file, err := os.OpenFile(fileName, os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil {
 		panic(err)
 	}
 	defer file.Close()
@@ -208,27 +212,29 @@ func (mt *MerkleTree) Serialize(fileName string) {
 	encoder := gob.NewEncoder(file)
 	err = encoder.Encode(t)
 
-	if(err != nil) {
+	if err != nil {
 		panic(err)
 	}
 }
 
-/* Deserialize pomocnu strukturu Tree, iz koje izvlacimo sve
-prethodne hasheve i pravimo ispocetka MerkleTree */
+/*
+	Deserialize pomocnu strukturu Tree, iz koje izvlacimo sve
+
+prethodne hasheve i pravimo ispocetka MerkleTree
+*/
 func (mt *MerkleTree) Deserialize(fileName string) {
 	// *****VAZNO*****
-	var f = ""     
+	//var f = ""
 	//f += "files%c"
-	f += fileName         // merkletree.gob
+	// += fileName         // merkletree.gob
 	/* ako testiramo ovde, iz custom maina, onda dodati: "../files%" ("../" ispred files) */
-	filePath := fmt.Sprintf(f, os.PathSeparator)
-	file, err := os.OpenFile(filePath, os.O_RDWR | os.O_CREATE, 0666)
-	if(err != nil) {
+	file, err := os.OpenFile(fileName, os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil {
 		panic(err)
 	}
 
 	defer file.Close()
-	
+
 	t := Tree{}
 	decoder := gob.NewDecoder(file)
 	file.Seek(0, 0)
@@ -247,23 +253,23 @@ func (mt *MerkleTree) Deserialize(fileName string) {
 
 	cur := t.Length
 	lvl := 1
-	for (true) {
+	for true {
 		br := 0
 		arr2 := []Node{}
 		for i := 0; i < len(arr); i += 2 {
 			nodeLeft := arr[i]
-			nodeRight := arr[i + 1]
+			nodeRight := arr[i+1]
 			curNode := Node{t.Hashes[cur], &nodeLeft, &nodeRight, lvl, br}
 			arr2 = append(arr2, curNode)
 			br++
-			cur++ 
+			cur++
 		}
-		if (len(arr2) == 1) {
+		if len(arr2) == 1 {
 			// onda je root...
 			mt.Root = &arr2[0]
 			break
 		}
-		if (len(arr2) % 2 == 1) {
+		if len(arr2)%2 == 1 {
 			lastNode := Node{t.Hashes[cur], nil, nil, lvl, len(arr2)}
 			arr2 = append(arr2, lastNode)
 			cur++
@@ -272,7 +278,6 @@ func (mt *MerkleTree) Deserialize(fileName string) {
 		arr = arr2
 	}
 }
-
 
 func (n *Node) String() string {
 	return hex.EncodeToString(n.Data[:])
@@ -283,42 +288,77 @@ func Hash(data []byte) [20]byte {
 }
 
 
-
 func (mt *MerkleTree) ToBytes() ([]byte, error) {
+
+	t := Tree{allHashes, lTree}
+
 	var network bytes.Buffer
-    enc := gob.NewEncoder(&network)
+	enc := gob.NewEncoder(&network)
 
-    err := enc.Encode(*mt)
-    if err != nil {
-        return nil, err
-    }
+	err := enc.Encode(t)
+	if err != nil {
+		return nil, err
+	}
 
-    return network.Bytes(), nil
+	return network.Bytes(), nil
 }
+
 
 func (mt *MerkleTree) FromBytes(bytess []byte) error {
+
+	t := Tree{}
+
 	network := bytes.NewBuffer(bytess)
-    dec := gob.NewDecoder(network)
+	dec := gob.NewDecoder(network)
 
-    err := dec.Decode(&mt)
+	err := dec.Decode(&t)
 
-    if err != nil {
-        return err
-    }
+	if err != nil {
 
-    return nil
+		arr := []Node{}
+		for i := 0; i < t.Length; i++ {
+			curNode := Node{t.Hashes[i], nil, nil, 0, i}
+			arr = append(arr, curNode)
+		}
+
+		cur := t.Length
+		lvl := 1
+		for true {
+			br := 0
+			arr2 := []Node{}
+			for i := 0; i < len(arr); i += 2 {
+				nodeLeft := arr[i]
+				nodeRight := arr[i+1]
+				curNode := Node{t.Hashes[cur], &nodeLeft, &nodeRight, lvl, br}
+				arr2 = append(arr2, curNode)
+				br++
+				cur++
+			}
+			if len(arr2) == 1 {
+				// onda je root...
+				mt.Root = &arr2[0]
+				break
+			}
+			if len(arr2)%2 == 1 {
+				lastNode := Node{t.Hashes[cur], nil, nil, lvl, len(arr2)}
+				arr2 = append(arr2, lastNode)
+				cur++
+			}
+			lvl++
+			arr = arr2
+		}
+
+		return err
+	}
+
+	return nil
 }
-
-
-
-
-
 
 /*
 func main() {
 	arr1 := make([][]byte, 10, 100)
 	var mt1 = MerkleTree{}
-	
+
    var elem1 = []byte("1")
 	var elem2 = []byte("2")
    var elem3 = []byte("3")
@@ -337,7 +377,7 @@ func main() {
 
 	arr2 := make([][]byte, 10, 100)
 	var mt2 = MerkleTree{}
-	
+
    var elem6 = []byte("1")
 	var elem7 = []byte("2")
    var elem8 = []byte("2")

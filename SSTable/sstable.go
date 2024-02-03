@@ -954,11 +954,17 @@ func MakeDataOneFile(nodes []*Config.Entry, FileName string, dil_s int, dil_i in
 
 	mt := MerkleTree.MerkleTree{}
 	mt.Init(data)
+
 	//FALI SERIJALIZACIJA ZA MERKLE
+	// trebalo bi da radi?? - nije isprobano
+	merkleBytes, err := mt.ToBytes()
+   if err != nil {
+        return err
+   }
 	merkleSize := make([]byte, KEY_SIZE_SIZE)
-	//binary.LittleEndian.PutUint64(merkleSize, uint64(len(merkleBytes)))
+	binary.LittleEndian.PutUint64(merkleSize, uint64(len(merkleBytes)))
 	file.Write(merkleSize)
-	//file.Write(merkleBytes)
+	file.Write(merkleBytes)
 
 	//DATA
 	dataOffset, err := FileLength(file)
@@ -1062,6 +1068,9 @@ func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, 
 
 	// pravi se merkle tree
 	// flag: Tamara
+
+	//fmt.Print("\n\n", MerkleFileName, "\n\n")
+
 	make_merkle(nodes, MerkleFileName, comp, dict1, dict2)
 
 	file, err := os.OpenFile(DataFileName, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0777)
