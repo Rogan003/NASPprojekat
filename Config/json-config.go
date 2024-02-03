@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"strconv"
 )
 
 type Config struct {
@@ -90,6 +91,26 @@ func NewLMSTree(Config Config) *LSMTree {
 			path := "files_SSTable/" + file.Name()
 			filterFile = append(filterFile, path)
 
+			lvlStr := strings.TrimPrefix(file.Name(), "bloomFilterFile_")
+
+			indx := 0
+
+			for {
+				if lvlStr[indx] == '_' {
+					break
+				}
+
+				indx++
+			}
+
+			lvl, err := strconv.Atoi(lvlStr[:indx])
+
+			if err != nil {
+				continue
+			}
+
+			l[lvl - 1]++
+
 		} else if strings.HasSuffix(file.Name(), ".db") && strings.HasPrefix(file.Name(), "dataFile") {
 			path := "files_SSTable/" + file.Name()
 			dataFile = append(dataFile, path)
@@ -109,6 +130,26 @@ func NewLMSTree(Config Config) *LSMTree {
 		} else if strings.HasSuffix(file.Name(), ".db") && strings.HasPrefix(file.Name(), "oneFile") {
 			path := "files_SSTable/" + file.Name()
 			oneFile = append(oneFile, path)
+
+			lvlStr := strings.TrimPrefix(file.Name(), "oneFile_")
+
+			indx := 0
+
+			for {
+				if lvlStr[indx] == '_' {
+					break
+				}
+
+				indx++
+			}
+
+			lvl, err := strconv.Atoi(lvlStr[:indx])
+
+			if err != nil {
+				continue
+			}
+
+			l[lvl - 1]++
 		}
 	}
 
