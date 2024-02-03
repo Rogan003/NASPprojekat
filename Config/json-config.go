@@ -23,11 +23,12 @@ type Config struct {
 	LevelNumber             int    `json:"level_num"`   // maksimum sstabela po nivou
 	T                       int    `json:"t"`           //kolikoo se povecava svaki level
 	TokenBucketSize         int    `json:"token_bucket_maxsize"`
+	// Tamara: TokenBucketInterval     string `json:"token_bucket_interval"`
 	DegreeOfDilutionSummary int    `json:"degree_of_dilution_summary"` // stepen proredjenosti u summaryfile sstabla
 	DegreeOfDilutionIndex   int    `json:"degree_of_dilution_index"`
 	PageSize                int    `json:"page_size"`
 	Compression             bool   `json:"compression"`
-	OneFile					bool   `json:"one_file"`
+	OneFile					   bool   `json:"one_file"`
 }
 
 type LSMTree struct {
@@ -48,6 +49,7 @@ func ConfigInst() (Config, error) {
 	var config Config
 	configData, err := os.ReadFile("config.json") // ako ne postoji popuniti config default vrednostima i vratiti ga
 	if err != nil {
+		// Tamara: return Config{5000, 1000, "skiplist", 10, 100, 5, 10, 10, 15, "1m", 5, 4, 10, false, false}, nil // iako mozda ne treba nil bas
 		return Config{5000, 1000, "skiplist", 10, 100, 5, 10, 10, 15, 5, 4, 10, false, false}, nil // iako mozda ne treba nil bas
 		log.Fatal(err)
 	}
