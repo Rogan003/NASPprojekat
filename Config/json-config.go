@@ -16,16 +16,16 @@ import (
 )
 
 type Config struct {
-	WalSize           int64  `json:"wal_size"`
-	MemtableSize      uint64 `json:"memtable_size"`
-	MemtableStructure string `json:"memtable_structure"`
-	MemtableNumber    int    `json:"memtable_number"`
-	CacheCapacity     uint64 `json:"cache_capacity"`
-	LevelCount        int    `json:"level_count"` // broj nivoa
-	LevelNumber       int    `json:"level_num"`   // maksimum sstabela po nivou
-	T                 int    `json:"t"`           //kolikoo se povecava svaki level
-	TokenBucketSize   int    `json:"token_bucket_maxsize"`
-	// Tamara: TokenBucketInterval     string `json:"token_bucket_interval"`
+	WalSize                 int64  `json:"wal_size"`
+	MemtableSize            uint64 `json:"memtable_size"`
+	MemtableStructure       string `json:"memtable_structure"`
+	MemtableNumber          int    `json:"memtable_number"`
+	CacheCapacity           uint64 `json:"cache_capacity"`
+	LevelCount              int    `json:"level_count"` // broj nivoa
+	LevelNumber             int    `json:"level_num"`   // maksimum sstabela po nivou
+	T                       int    `json:"t"`           //kolikoo se povecava svaki level
+	TokenBucketSize         int    `json:"token_bucket_maxsize"`
+	TokenBucketInterval     string `json:"token_bucket_interval"`
 	DegreeOfDilutionSummary int  `json:"degree_of_dilution_summary"` // stepen proredjenosti u summaryfile sstabla
 	DegreeOfDilutionIndex   int  `json:"degree_of_dilution_index"`
 	PageSize                int  `json:"page_size"`
@@ -53,7 +53,7 @@ func ConfigInst() (Config, error) {
 	configData, err := os.ReadFile("config.json") // ako ne postoji popuniti config default vrednostima i vratiti ga
 	if err != nil {
 		// Tamara: return Config{5000, 1000, "skiplist", 10, 100, 5, 10, 10, 15, "1m", 5, 4, 10, false, false}, nil // iako mozda ne treba nil bas
-		return Config{5000, 1000, "skiplist", 10, 100, 5, 10, 10, 15, 5, 4, 10, false, true, false}, nil // iako mozda ne treba nil bas
+		return Config{5000, 1000, "skiplist", 10, 100, 5, 10, 10, 15, "1m", 5, 4, 10, false, true, false}, nil // iako mozda ne treba nil bas
 		log.Fatal(err)
 	}
 

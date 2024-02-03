@@ -528,7 +528,6 @@ func (m *Memtable) flushToDisk(lsm *Config.LSMTree, dil_s int, dil_i int, oneFil
 	//KOMPAKCIJA
 	if sizeComp {
 		SSTable.SizeTieredCompaction(*lsm, dil_s, dil_i, oneFile, comp, dict1, dict2)
-	}
 	} else {
 		SSTable.LevelTieredCompaction(*lsm, dil_s, dil_i, oneFile, comp, dict1, dict2)
 	}
