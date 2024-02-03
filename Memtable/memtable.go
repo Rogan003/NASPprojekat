@@ -505,9 +505,6 @@ func (m *Memtable) flushToDisk(lsm *Config.LSMTree, dil_s int, dil_i int, oneFil
 		}
 
 		merkleTreeFile, _ := os.Create(MerkleTreeFileName)
-
-		//fmt.Print("\n\n", MerkleTreeFileName, "\n\n")
-		
 		err = merkleTreeFile.Close()
 		if err != nil {
 			return
