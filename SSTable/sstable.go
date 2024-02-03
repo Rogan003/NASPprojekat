@@ -98,7 +98,7 @@ func make_merkle(elems []*Config.Entry, filePath string, comp bool, dict1 *map[i
 func GetFromOneFile(key string, FileName string) []byte {
 
 	//iz summary citamo opseg kljuceva u sstable (prvi i poslendji)
-	file, _ := os.OpenFile(FileName, os.O_RDWR, 0777)
+	file, _ := os.OpenFile(FileName, os.O_RDONLY, 0777)
 	file.Seek(0, 0)
 	summaryOffsetBytes := make([]byte, KEY_SIZE_SIZE)
 	indexOffsetBytes := make([]byte, KEY_SIZE_SIZE)
@@ -114,20 +114,35 @@ func GetFromOneFile(key string, FileName string) []byte {
 	//skace na summary deo
 	file.Seek(int64(summaryOffset), 0)
 	summary := LoadSummary(file)
+	len, _ := FileLength(file)
+	print("DUszina fajl ", len)
 	// ako je trazeni kljuc u tom opsegu, podatak bi trebalo da se nalazi u ovom sstable
 	if summary.FirstKey <= key && key <= summary.LastKey {
-
+		println("USAO u opseg")
 		var indexPosition = indexOffset
 		for {
 			println(indexPosition)
 			//citamo velicinu kljucax
 			keySizeBytes := make([]byte, KEY_SIZE_SIZE)
 			_, err := file.Read(keySizeBytes)
+			if err == io.EOF {
+				dataPosition := findInIndexInOneFile(indexPosition, summaryOffset, key, file)
+				notFound := -1
+				if dataPosition == uint64(notFound) {
+					fmt.Println("sstable: Nije pronadjen key u indexFile")
+					file.Close()
+					break
+				}
+				_, data, _ := ReadDataOneFile(int64(dataPosition), int64(indexOffset), FileName, key)
+				return data
+			}
+
 			keySize := int64(binary.LittleEndian.Uint64(keySizeBytes))
 
 			//citamo keySize bajtiva da bi dobili kljuc
 			keyValue := make([]byte, keySize)
 			_, err = file.Read(keyValue)
+
 			if err != nil {
 				panic(err)
 			}
@@ -187,6 +202,18 @@ func Get(key string, SummaryFileName string, IndexFileName string, DataFileName 
 			//citamo velicinu kljuca
 			keySizeBytes := make([]byte, KEY_SIZE_SIZE)
 			_, err := sumarryFile.Read(keySizeBytes)
+
+			if err == io.EOF {
+				dataPosition := findInIndex(indexPosition, key, IndexFileName)
+				notFound := -1
+				if dataPosition == uint64(notFound) {
+					fmt.Println("sstable: Nije pronadjen key u indexFile")
+					sumarryFile.Close()
+					break
+				}
+				_, data, _ := ReadData(int64(dataPosition), DataFileName, key, comp, dict)
+				return data
+			}
 			keySize := int64(binary.LittleEndian.Uint64(keySizeBytes))
 
 			//citamo keySize bajtiva da bi dobili kljuc
@@ -235,15 +262,18 @@ func Get(key string, SummaryFileName string, IndexFileName string, DataFileName 
 }
 
 func findInIndexInOneFile(startPosition uint64, endPosition uint64, key string, file *os.File) uint64 {
-
+	println("Statrpos ", startPosition)
 	// od date pozicije citamo
 	_, err := file.Seek(int64(startPosition), 0)
 	if err != nil {
 		log.Fatal(err)
 	}
+	offset, err := file.Seek(0, io.SeekCurrent)
+	print("Nakon pomeranja ", offset)
 	var lastPos int64 = -1
 	for {
 		currentKey, position := ReadFromIndex(file)
+		println("Currentkey u indexu ", currentKey, "  position ", position)
 		if position == int64(endPosition) {
 			return uint64(lastPos)
 		}
@@ -419,7 +449,7 @@ func ReadAnyData(position int64, DataFileName string, comp bool, dict1 *map[int]
 		log.Fatal(err)
 		return []byte{}, []byte{}, false
 	}
-	
+
 	if comp {
 		info := make([]byte, KEY_SIZE_START)
 		_, err = file.Read(info)
@@ -429,12 +459,12 @@ func ReadAnyData(position int64, DataFileName string, comp bool, dict1 *map[int]
 
 		num, n := binary.Uvarint(info[TIMESTAMP_START:])
 
-		tombstone := info[TIMESTAMP_START + n]
+		tombstone := info[TIMESTAMP_START+n]
 
 		if tombstone == 1 {
 			return []byte{}, []byte{}, false
 		}
-		
+
 		position += int64(TIMESTAMP_START + n + 1)
 		_, err = file.Seek(position, 0)
 		if err != nil {
@@ -641,7 +671,7 @@ func ReadData(position int64, DataFileName string, realKey string, comp bool, di
 
 			num, n := binary.Uvarint(info[TIMESTAMP_START:])
 
-			tombstone := info[TIMESTAMP_START + n]
+			tombstone := info[TIMESTAMP_START+n]
 
 			if tombstone == 1 {
 				info = make([]byte, 10)
@@ -661,14 +691,14 @@ func ReadData(position int64, DataFileName string, realKey string, comp bool, di
 				num, n := binary.Uvarint(info)
 				position += int64(n)
 				key := (*dict1)[int(num)]
-				
+
 				if key >= realKey {
 					return []byte{}, []byte{}, false
 				}
 
 				continue
 			}
-			
+
 			position += int64(TIMESTAMP_START + n + 1)
 			_, err = file.Seek(position, 0)
 			if err != nil {
@@ -835,7 +865,7 @@ func NodeToBytes(node Config.Entry, comp bool, dict1 *map[int]string, dict2 *map
 				data = append(data, buf[:n]...)
 
 			}
-	
+
 		} else {
 			// zapisme tomb, pa valsize, pa key, pa value
 			var delb byte = 0
@@ -845,7 +875,7 @@ func NodeToBytes(node Config.Entry, comp bool, dict1 *map[int]string, dict2 *map
 			n := binary.PutUvarint(valuebs, uint64(len(node.Transaction.Value)))
 
 			data = append(data, valuebs[:n]...)
-			
+
 			val, ok := (*dict2)[node.Transaction.Key]
 
 			if ok {
@@ -873,7 +903,7 @@ func NodeToBytes(node Config.Entry, comp bool, dict1 *map[int]string, dict2 *map
 		secb := make([]byte, TIMESTAMP_SIZE)
 		binary.LittleEndian.PutUint64(secb, uint64(sec))
 		data = append(data, secb...) //dodaje se Timestamp
-	
+
 		//1 - deleted; 0 - not deleted
 		//dodaje se Tombstone
 		if node.Tombstone {
@@ -886,7 +916,7 @@ func NodeToBytes(node Config.Entry, comp bool, dict1 *map[int]string, dict2 *map
 			//upisujemo key size i key
 			data = append(data, keybs...)
 			data = append(data, keyb...)
-	
+
 		} else {
 			//ako je tombstone 0 onda sa svim kao u WALu
 			var delb byte = 0
@@ -896,7 +926,7 @@ func NodeToBytes(node Config.Entry, comp bool, dict1 *map[int]string, dict2 *map
 			binary.LittleEndian.PutUint64(keybs, uint64(len(keyb)))
 			valuebs := make([]byte, VALUE_SIZE_SIZE)
 			binary.LittleEndian.PutUint64(valuebs, uint64(len(node.Transaction.Value)))
-	
+
 			//dodaju se Key Size i Value Size
 			data = append(data, keybs...)
 			data = append(data, valuebs...)
@@ -911,7 +941,8 @@ func NodeToBytes(node Config.Entry, comp bool, dict1 *map[int]string, dict2 *map
 }
 
 func MakeDataOneFile(nodes []*Config.Entry, FileName string, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) error {
-	file, err := os.OpenFile(FileName, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0777)
+	println("USLO U MAKEONEFILE")
+	file, err := os.OpenFile(FileName, os.O_RDWR|os.O_CREATE, 0777)
 	if err != nil {
 		panic(err)
 	}
@@ -987,7 +1018,7 @@ func MakeDataOneFile(nodes []*Config.Entry, FileName string, dil_s int, dil_i in
 	for i, el := range offsetList {
 		if i%dil_i == 0 {
 			indexOff := AddToIndex(el, nodes[i].Transaction.Key, file)
-			offsetIndexList = append(offsetList, indexOff)
+			offsetIndexList = append(offsetIndexList, indexOff)
 		}
 	}
 	//PRAVLJENJE SUMMARY DELA
@@ -1010,32 +1041,22 @@ func MakeDataOneFile(nodes []*Config.Entry, FileName string, dil_s int, dil_i in
 	}
 
 	//UPISIVANJE OFFSETA DATA,SUMMARY I INDEX DELA FAJLA
-	file.Seek(0, 0)
-	println("offset sum ", summaryOffset)
-	println("offset idx ", indexOffset)
-	println("offset data ", dataOffset)
+
 	summaryOffsetSize = make([]byte, KEY_SIZE_SIZE)
 	indexOffsetSize = make([]byte, KEY_SIZE_SIZE)
 	dataOffsetSize = make([]byte, KEY_SIZE_SIZE)
 	binary.LittleEndian.PutUint64(dataOffsetSize, uint64(dataOffset))
 	binary.LittleEndian.PutUint64(indexOffsetSize, uint64(indexOffset))
 	binary.LittleEndian.PutUint64(summaryOffsetSize, uint64(summaryOffset))
-	file.Write(summaryOffsetSize)
-	file.Write(indexOffsetSize)
-	file.Write(dataOffsetSize)
+
 	file.Seek(0, 0)
-	summaryOffsetSize = make([]byte, KEY_SIZE_SIZE)
-	indexOffsetSize = make([]byte, KEY_SIZE_SIZE)
-	dataOffsetSize = make([]byte, KEY_SIZE_SIZE)
-	_, _ = file.Read(summaryOffsetSize)
-	_, _ = file.Read(indexOffsetSize)
-	_, _ = file.Read(dataOffsetSize)
-	summaryOffset = int64(binary.LittleEndian.Uint64(summaryOffsetSize))
-	indexOffset = int64(binary.LittleEndian.Uint64(indexOffsetSize))
-	dataOffset = int64(binary.LittleEndian.Uint64(dataOffsetSize))
-	println("offset sum ", summaryOffset)
-	println("offset idx ", indexOffset)
-	println("offset data ", dataOffset)
+	_, err = file.WriteAt(summaryOffsetSize, 0)
+	_, err = file.WriteAt(indexOffsetSize, KEY_SIZE_SIZE)
+	_, err = file.WriteAt(dataOffsetSize, 2*KEY_SIZE_SIZE)
+	if err != nil {
+		return err
+	}
+
 	return nil
 
 }
