@@ -989,9 +989,9 @@ func MakeDataOneFile(nodes []*Config.Entry, FileName string, dil_s int, dil_i in
 	//FALI SERIJALIZACIJA ZA MERKLE
 	// trebalo bi da radi?? - nije isprobano
 	merkleBytes, err := mt.ToBytes()
-   if err != nil {
-        return err
-   }
+	if err != nil {
+		return err
+	}
 	merkleSize := make([]byte, KEY_SIZE_SIZE)
 	binary.LittleEndian.PutUint64(merkleSize, uint64(len(merkleBytes)))
 	file.Write(merkleSize)

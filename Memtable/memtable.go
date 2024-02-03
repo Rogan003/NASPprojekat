@@ -136,8 +136,8 @@ func (nmt *NMemtables) Add(key string, value []byte) (int, int) {
 
 	if memtable.curCap == memtable.maxCap {
 		if (nmt.R-nmt.l == nmt.N-1) || (nmt.R < nmt.l) {
-			memtableLast := arr[nmt.l]                                                                                                                    // izbrisala sam proveru da li je memtable empty
-			lwm = memtableLast.flush(nmt.lsm, nmt.l, nmt.DegreeOfDilutionSummary, nmt.DegreeOfDilutionIndex, true, nmt.Compression, nmt.Dict1, nmt.Dict2) // valjda nece trebati (testiracu)
+			memtableLast := arr[nmt.l]                                                                                                                           // izbrisala sam proveru da li je memtable empty
+			lwm = memtableLast.flush(nmt.lsm, nmt.l, nmt.DegreeOfDilutionSummary, nmt.DegreeOfDilutionIndex, false, true, nmt.Compression, nmt.Dict1, nmt.Dict2) // valjda nece trebati (testiracu)
 			nmt.l = (nmt.l + 1) % nmt.N
 		}
 		nmt.R = (nmt.R + 1) % nmt.N
@@ -181,8 +181,8 @@ func (nmt *NMemtables) AddAndDelete(key string, value []byte) int {
 	var lwm = -1
 	if memtable.curCap == memtable.maxCap {
 		if (nmt.R-nmt.l == nmt.N-1) || (nmt.R < nmt.l) {
-			memtableLast := arr[nmt.l]                                                                                                                    // izbrisala sam proveru da li je memtable empty
-			lwm = memtableLast.flush(nmt.lsm, nmt.l, nmt.DegreeOfDilutionSummary, nmt.DegreeOfDilutionIndex, true, nmt.Compression, nmt.Dict1, nmt.Dict2) // valjda nece trebati (testiracu)
+			memtableLast := arr[nmt.l]                                                                                                                           // izbrisala sam proveru da li je memtable empty
+			lwm = memtableLast.flush(nmt.lsm, nmt.l, nmt.DegreeOfDilutionSummary, nmt.DegreeOfDilutionIndex, false, true, nmt.Compression, nmt.Dict1, nmt.Dict2) // valjda nece trebati (testiracu)
 			nmt.l = (nmt.l + 1) % nmt.N
 		}
 		nmt.R = (nmt.R + 1) % nmt.N
@@ -331,7 +331,7 @@ func (nmt *NMemtables) Get(key string) ([]byte, bool, bool) {
 }
 
 // funkcija koja radi flush na disk (sstable)
-func (mt *Memtable) flush(lsm *Config.LSMTree, index int, dil_s int, dil_i int, oneFile bool, comp bool, dict1 *map[int]string, dict2 *map[string]int) int {
+func (mt *Memtable) flush(lsm *Config.LSMTree, index int, dil_s int, dil_i int, oneFile bool, sizeComp bool, comp bool, dict1 *map[int]string, dict2 *map[string]int) int {
 	/*
 		for _, value := range mt.GetSortedElems() {
 			fmt.Printf("%s %d %t %s\n", value.Transaction.Key, value.Transaction.Value, value.Tombstone, value.ToByte())
@@ -339,7 +339,7 @@ func (mt *Memtable) flush(lsm *Config.LSMTree, index int, dil_s int, dil_i int, 
 		fmt.Printf("\n")
 	*/
 
-	mt.flushToDisk(lsm, dil_s, dil_i, oneFile, comp, dict1, dict2) // true je za oneFile (preko config-a?)
+	mt.flushToDisk(lsm, dil_s, dil_i, oneFile, sizeComp, comp, dict1, dict2) // true je za oneFile (preko config-a?)
 
 	if mt.version == "skiplist" {
 		mt.skiplist = SkipList.SkipList{}
@@ -438,7 +438,7 @@ func (mt *Memtable) GetSortedElems() []*Config.Entry {
 	return mt.btree.AllElem()
 }
 
-func (m *Memtable) flushToDisk(lsm *Config.LSMTree, dil_s int, dil_i int, oneFile bool, comp bool, dict1 *map[int]string, dict2 *map[string]int) {
+func (m *Memtable) flushToDisk(lsm *Config.LSMTree, dil_s int, dil_i int, oneFile bool, sizeComp bool, comp bool, dict1 *map[int]string, dict2 *map[string]int) {
 	fmt.Println("Zapisano na disk.")
 	if oneFile {
 		//citamo podatke prvog nivoa jer u njega flushujemo, osmi sstable na prvom nivou je u fajlu npr SSTable/files/dataFile_1_8
@@ -459,6 +459,7 @@ func (m *Memtable) flushToDisk(lsm *Config.LSMTree, dil_s int, dil_i int, oneFil
 
 		SSTable.MakeDataOneFile(m.GetSortedElems(), OneFileName, dil_s, dil_i, comp, dict1, dict2)
 		lsm.Levels[0]++
+
 	} else {
 		//citamo podatke prvog nivoa jer u njega flushujemo, osmi sstable na prvom nivou je u fajlu npr SSTable/files/dataFile_1_8
 		var DataFileName = "files_SSTable/dataFile_1"
@@ -521,6 +522,12 @@ func (m *Memtable) flushToDisk(lsm *Config.LSMTree, dil_s int, dil_i int, oneFil
 		//MORA DA SE PROSLEDI LISTA SORTIRANIH ENTYJA A NE MEMTABLE
 		SSTable.MakeData(m.GetSortedElems(), DataFileName, IndexFileName, SummaryFileName, BloomFilterFileName, MerkleTreeFileName, dil_s, dil_i, comp, dict1, dict2)
 		lsm.Levels[0]++
-		// SSTable.SizeTieredCompaction(*lsm, dil_s, dil_i, false, comp, dict1, dict2)
+
+	}
+	//KOMPAKCIJA
+	if sizeComp {
+		SSTable.SizeTieredCompaction(*lsm, dil_s, dil_i, oneFile, comp, dict1, dict2)
+	} else {
+		//pozvati levelcomp
 	}
 }
