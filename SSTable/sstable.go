@@ -1062,7 +1062,7 @@ func MakeData(nodes []*Config.Entry, DataFileName string, IndexFileName string, 
 
 	// pravi se merkle tree
 	// flag: Tamara
-	//make_merkle(nodes, MerkleFileName, comp)
+	make_merkle(nodes, MerkleFileName, comp, dict1, dict2)
 
 	file, err := os.OpenFile(DataFileName, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0777)
 	if err != nil {

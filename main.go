@@ -38,23 +38,28 @@ func main() {
 	if err != nil {
 		return
 	}
-	
-	defer Config.SaveDictionary(&dict1)
 
+	
+
+// CONFIG
+	defer Config.SaveDictionary(&dict1)
 	var dict2 map[string]int
 
 	err = Config.ReadDictionary2(&dict2)
-
 	if err != nil {
 		return
 	}
-	
 	defer Config.SaveDictionary2(&dict2)
 
+
+// LSM
 	lsm := Config.NewLMSTree(conf)
 
+
+// MEMTABLE
 	mt := Memtable.NMemtables{}
 	mt.Init(conf.MemtableStructure, int(conf.MemtableSize), conf.MemtableNumber, lsm, conf.DegreeOfDilutionSummary, conf.DegreeOfDilutionIndex, conf.Compression, &dict1, &dict2)
+
 
 	tb := TokenBucket.TokenBucket{}
 	tb.Init(conf.TokenBucketSize, time.Minute)
@@ -71,6 +76,8 @@ func main() {
 			mt.Arr[mt.R].Flush(lsm)
 	*/
 
+
+// WAL
 	wal, err := WriteAheadLog.NewWAL("files_WAL", 60000000000, conf.WalSize) // ne znam ove parametre kako i sta?
 	// inace ovo je putanja do foldera gde bi WAL segmenti mogli biti smesteni, ovaj ogroman broj je kao sat vremena za duration, i eto
 	// low watermark lupih 5, ne znam gde treba conf.WalSize??? ja sam ga lupio da bude segment size?
@@ -94,7 +101,14 @@ func main() {
 	// 	return
 	// }
 
+
+//CACHE
 	cache := Cache.NewLRUCache(int(conf.CacheCapacity))
+
+
+// TOKEN BUCKET
+// dodati
+
 
 	fmt.Println("==================DOBRODOSLI==================")
 	for {

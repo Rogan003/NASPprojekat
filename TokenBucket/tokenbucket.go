@@ -6,6 +6,7 @@ import (
 	"time"
 	"encoding/gob"
 	"os"
+	"bytes"
 )
 
 
@@ -64,7 +65,7 @@ func (tb *TokenBucket) ConsumeToken() bool {
 
 func (tb *TokenBucket) Serialize(fileName string) {
 	var f = ""
-	f += "files%c"
+	//f += "files%c"
 	f += fileName
 	/* ako testiramo ovde, iz custom maina, onda dodati: "../files%" ("../" ispred files) */
 
@@ -86,7 +87,7 @@ func (tb *TokenBucket) Serialize(fileName string) {
 
 func Deserialize(fileName string) *TokenBucket {
 	var f = ""     
-	f += "files%c"
+	//f += "files%c"
 	f += fileName 
 	/* ako testiramo ovde, iz custom maina, onda dodati: "../files%" ("../" ispred files) */
 
@@ -106,6 +107,32 @@ func Deserialize(fileName string) *TokenBucket {
 	}
 
 	return &tb
+}
+
+
+func (tb *TokenBucket) ToBytes() ([]byte, error) {
+	var network bytes.Buffer
+    enc := gob.NewEncoder(&network)
+
+    err := enc.Encode(*tb)
+    if err != nil {
+        return nil, err
+    }
+
+    return network.Bytes(), nil
+}
+
+func (tb *TokenBucket) FromBytes(bytess []byte) error {
+	network := bytes.NewBuffer(bytess)
+    dec := gob.NewDecoder(network)
+
+    err := dec.Decode(&tb)
+
+    if err != nil {
+        return err
+    }
+
+    return nil
 }
 
 

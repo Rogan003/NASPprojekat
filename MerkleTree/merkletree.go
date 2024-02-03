@@ -193,7 +193,7 @@ func (mt1 *MerkleTree) Compare(mt2 *MerkleTree) []DiffPoint {
 func (mt *MerkleTree) Serialize(fileName string) {
 	// *****VAZNO*****
 	var f = ""
-	f += "files%c"
+	//f += "files%c"
 	f += fileName
 	/* ako testiramo ovde, iz custom maina, onda dodati: "../files%" ("../" ispred files) */
 	filePath := fmt.Sprintf(f, os.PathSeparator)
@@ -218,7 +218,7 @@ prethodne hasheve i pravimo ispocetka MerkleTree */
 func (mt *MerkleTree) Deserialize(fileName string) {
 	// *****VAZNO*****
 	var f = ""     
-	f += "files%c"
+	//f += "files%c"
 	f += fileName         // merkletree.gob
 	/* ako testiramo ovde, iz custom maina, onda dodati: "../files%" ("../" ispred files) */
 	filePath := fmt.Sprintf(f, os.PathSeparator)
