@@ -1549,12 +1549,120 @@ func mergeFiles(level int, dataFile *os.File, indexFile *os.File, summaryFile *o
 // znaci kada se flushuje
 func LevelTieredCompaction(lsm Config.LSMTree, dil_s int, dil_i int, oneFile bool, comp bool, dict1 *map[int]string, dict2 *map[string]int) {
 	if lsm.Levels[0] == lsm.MaxSSTables {
-		if oneFile {
-			//levelMergeOneFile(0, lsm, dil_s, dil_i, comp, dict1, dict2)
-		} else {
-			levelMerge(0, lsm, dil_s, dil_i, comp, dict1, dict2)
+		if oneFile{
+			levelMergeOneFile(1, lsm, dil_s, dil_i, comp, dict1, dict2)
+		}else{
+			levelMerge(1, lsm, dil_s, dil_i, comp, dict1, dict2)
 		}
 	}
+}
+
+func levelMergeOneFile(level int, lsm Config.LSMTree, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int){
+	br := lsm.Levels[level]
+
+	//izabrali smo tabelu na visem nivou
+	sstableFile := "files_SSTable/oneFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".db"
+	
+	//treba dobaviti indekse iz sstableFile iz summarija
+	SummaryContent := LoadSummaryOneFile(sstableFile, dil_s, dil_i, comp, dict1,dict2)
+
+	bottomIdx := SummaryContent.FirstKey
+	topIdx := SummaryContent.LastKey
+
+	//naci tabele koje su sa sledeceg nivoa
+
+	sstableFiles,entriesAdd := findOtherTablesOneFile(level+1, bottomIdx, topIdx, lsm, dil_s, dil_i,comp, dict1, dict2)
+
+	//sve tabele dodati u neki niz koji ce se proslediti funkciji koja ce da merguje sve
+
+	num := len(sstableFiles)
+
+	sstableFiles = append(sstableFiles, sstableFile)
+
+	levelMergeFilesOneFile(level, sstableFiles, lsm, num, entriesAdd, dil_s, dil_i, comp, dict1, dict2)
+
+	lsm.Levels[level]--
+	// (dodaj tu jednu iz levela na [level + 1], i oduzmi num merge-ovanih)
+	lsm.Levels[level+1] += 1   // dodaj spojenu koju smo prebacili tu
+	lsm.Levels[level+1] -= num // oduzmi sve koje smo spojili sa tog nivoa
+
+	// ** T: provjeriti da li je okej uslov za level tiered?
+	if lsm.Levels[level+1] == int(float64(lsm.MaxSSTables)*math.Pow(float64(lsm.T), float64(level+1))) && level != lsm.CountOfLevels {
+		// proverava broj fajlova na sledećem nivou, i ne treba da pozove merge ako je na 3. nivou tj ako je nivo 2
+		levelMergeOneFile(level+1, lsm, dil_s, dil_i, comp, dict1, dict2)
+	}
+}
+
+func levelMergeFilesOneFile(level int, sstableFiles []string, lsm Config.LSMTree, num int, entriesAdd []*Config.Entry, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int){
+
+	files, err := openedFiles(sstableFiles)
+	if err != nil{
+		panic(err)
+	}
+
+	var entries []*Config.Entry
+
+	entries = entriesAdd
+
+	var sortedAllEntries []*Config.Entry
+
+	for _, file := range files {
+
+		dataOffset
+	}
+}
+
+func findOtherTablesOneFile(level int, bottomIdx int, topIdx int,lsm Config.LSMTree, dil_s int, dil_i int, comp bool,  dict1 *map[int]string, dict2 *map[string]int) []string{
+
+	var otherFiles []string
+
+	for i := 1 ; i <= lsm.LevelNumber[level]; i++ {
+
+		nextSSTableFile := "files_SSTable/oneFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db"
+
+		summary := LoadSummaryOneFile(nextSSTableFile, dil_s, dil_i, comp, dict1, dict2)
+
+		FirstKey := summary.FirstKey
+		LastKey := summary.LastKey
+
+		if FirstKey >= bottomIdx && FirstKey <= topIdx && LastKey >= bottomIdx && LastKey <= topIdx {
+			otherFiles = append(otherFiles, nextSSTableFile)
+		}else{
+
+			if FirstKey >= bottomIdx && FirstKey <= topIdx{
+				k1 := FirstKey
+				k2 := topIdx
+				k3 := LastKey
+
+				//dodati entriesAddOneFile
+			}
+
+			if LastKey >= bottomIdx && LastKey <= topIdx{
+				k1 := FirstKey
+				k2 := bottomIdx
+				k3 := LastKey
+				//dodati entriesAddOneFile
+			}
+		}
+	}
+	//proveriti kako vratiti entriesAdd ako nema preklapanja ??????
+	return otherFiles, entriesAdd
+}
+
+func LoadSummaryOneFile(FileName string, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) *SStableSummary{
+
+	file, err := os.OpenFile(FileName, os.O_RDWR|os.O_CREATE, 0777)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	summaryOffsetSize := make([]byte, KEY_SIZE_SIZE)
+	_, _ = file.Read(summaryOffsetBytes)
+	summaryOffset := binary.LittleEndian.Uint64(summaryOffsetBytes)
+	file.Seek(int64(summaryOffset), 0)
+	summary := LoadSummary(file)
+	return sumarry
 }
 
 func levelMerge(level int, lsm Config.LSMTree, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) {
@@ -1571,8 +1679,8 @@ func levelMerge(level int, lsm Config.LSMTree, dil_s int, dil_i int, comp bool, 
 	merkleFile := "files_SSTable/merkleFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".db"
 
 	//trazimo opseg indeksa
-	sumarry, _ := os.OpenFile(summaryFile, os.O_RDWR, 0777)
-	SummaryContent := LoadSummary(sumarry)
+	summary, _ := os.OpenFile(summaryFile, os.O_RDWR, 0777)
+	SummaryContent := LoadSummary(summary)
 	//SummaryContent := LoadSummary(summaryFile)
 
 	bottomIdx := SummaryContent.FirstKey
@@ -1660,7 +1768,7 @@ func findOtherTables(level int, bottomIdx string, topIdx string, lsm Config.LSMT
 				// (entriesRewrite - entry za rewrite samo)							 //  80 - 95
 				// (entriesAdd     - entry za dodati u novu, veliku sstaeblu)   //  60 - 80
 				// saljemo "false" jer nije "lower" (uporedjujemo sa "višim" kljucem iz opsega - topIdx ( == 80 u ovom slucaju))
-				entriesAdd = splitSSTable(k1, k2, k3, false, dataFile, indexFile, summaryFile, bloomFile, merkleFile, lsm, dil_s, dil_i, comp, dict1, dict2)
+				entriesAdd = splitSSTable(k1, k2, k3, false, dataFile, indexFile, summaryFile, bloomFile, merkleFile, lsm, dil_s, dil_i, comp, dict1, dict2)			
 			}
 
 			// NPR. ukupan prvi opseg = [30 - 80] ---> [bottomIdx - topIdx]
@@ -1726,11 +1834,12 @@ func splitSSTable(k1 string, k2 string, k3 string, lower bool, dataFile string, 
 	// removeFileName(lsm, summaryFile)
 	// removeFileName(lsm, bloomFile)
 	// removeFileName(lsm, merkleFile)
-	lsm.DataFilesNames = removeFileName(lsm.DataFilesNames, dataFile)
-	lsm.IndexFilesNames = removeFileName(lsm.IndexFilesNames, indexFile)
-	lsm.SummaryFilesNames = removeFileName(lsm.SummaryFilesNames, summaryFile)
-	lsm.BloomFilterFilesNames = removeFileName(lsm.BloomFilterFilesNames, bloomFile)
-	lsm.MerkleTreeFilesNames = removeFileName(lsm.MerkleTreeFilesNames, merkleFile)
+	lsm.DataFilesNames = removeFileName(lsm.DataFilesNames,dataFile)
+	lsm.IndexFilesNames = removeFileName(lsm.IndexFilesNames,indexFile)
+	lsm.SummaryFilesNames = removeFileName(lsm.SummaryFilesNames,summaryFile)
+	lsm.BloomFilterFilesNames = removeFileName(lsm.BloomFilterFilesNames,bloomFile)
+	lsm.MerkleTreeFilesNames = removeFileName(lsm.MerkleTreeFilesNames,merkleFile)
+
 
 	//pravljenje novog sstablea od svih sstableova ovog nivoa koji su sada spojeni
 	//fali merkle???
@@ -1815,7 +1924,7 @@ func GetSplitEntries(dataFile string, borderKey string, lower bool) ([]*Config.E
 	return entriesRewrite, entriesAdd
 }
 
-func levelMergeFiles(level int, dataFiles []string, indexFiles []string, summaryFiles []string, bloomFiles []string, merkleFiles []string, lsm Config.LSMTree, num int, entriesAdd []*Config.Entry, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) {
+func levelMergeFiles(level int, dataFiles []string, indexFiles []string, summaryFiles []string, bloomFiles []string, merkleFiles []string, lsm Config.LSMTree, num int, entriesAdd []*Config.Entry,dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) {
 
 	//levelFiles su SStabele iz narednog nivoa + tabela iz prethodnog
 	levelFiles, err := openFiles(dataFiles)
@@ -1891,11 +2000,12 @@ func levelMergeFiles(level int, dataFiles []string, indexFiles []string, summary
 	// removeFileName(lsm, summaryFileName)
 	// removeFileName(lsm, bloomFileName)
 	// removeFileName(lsm, merkleFileName)
-	lsm.DataFilesNames = removeFileName(lsm.DataFilesNames, dataFileName)
-	lsm.IndexFilesNames = removeFileName(lsm.IndexFilesNames, indexFileName)
-	lsm.SummaryFilesNames = removeFileName(lsm.SummaryFilesNames, summaryFileName)
-	lsm.BloomFilterFilesNames = removeFileName(lsm.BloomFilterFilesNames, bloomFileName)
-	lsm.MerkleTreeFilesNames = removeFileName(lsm.MerkleTreeFilesNames, merkleFileName)
+	lsm.DataFilesNames = removeFileName(lsm.DataFilesNames,dataFileName)
+	lsm.IndexFilesNames = removeFileName(lsm.IndexFilesNames,indexFileName)
+	lsm.SummaryFilesNames = removeFileName(lsm.SummaryFilesNames,summaryFileName)
+	lsm.BloomFilterFilesNames = removeFileName(lsm.BloomFilterFilesNames,bloomFileName)
+	lsm.MerkleTreeFilesNames = removeFileName(lsm.MerkleTreeFilesNames,merkleFileName)
+
 
 	//pravljenje novog sstablea od svih sstableova ovog nivoa koji su sada spojeni
 	//fali merkle???
@@ -1929,11 +2039,11 @@ func levelMergeFiles(level int, dataFiles []string, indexFiles []string, summary
 		// removeFileName(lsm, summaryFiles[i])
 		// removeFileName(lsm, bloomFiles[i])
 		// removeFileName(lsm, merkleFiles[i])
-		lsm.DataFilesNames = removeFileName(lsm.DataFilesNames, dataFiles[i])
-		lsm.IndexFilesNames = removeFileName(lsm.IndexFilesNames, indexFiles[i])
-		lsm.SummaryFilesNames = removeFileName(lsm.SummaryFilesNames, summaryFiles[i])
-		lsm.BloomFilterFilesNames = removeFileName(lsm.BloomFilterFilesNames, bloomFiles[i])
-		lsm.MerkleTreeFilesNames = removeFileName(lsm.MerkleTreeFilesNames, merkleFiles[i])
+		lsm.DataFilesNames = removeFileName(lsm.DataFilesNames,dataFiles[i])
+		lsm.IndexFilesNames = removeFileName(lsm.IndexFilesNames,indexFiles[i])
+		lsm.SummaryFilesNames = removeFileName(lsm.SummaryFilesNames,summaryFiles[i])
+		lsm.BloomFilterFilesNames = removeFileName(lsm.BloomFilterFilesNames,bloomFiles[i])
+		lsm.MerkleTreeFilesNames = removeFileName(lsm.MerkleTreeFilesNames,merkleFiles[i])
 
 	}
 
@@ -2067,3 +2177,4 @@ func renameFiles(files []string, targetFile string, num int) {
 		}
 	}
 }
+
