@@ -1353,12 +1353,9 @@ func readMerge(file *os.File) *Config.Entry {
 	if err != nil {
 		return nil
 	}
-	println("key_size_start: ", KEY_SIZE_START)
-	println("tombstone_start: ", TOMBSTONE_START)
-
-	tombstone := binary.LittleEndian.Uint64(info[TOMBSTONE_START:])
+	tombstone := info[TOMBSTONE_START:KEY_SIZE_START]
 	//ako je tombstone 1 procitaj odmah sledeci
-	if tombstone == 1 {
+	if tombstone[0] == 1 {
 		info := make([]byte, KEY_SIZE_SIZE)
 		_, err = file.Read(info)
 		if err != nil {
