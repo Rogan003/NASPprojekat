@@ -39,9 +39,7 @@ func main() {
 		return
 	}
 
-	
-
-// CONFIG
+	// CONFIG
 	defer Config.SaveDictionary(&dict1)
 	var dict2 map[string]int
 
@@ -51,28 +49,26 @@ func main() {
 	}
 	defer Config.SaveDictionary2(&dict2)
 
-
-// LSM
+	// LSM
 	lsm := Config.NewLMSTree(conf)
 
-
-// MEMTABLE
+	// MEMTABLE
 	mt := Memtable.NMemtables{}
 	mt.Init(conf.MemtableStructure, int(conf.MemtableSize), conf.MemtableNumber, lsm, conf.DegreeOfDilutionSummary, conf.DegreeOfDilutionIndex, conf.Compression, &dict1, &dict2)
 
-/*
-	// interval moze biti "1m", "1h", "3h", "1d"  itd... (u configu)
-	interval, err := time.ParseDuration(conf.TokenBucketInterval)
-	if err != nil {
-		fmt.Println("GRESKA kod parsiranja intervala (tokenBucket main.go):", err)
-		return
-	}
-	tb := TokenBucket.TokenBucket{}
-	tb.Init(conf.TokenBucketSize, interval)
+	/*
+		// interval moze biti "1m", "1h", "3h", "1d"  itd... (u configu)
+		interval, err := time.ParseDuration(conf.TokenBucketInterval)
+		if err != nil {
+			fmt.Println("GRESKA kod parsiranja intervala (tokenBucket main.go):", err)
+			return
+		}
+		tb := TokenBucket.TokenBucket{}
+		tb.Init(conf.TokenBucketSize, interval)
 
-	//u config.json "token_bucket_interval": "1m",
+		//u config.json "token_bucket_interval": "1m",
 
-*/
+	*/
 
 	tb := TokenBucket.TokenBucket{}
 	tb.Init(conf.TokenBucketSize, time.Minute)
@@ -89,8 +85,7 @@ func main() {
 			mt.Arr[mt.R].Flush(lsm)
 	*/
 
-
-// WAL
+	// WAL
 	wal, err := WriteAheadLog.NewWAL("files_WAL", 60000000000, conf.WalSize) // ne znam ove parametre kako i sta?
 	// inace ovo je putanja do foldera gde bi WAL segmenti mogli biti smesteni, ovaj ogroman broj je kao sat vremena za duration, i eto
 	// low watermark lupih 5, ne znam gde treba conf.WalSize??? ja sam ga lupio da bude segment size?
@@ -114,13 +109,11 @@ func main() {
 	// 	return
 	// }
 
-
-//CACHE
+	//CACHE
 	cache := Cache.NewLRUCache(int(conf.CacheCapacity))
 
-
-// TOKEN BUCKET
-// dodati
+	// TOKEN BUCKET
+	// dodati
 
 	/*for i := 3; i <= 10; i++ {
 		key := "test"
@@ -129,7 +122,7 @@ func main() {
 		value := []byte(v)
 		Put(wal, &mt, cache, key, value, &tb)
 	}
-*/
+	*/
 
 	fmt.Println("==================DOBRODOSLI==================")
 	for {
@@ -187,7 +180,7 @@ func main() {
 				continue
 			}
 
-			elem, done := Get(&mt, cache, key, &tb, lsm, conf.Compression, &dict1)
+			elem, done := Get(&mt, cache, key, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
 
 			if done {
 				fmt.Printf("Vrednost pod kljucem %s: %s\n", key, elem)
@@ -237,7 +230,7 @@ func main() {
 					key := scanner.Text()
 					key_real := "bf_" + key
 
-					_, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1)
+					_, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
 
 					if done {
 						fmt.Println("Greska! BF sa datim kljucem vec postoji!")
@@ -279,7 +272,7 @@ func main() {
 					scanner.Scan()
 					key := scanner.Text()
 					key_real := "bf_" + key
-					elem, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1)
+					elem, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
 
 					if done {
 						bf, err := DecodeBF(elem)
@@ -319,7 +312,7 @@ func main() {
 					scanner.Scan()
 					key := scanner.Text()
 					key_real := "bf_" + key
-					elem, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1)
+					elem, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
 
 					if done {
 						bf, err := DecodeBF(elem)
@@ -385,7 +378,7 @@ func main() {
 					scanner.Scan()
 					key := scanner.Text()
 					key_real := "hll_" + key
-					_, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1)
+					_, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
 
 					if done {
 						fmt.Println("Greska! HLL sa datim kljucem vec postoji! ")
@@ -419,7 +412,7 @@ func main() {
 					scanner.Scan()
 					key := scanner.Text()
 					key_real := "hll_" + key
-					elem, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1)
+					elem, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
 
 					if done {
 						hll, err := DecodeHLL(elem)
@@ -459,7 +452,7 @@ func main() {
 					scanner.Scan()
 					key := scanner.Text()
 					key_real := "hll_" + key
-					elem, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1)
+					elem, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
 
 					if done {
 						hll, err := DecodeHLL(elem)
@@ -514,7 +507,7 @@ func main() {
 				scanner.Scan()
 				key := scanner.Text()
 				key_real := "cms_" + key
-				_, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1)
+				_, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
 
 				if done {
 					fmt.Println("Greska! CMS sa datim kljucem vec postoji!")
@@ -552,7 +545,7 @@ func main() {
 				scanner.Scan()
 				key := scanner.Text()
 				key_real := "cms_" + key
-				elem, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1)
+				elem, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
 
 				if done {
 					cms, err := DecodeCMS(elem)
@@ -590,7 +583,7 @@ func main() {
 				scanner.Scan()
 				key := scanner.Text()
 				key_real := "cms_" + key
-				elem, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1)
+				elem, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
 
 				if done {
 					cms, err := DecodeCMS(elem)
@@ -643,7 +636,7 @@ func main() {
 				scanner.Scan()
 				text := scanner.Text()
 				key_real := "sh_" + text
-				_, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1)
+				_, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
 				if done {
 					fmt.Println("Greska! Text vec postoji!")
 					continue
@@ -657,11 +650,11 @@ func main() {
 					}
 				}
 			case 2:
-				fmt.Println("Unesite jedan tekst za racunanje hemingove distance: ")
+				go fmt.Println("Unesite jedan tekst za racunanje hemingove distance: ")
 				scanner.Scan()
 				text1 := scanner.Text()
 				key_real1 := "sh_" + text1
-				elem1, done1 := Get(&mt, cache, key_real1, &tb, lsm, conf.Compression, &dict1)
+				elem1, done1 := Get(&mt, cache, key_real1, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
 				var textBytes1 [16]byte
 				if done1 {
 					copy(textBytes1[:], elem1)
@@ -673,7 +666,7 @@ func main() {
 				scanner.Scan()
 				text2 := scanner.Text()
 				key_real2 := "sh_" + text2
-				elem2, done2 := Get(&mt, cache, key_real2, &tb, lsm, conf.Compression, &dict1)
+				elem2, done2 := Get(&mt, cache, key_real2, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
 				var textBytes2 [16]byte
 				if done2 {
 					copy(textBytes2[:], elem2)
@@ -730,11 +723,11 @@ func main() {
 		}
 	}
 	/*
-	err = Config.SaveDictionary(&dict)
+		err = Config.SaveDictionary(&dict)
 
-	if err != nil {
-		return
-	}
+		if err != nil {
+			return
+		}
 	*/
 }
 
