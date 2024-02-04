@@ -1751,11 +1751,11 @@ func merge(level int, lsm *Config.LSMTree, dil_s int, dil_i int, comp bool, dict
 	bloomFile, _ := os.Create("files_SSTable/bloomFilterFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".db")
 	merkleFile, _ := os.Create("files_SSTable/merkleTreeFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".db")
 
-	lsm.DataFilesNames = append(lsm.DataFilesNames, dataFile.Name())
-	lsm.IndexFilesNames = append(lsm.IndexFilesNames, indexFile.Name())
-	lsm.SummaryFilesNames = append(lsm.SummaryFilesNames, summaryFile.Name())
-	lsm.BloomFilterFilesNames = append(lsm.BloomFilterFilesNames, bloomFile.Name())
-	lsm.MerkleTreeFilesNames = append(lsm.MerkleTreeFilesNames, merkleFile.Name())
+	lsm.DataFilesNames = append([]string{dataFile.Name()}, lsm.DataFilesNames...)
+	lsm.IndexFilesNames = append([]string{indexFile.Name()}, lsm.IndexFilesNames...)
+	lsm.SummaryFilesNames = append([]string{summaryFile.Name()}, lsm.SummaryFilesNames...)
+	lsm.BloomFilterFilesNames = append([]string{bloomFile.Name()}, lsm.BloomFilterFilesNames...)
+	lsm.MerkleTreeFilesNames = append([]string{merkleFile.Name()}, lsm.MerkleTreeFilesNames...)
 	mergeFiles(level, dataFile, indexFile, summaryFile, bloomFile, merkleFile, lsm, dil_s, dil_i, comp, dict1, dict2)
 	lsm.Levels[level-1] = 0
 	lsm.Levels[level]++

@@ -194,7 +194,7 @@ func main() {
 	/*
 
 	SKRIPTA 2:
-
+	
 	for i := 1;i <= 100000;i++ {
 		key := "test" + strconv.Itoa(i % 50000)
 		value := []byte(strconv.Itoa(i))
