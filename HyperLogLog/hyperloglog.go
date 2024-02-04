@@ -5,8 +5,9 @@ import (
 	"math/bits"
 	"hash/fnv"
 	"os"
-	"encoding/gob"
-	"bytes"
+	"encoding/binary"
+	//"fmt"
+	//"bytes"
 	//"runtime"
 )
 
@@ -54,7 +55,7 @@ func (hll *HLL) Add(elem []byte){
 	if uint8(value) > hll.Reg[index]{
 		hll.Reg[index]= uint8(value)
 	}
-	//fmt.Println(value,";",index)
+	
 }
 
 //brisanje postojece instance
@@ -108,53 +109,77 @@ func (hll *HLL) Serialize(path string) {
 	}
 	defer file.Close()
 
-	encoder := gob.NewEncoder(file)
-	err = encoder.Encode(hll)
-
+	bytess,_ := hll.ToBytes()
+	_, err = file.Write(bytess)
 	if err!=nil{
 		panic(err)
 	}
 }
 
 
-func (hll *HLL) Deserialize(path string){
+func (hll *HLL) Deserialize(path string) error{
 	file,err:= os.OpenFile(path, os.O_RDWR | os.O_CREATE,0666)
 	if(err != nil){
 		panic(err)
 	}
 	defer file.Close()
 
-	decoder := gob.NewDecoder(file)
 	file.Seek(0,0)
-	for{
-		err = decoder.Decode(hll)
-		if err!= nil{
-			break
-		}
+
+	fi, err2 := file.Stat()
+	if err2 != nil {
+		return err2
+	}
+
+	data := make([]byte, fi.Size())
+	_, err = file.Read(data)
+	if err != nil {
+		return err
 	}
 	
+	hll.FromBytes(data)
+
+	return nil
 }
 
 func (hll *HLL)ToBytes() ([]byte, error) {
-	var network bytes.Buffer
-	enc := gob.NewEncoder(&network)
+	
+	data := make([]byte, 0)
+	mBytes := make([]byte , 8)
+	binary.LittleEndian.PutUint64(mBytes, hll.M)
+	data  = append(data, mBytes...)
 
-	err := enc.Encode(*hll)
-	if err != nil {
-		return nil, err
+	pBytes := make([]byte, 1)
+	pBytes[0] = byte(hll.P)
+	data = append(data, pBytes...)
+
+	for _, r := range hll.Reg{
+		
+		regBytes := make([]byte, 1)
+		regBytes[0] = byte(r)
+		data = append(data, regBytes... )
 	}
-
-	return network.Bytes(), nil
+	
+	return data, nil
 }
 
 func (hll *HLL)FromBytes(b []byte) error {
-	network:= bytes.NewBuffer(b)
-	dec := gob.NewDecoder(network)
+	
+	hll.M = binary.LittleEndian.Uint64(b[:8])
+	b = b[8:]
 
-	err := dec.Decode(&hll)
+	hll.P = b[0]
+	b = b[1:]
 
-	if err != nil{
-		return err
+	var newReg []uint8
+	for len(b) != 0{
+		
+		reg := uint8(b[0])
+		b = b[1:]
+		newReg = append(newReg, reg)
+		
 	}
+	hll.Reg = newReg
+	
 	return nil
 }
