@@ -545,6 +545,21 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 		lastElem := "{"
 
 		for works {
+			/*
+			if len(lastDeletedElems) > (pageSize + memtable.N + len(sstables)) && lastElem != "{" {
+				keys := make([]string, 0)
+
+				for key := range lastDeletedElems {
+					if key < lastElem {
+						keys = append(keys, key)
+					}
+				}
+
+				for _, key := range keys {
+					delete(lastDeletedElems, key)
+				}
+			}*/
+
 			keys := make([]string, pageSize)
 			vals := make([][]byte, pageSize)
 
