@@ -1,8 +1,7 @@
 package CountMinSketch
 
 import (
-	"bytes"
-	"encoding/gob"
+	"encoding/binary"
 	"math"
 	"os"
 )
@@ -72,9 +71,8 @@ func (cms *CMS) Serialize(path string) {
 	}
 	defer file.Close()
 
-	encoder := gob.NewEncoder(file)
-	err = encoder.Encode(cms)
-
+	bytess, _ := cms.ToBytes()
+	_, err = file.Write(bytess)
 	if err != nil {
 		panic(err)
 	}
@@ -89,36 +87,81 @@ func (cms *CMS) Deserialize(path string) error {
 	}
 	defer file.Close()
 
-	decoder := gob.NewDecoder(file)
 	file.Seek(0, 0)
-	for {
-		err = decoder.Decode(cms)
-		if err != nil {
-			return err
-		}
+
+	fi, err2 := file.Stat()
+	if err2 != nil {
+		return err2
 	}
+
+	data := make([]byte, fi.Size())
+	_, err = file.Read(data)
+	if err != nil {
+		return err
+	}
+
+	cms.FromBytes(data)
+
+	return nil
 }
 
 func (cms *CMS) ToBytes() ([]byte, error) {
-	var network bytes.Buffer
-	enc := gob.NewEncoder(&network)
+	data := make([]byte, 0)
 
-	err := enc.Encode(*cms)
-	if err != nil {
-		return nil, err
+	kBytes := make([]byte, 8)
+	binary.LittleEndian.PutUint64(kBytes, uint64(cms.K))
+	data = append(data, kBytes...)
+
+	mBytes := make([]byte, 8)
+	binary.LittleEndian.PutUint64(mBytes, uint64(cms.M))
+	data = append(data, mBytes...)
+
+	for _, hash := range cms.HashArray {
+		hashSizeBytes := make([]byte, 8)
+		binary.LittleEndian.PutUint64(hashSizeBytes, uint64(len(hash.Seed)))
+		data = append(data, hashSizeBytes...)
+
+		data = append(data, hash.Seed...)
 	}
 
-	return network.Bytes(), nil
+	for _, hash := range cms.Data {
+		hashSizeInt := make([]byte, 8)
+		binary.LittleEndian.PutUint64(hashSizeInt, uint64(len(hash)))
+		data = append(data, hashSizeInt...)
+		byteSlice := make([]byte, len(hash)*4) // Assuming int is 4 bytes
+		for i, num := range hash {
+			binary.LittleEndian.PutUint32(byteSlice[i*4:], uint32(num))
+		}
+		data = append(data, byteSlice...)
+	}
+	return data, nil
 }
 
 func (cms *CMS) FromBytes(bytess []byte) error {
-	network := bytes.NewBuffer(bytess)
-	dec := gob.NewDecoder(network)
+	cms.K = int(binary.LittleEndian.Uint64(bytess[:8]))
+	bytess = bytess[8:]
 
-	err := dec.Decode(&cms)
+	cms.M = int(binary.LittleEndian.Uint64(bytess[:8]))
+	bytess = bytess[8:]
 
-	if err != nil {
-		return err
+	for i := 0; i < int(cms.K); i++ {
+		length := binary.LittleEndian.Uint64(bytess[:8])
+		bytess = bytess[8:]
+
+		cms.HashArray[i] = HashWithSeed{Seed: bytess[:length]}
+		bytess = bytess[length:]
+	}
+
+	for i := 0; i < int(cms.M); i++ {
+		length := binary.LittleEndian.Uint64(bytess[:8])
+		bytess = bytess[8:]
+
+		intSlice := make([]int, length)
+		for j := 0; j < len(intSlice); j++ {
+			intSlice[j] = int(binary.LittleEndian.Uint32(bytess[:4]))
+			bytess = bytess[4:]
+		}
+		cms.Data[i] = intSlice
 	}
 
 	return nil
