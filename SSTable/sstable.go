@@ -713,6 +713,37 @@ func findInIndexInOneFile(startPosition uint64, endPosition uint64, key string, 
 	}
 }
 
+func ScanIndexInOneFile(startPosition uint64, endPosition uint64, key string, file *os.File) int64 {
+	// od date pozicije citamo
+	_, err := file.Seek(int64(startPosition), 0)
+	if err != nil {
+		log.Fatal(err)
+	}
+	offset, err := file.Seek(0, io.SeekCurrent)
+
+	var lastPos int64 = -1
+	for {
+		currentKey, position := ReadFromIndex(file)
+		println("Currentkey u indexu ", currentKey, "  position ", position)
+		offset, err = file.Seek(0, io.SeekCurrent)
+		if offset == int64(endPosition) {
+			return uint64(lastPos)
+		}
+
+		if currentKey > key { // valjda nece nikada biti da je lastPos prazan?
+			if lastPos == -1 {
+				notFound := -1
+				return uint64(notFound)
+			}
+			return uint64(lastPos)
+		}
+
+		lastPos = position
+	}
+
+	return -1
+}
+
 // vraca offset za dataFile, nakon sto nadje u indexFile
 func findInIndex(startPosition uint64, key string, IndexFileName string) uint64 {
 
@@ -1025,6 +1056,14 @@ func ReadDataOneFile(position int64, endPosition int64, DataFileName string, rea
 			if err != nil {
 				log.Fatal(err)
 				return []byte{}, []byte{}, false, false
+			}
+
+			currentOffset, err := file.Seek(0, io.SeekCurrent)
+			if err != nil {
+				fmt.Println("Error getting file offset:", err)
+			}
+			if endPosition == currentOffset {
+				return []byte{}, []byte{}, true, false // mozda neka prijava gresaka npr za kraj fajla?
 			}
 
 			info := make([]byte, KEY_SIZE_START)
