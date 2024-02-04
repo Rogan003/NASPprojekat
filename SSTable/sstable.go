@@ -532,13 +532,16 @@ func GetFromOneFile(key string, FileName string, comp bool, dict *map[int]string
 	// ako je trazeni kljuc u tom opsegu, podatak bi trebalo da se nalazi u ovom sstable
 	if summary.FirstKey <= key && key <= summary.LastKey {
 		println("USAO u opseg")
+		println("prvi kljuc ", summary.FirstKey)
+		println("zadnji kljuc ", summary.LastKey)
 		var indexPosition = indexOffset
 		for {
-			println(indexPosition)
+			//println(indexPosition)
 			//citamo velicinu kljucax
 			keySizeBytes := make([]byte, KEY_SIZE_SIZE)
 			_, err := file.Read(keySizeBytes)
 			if err == io.EOF {
+				println(" getfromone file 1")
 				dataPosition := findInIndexInOneFile(indexPosition, summaryOffset, key, file)
 				notFound := -1
 				if dataPosition == uint64(notFound) {
@@ -560,7 +563,12 @@ func GetFromOneFile(key string, FileName string, comp bool, dict *map[int]string
 				panic(err)
 			}
 
+			println("key value, ", string(keyValue))
+			println("nas key ", key)
+			println("bool ", string(keyValue) > key)
+
 			if string(keyValue) > key {
+				println(" getfromone file 2")
 				//OVO RESITI
 				dataPosition := findInIndexInOneFile(indexPosition, summaryOffset, key, file)
 				notFound := -1
@@ -571,10 +579,12 @@ func GetFromOneFile(key string, FileName string, comp bool, dict *map[int]string
 				_, data, _, del := ReadDataOneFile(int64(dataPosition), int64(indexOffset), FileName, key, comp, dict)
 				return data, del
 			} else {
+				println(" getfromone file 3")
 				// citanje pozicije za taj kljuc u indexFile
 				positionBytes := make([]byte, KEY_SIZE_SIZE)
 				_, err = file.Read(positionBytes)
 				position := binary.LittleEndian.Uint64(positionBytes)
+				println("position key Value ", position)
 				indexPosition = position
 				if err != nil {
 					if err == io.EOF {
@@ -676,7 +686,7 @@ func Get(key string, SummaryFileName string, IndexFileName string, DataFileName 
 			}
 		}
 	}
-	println("OVDE2")
+	//println("OVDE2")
 	return []byte{}, false
 }
 
@@ -688,15 +698,21 @@ func findInIndexInOneFile(startPosition uint64, endPosition uint64, key string, 
 		log.Fatal(err)
 	}
 	offset, err := file.Seek(0, io.SeekCurrent)
-	print("Nakon pomeranja ", offset)
+	println("Nakon pomeranja ", offset)
 	var lastPos int64 = -1
 	for {
 		currentKey, position := ReadFromIndex(file)
 		println("Currentkey u indexu ", currentKey, "  position ", position)
-		offset, err = file.Seek(0, io.SeekCurrent)
-		if offset == int64(endPosition) {
+		if position == -1 {
+			if lastPos == -1 {
+				notFound := -1
+				return uint64(notFound)
+			}
+
 			return uint64(lastPos)
 		}
+		offset, err = file.Seek(0, io.SeekCurrent)
+
 		if currentKey == key {
 			return uint64(position)
 		}
@@ -708,8 +724,12 @@ func findInIndexInOneFile(startPosition uint64, endPosition uint64, key string, 
 			}
 			return uint64(lastPos)
 		}
-
 		lastPos = position
+		if offset == int64(endPosition) {
+			return uint64(lastPos)
+		}
+
+		//lastPos = position
 	}
 }
 
@@ -1554,7 +1574,7 @@ func MakeDataOneFile(nodes []*Config.Entry, FileName string, dil_s int, dil_i in
 	//bloomfilter
 	bfsize := make([]byte, KEY_SIZE_SIZE)
 	bf := BloomFilter.BloomFilter{}
-	println("Velicina nodes ", len(nodes))
+	//println("Velicina nodes ", len(nodes))
 	bf.Init(len(nodes), 0.01)
 
 	for _, val := range nodes {
@@ -1610,7 +1630,9 @@ func MakeDataOneFile(nodes []*Config.Entry, FileName string, dil_s int, dil_i in
 	var offsetIndexList []int64
 	indexOffset, err := FileLength(file)
 	for i, el := range offsetList {
+		//println("nodes ", nodes[i].Transaction.Key)
 		if i%dil_i == 0 {
+			//println("pise u index ", nodes[i].Transaction.Key)
 			indexOff := AddToIndex(el, nodes[i].Transaction.Key, file)
 			offsetIndexList = append(offsetIndexList, indexOff)
 		}
@@ -1630,7 +1652,7 @@ func MakeDataOneFile(nodes []*Config.Entry, FileName string, dil_s int, dil_i in
 	file.Write([]byte(nodes[len(nodes)-1].Transaction.Key))
 	for i, el := range offsetIndexList {
 		if i%dil_s == 0 {
-			AddToSummary(el, nodes[i].Transaction.Key, file)
+			AddToSummary(el, nodes[i*dil_i].Transaction.Key, file)
 		}
 	}
 
@@ -2598,7 +2620,7 @@ func levelMergeFilesOneFile(level int, sstableFiles []string, lsm *Config.LSMTre
 	var sortedAllEntries []*Config.Entry
 	var eofList []int
 
-	for _, file := range files{
+	for _, file := range files {
 		dataOffsetBytes := make([]byte, KEY_SIZE_SIZE)
 		indexOffsetBytes := make([]byte, KEY_SIZE_SIZE)
 		//preskace summary offset
@@ -2613,20 +2635,19 @@ func levelMergeFilesOneFile(level int, sstableFiles []string, lsm *Config.LSMTre
 		file.Seek(int64(dataOffset), 0)
 	}
 
-
 	for i, file := range files {
-		entry := readMergeOneFile(file,eofList[i], comp, dict1)
+		entry := readMergeOneFile(file, eofList[i], comp, dict1)
 		entries = append(entries, entry)
 	}
 	for {
-		if areAllNil(entries){
+		if areAllNil(entries) {
 			break
 		}
 		minKeyArray, minEntry := findMinKeyEntry(entries)
 		sortedAllEntries = append(sortedAllEntries, minEntry)
 		//citamo naredne entye za fajlove koji su bili na min entry
 		for _, index := range minKeyArray {
-			newEntry := readMergeOneFile(files[index],eofList[index], comp, dict1)
+			newEntry := readMergeOneFile(files[index], eofList[index], comp, dict1)
 			entries[index] = newEntry
 		}
 	}
@@ -2637,25 +2658,25 @@ func levelMergeFilesOneFile(level int, sstableFiles []string, lsm *Config.LSMTre
 	oneFileName := sstableFiles[last]
 
 	err = os.Remove(oneFileName)
-	if err != nil{
+	if err != nil {
 		log.Fatal(err)
 	}
 
 	lsm.OneFilesNames = removeFileName(lsm.OneFilesNames, oneFileName)
 
-	if len(sstableFiles) == 1{
+	if len(sstableFiles) == 1 {
 		br := lsm.Levels[level] + 1
 		oneFileName = "files_SSTable/oneFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".db"
-	}else{
+	} else {
 		oneFileName = sstableFiles[0]
 	}
 
-	MakeDataOneFile(sortedAllEntries ,oneFileName, dil_s, dil_i, comp, dict1, dict2)
+	MakeDataOneFile(sortedAllEntries, oneFileName, dil_s, dil_i, comp, dict1, dict2)
 
-	if len(sstableFiles) == 1{
+	if len(sstableFiles) == 1 {
 		lsm.OneFilesNames = append(lsm.OneFilesNames, oneFileName)
-	}else{
-		for i := 1; i < len(sstableFiles) ; i++{
+	} else {
+		for i := 1; i < len(sstableFiles); i++ {
 
 			err = os.Remove(sstableFiles[i])
 			if err != nil {
@@ -2663,8 +2684,8 @@ func levelMergeFilesOneFile(level int, sstableFiles []string, lsm *Config.LSMTre
 			}
 			lsm.OneFilesNames = removeFileName(lsm.DataFilesNames, sstableFiles[i])
 
-			sort.Slice(lsm.OneFilesNames, func(i,j int) bool{
-				return compareFilenames(i,j, lsm.OneFilesNames)
+			sort.Slice(lsm.OneFilesNames, func(i, j int) bool {
+				return compareFilenames(i, j, lsm.OneFilesNames)
 			})
 
 			renameFiles(lsm.OneFilesNames, oneFileName, num)
@@ -2672,7 +2693,6 @@ func levelMergeFilesOneFile(level int, sstableFiles []string, lsm *Config.LSMTre
 		}
 	}
 }
-
 
 func findOtherTablesOneFile(level int, bottomIdx string, topIdx string, lsm *Config.LSMTree, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) ([]string, []*Config.Entry) {
 
@@ -2756,7 +2776,6 @@ func splitSSTableOneFile(k1 string, k2 string, k3 string, lower bool, currentOne
 	return entriesAdd
 }
 
-
 // vraca sve entrije, ali splitovane u dva dijela prema kljucu, zbog preklapanja opsega
 // filename  - naziv fajla nad kojim radimo
 // borderKey - kljuc nakon koga splitujemo
@@ -2781,15 +2800,14 @@ func GetSplitEntriesOneFile(OneFileName string, borderKey string, lower bool, co
 	var entriesRewrite []*Config.Entry // svi procitani entry koji ce se rewrite u novu malu SSTabelu
 	var entriesAdd []*Config.Entry     // svi procitani entry koji ce se spojiti sa velikom tabelom
 
-
 	for {
-		 entry := readMergeOneFile(file, int(indexOffset), comp, dict)
+		entry := readMergeOneFile(file, int(indexOffset), comp, dict)
 
-		 if entry == nil {
-			  break
-		 }
+		if entry == nil {
+			break
+		}
 
-		 if lower { // manji kljuc od border kljuca ide u rewrite
+		if lower { // manji kljuc od border kljuca ide u rewrite
 			if entry.Transaction.Key >= borderKey {
 				entriesAdd = append(entriesAdd, entry) // 30 - 40
 			} else {
@@ -2808,7 +2826,6 @@ func GetSplitEntriesOneFile(OneFileName string, borderKey string, lower bool, co
 	return entriesRewrite, entriesAdd
 }
 
-
 func LoadSummaryOneFile(FileName string, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) *SStableSummary {
 
 	file, err := os.OpenFile(FileName, os.O_RDWR|os.O_CREATE, 0777)
@@ -2824,7 +2841,6 @@ func LoadSummaryOneFile(FileName string, dil_s int, dil_i int, comp bool, dict1 
 	summary := LoadSummary(file)
 	return summary
 }
-
 
 func levelMerge(level int, lsm *Config.LSMTree, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) {
 	//treba da se izabere tabela koja se merguje
@@ -3016,7 +3032,7 @@ func splitSSTable(k1 string, k2 string, k3 string, lower bool, dataFile string, 
 	lsm.MerkleTreeFilesNames = removeFileName(lsm.MerkleTreeFilesNames, merkleFile)
 
 	//pravljenje novog sstablea od svih sstableova ovog nivoa koji su sada spojeni
-	
+
 	MakeData(entriesRewrite, dataFile, indexFile, summaryFile, bloomFile, merkleFile, dil_s, dil_i, comp, dict1, dict2)
 	return entriesAdd
 }
@@ -3170,7 +3186,7 @@ func levelMergeFiles(level int, dataFiles []string, indexFiles []string, summary
 	}
 
 	// takodje brisemo i iz lsm ovo isto kao gore
-	
+
 	lsm.DataFilesNames = removeFileName(lsm.DataFilesNames, dataFileName)
 	lsm.IndexFilesNames = removeFileName(lsm.IndexFilesNames, indexFileName)
 	lsm.SummaryFilesNames = removeFileName(lsm.SummaryFilesNames, summaryFileName)
@@ -3178,7 +3194,7 @@ func levelMergeFiles(level int, dataFiles []string, indexFiles []string, summary
 	lsm.MerkleTreeFilesNames = removeFileName(lsm.MerkleTreeFilesNames, merkleFileName)
 
 	//pravljenje novog sstablea od svih sstableova ovog nivoa koji su sada spojeni
-	
+
 	if len(dataFiles) == 1 { //ako nije nadjen ni jedan dodatni, dodaj ga na kraj
 		br := lsm.Levels[level] + 1
 		dataFileName = "files_SSTable/dataFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".db"
@@ -3187,7 +3203,7 @@ func levelMergeFiles(level int, dataFiles []string, indexFiles []string, summary
 		bloomFileName = "files_SSTable/bloomFilterFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".db"
 		merkleFileName = "files_SSTable/merkleTreeFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".db"
 	} else {
-		
+
 		dataFileName = dataFiles[0]
 		indexFileName = indexFiles[0]
 		summaryFileName = summaryFiles[0]
