@@ -188,6 +188,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 
 		sstables := lsm.DataFilesNames
 		indexes := make([]int, len(sstables))
+		lastDeletedElems := make(map[string]bool)
 
 		// postavljamo sve na -1 kako bi znali ako neki sstable nema range koji nama treba
 		for index, _ := range indexes {
@@ -400,7 +401,10 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 							position += n
 							key := (*dict)[int(num)]
 
-							if key2 < key {
+							if key >= key1 && key <= key2 {
+								indexes[index] = oldPos
+								break
+							} else if key2 < key {
 								indexes[index] = -1
 								break
 							}
@@ -477,7 +481,6 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 
 							key_size := binary.LittleEndian.Uint64(info3)
 
-							position += SSTable.VALUE_SIZE_START + int(key_size)
 							// cita bajtove podatka, odnosno key data
 							data := make([]byte, key_size)
 							_, err = file.Read(data)
@@ -487,10 +490,15 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 							}
 							key := data[:key_size]
 
-							if key2 < string(key) {
+							if string(key) >= key1 && string(key) <= key2 {
+								indexes[index] = position
+								break
+							} else if key2 < string(key) {
 								indexes[index] = -1
 								break
 							}
+
+							position += SSTable.VALUE_SIZE_START + int(key_size)
 
 							continue
 						}
@@ -591,8 +599,21 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 									}
 
 									keyHelp := memElems[mem_indexes[i%memtable.N]].Transaction.Key
+									
+									var foundElem bool = false
+									if memElems[mem_indexes[i%memtable.N]].Tombstone {
+										lastDeletedElems[keyHelp] = true
+										foundElem = true
 
-									if keyHelp != lastElem && keyHelp < keys[in] && keyHelp <= key2 && !memElems[mem_indexes[i%memtable.N]].Tombstone && !(keyHelp[0:3] == "bf_" || keyHelp[0:4] == "cms_" || keyHelp[0:4] == "hll_" || keyHelp[0:3] == "sh_" || keyHelp[0:3] == "tb_") {
+									} else {
+										_, found := lastDeletedElems[keyHelp]
+
+										if found {
+											foundElem = true
+										}
+									}
+
+									if !foundElem && keyHelp != lastElem && keyHelp < keys[in] && keyHelp <= key2 && !memElems[mem_indexes[i%memtable.N]].Tombstone && !(keyHelp[0:3] == "bf_" || keyHelp[0:4] == "cms_" || keyHelp[0:4] == "hll_" || keyHelp[0:3] == "sh_" || keyHelp[0:3] == "tb_") {
 										keys[in] = keyHelp
 										vals[in] = memElems[mem_indexes[i%memtable.N]].Transaction.Value
 										lastElemsTables[lastIter+in] = ("M" + strconv.Itoa(i%memtable.N))
@@ -615,14 +636,27 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 								}
 
 								for {
-									keyHelp, valHelp, end := SSTable.ReadAnyData(int64(indexes[index]), value, comp, dict)
+									keyHelp, valHelp, end, del := SSTable.ReadAnyData(int64(indexes[index]), value, comp, dict)
 
 									if end {
 										indexes[index] = -1
 										break
 									}
 
-									if string(keyHelp) != lastElem && string(keyHelp) < keys[in] && string(keyHelp) <= key2 && !bytes.Equal(keyHelp, []byte{}) && !(string(keyHelp)[0:3] == "bf_" || string(keyHelp)[0:4] == "cms_" || string(keyHelp)[0:4] == "hll_" || string(keyHelp)[0:3] == "sh_" || string(keyHelp)[0:3] == "tb_") {
+									var foundElem bool = false
+									if del {
+										foundElem = true
+										lastDeletedElems[string(keyHelp)] = true
+
+									} else {
+										_, found := lastDeletedElems[string(keyHelp)]
+
+										if found {
+											foundElem = true
+										}
+									}
+
+									if !foundElem && string(keyHelp) != lastElem && string(keyHelp) < keys[in] && string(keyHelp) <= key2 && !bytes.Equal(keyHelp, []byte{}) && !(string(keyHelp)[0:3] == "bf_" || string(keyHelp)[0:4] == "cms_" || string(keyHelp)[0:4] == "hll_" || string(keyHelp)[0:3] == "sh_" || string(keyHelp)[0:3] == "tb_") {
 										keys[in] = string(keyHelp)
 										vals[in] = valHelp
 										lastElemsTables[lastIter+in] = ("S" + strconv.Itoa(index))
@@ -794,7 +828,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 								vals[i] = memElems[lastElemsPos[lastIter+i]].Transaction.Value
 							} else if lastElemsTables[lastIter+i] != "" {
 								pos, _ := strconv.Atoi(lastElemsTables[lastIter+i][1:])
-								keyHelp, valHelp, _ := SSTable.ReadAnyData(int64(lastElemsPos[lastIter+i]), sstables[pos], comp, dict)
+								keyHelp, valHelp, _, _ := SSTable.ReadAnyData(int64(lastElemsPos[lastIter+i]), sstables[pos], comp, dict)
 
 								keys[i] = string(keyHelp)
 								vals[i] = valHelp
@@ -821,7 +855,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 							vals[i] = memElems[lastElemsPos[lastIter-pageSize+i]].Transaction.Value
 						} else {
 							pos, _ := strconv.Atoi(lastElemsTables[lastIter-pageSize+i][1:])
-							keyHelp, valHelp, _ := SSTable.ReadAnyData(int64(lastElemsPos[lastIter-pageSize+i]), sstables[pos], comp, dict)
+							keyHelp, valHelp, _, _ := SSTable.ReadAnyData(int64(lastElemsPos[lastIter-pageSize+i]), sstables[pos], comp, dict)
 
 							keys[i] = string(keyHelp)
 							vals[i] = valHelp

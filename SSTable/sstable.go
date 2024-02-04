@@ -845,25 +845,25 @@ func LoadSummary(summary *os.File) *SStableSummary {
 	}
 }
 
-func ReadAnyData(position int64, DataFileName string, comp bool, dict1 *map[int]string) ([]byte, []byte, bool) {
+func ReadAnyData(position int64, DataFileName string, comp bool, dict1 *map[int]string) ([]byte, []byte, bool, bool) {
 	file, err := os.OpenFile(DataFileName, os.O_RDWR, 0777)
 	if err != nil {
 		log.Fatal(err)
-		return []byte{}, []byte{}, false
+		return []byte{}, []byte{}, false, false
 	}
 	defer file.Close()
 	// pomeramo se na poziciju u dataFile gde je nas podatak
 	_, err = file.Seek(position, 0)
 	if err != nil {
 		log.Fatal(err)
-		return []byte{}, []byte{}, false
+		return []byte{}, []byte{}, false, false
 	}
 
 	if comp {
 		info := make([]byte, KEY_SIZE_START)
 		_, err = file.Read(info)
 		if err != nil && err != io.EOF {
-			return []byte{}, []byte{}, true
+			return []byte{}, []byte{}, true, false
 		}
 
 		num, n := binary.Uvarint(info[TIMESTAMP_START:])
@@ -871,21 +871,38 @@ func ReadAnyData(position int64, DataFileName string, comp bool, dict1 *map[int]
 		tombstone := info[TIMESTAMP_START+n]
 
 		if tombstone == 1 {
-			return []byte{}, []byte{}, false
+			info = make([]byte, 10)
+
+			position += int64(TIMESTAMP_START + n + 1)
+			_, err = file.Seek(position, 0)
+			if err != nil {
+				log.Fatal(err)
+				return []byte{}, []byte{}, false, true
+			}
+
+			_, err = file.Read(info)
+			if err != nil {
+				return []byte{}, []byte{}, true, true
+			}
+
+			num, _ := binary.Uvarint(info)
+			key := (*dict1)[int(num)]
+
+			return []byte(key), []byte{}, false, true
 		}
 
 		position += int64(TIMESTAMP_START + n + 1)
 		_, err = file.Seek(position, 0)
 		if err != nil {
 			log.Fatal(err)
-			return []byte{}, []byte{}, false
+			return []byte{}, []byte{}, false, false
 		}
 
 		info = make([]byte, VALUE_SIZE_SIZE)
 
 		_, err = file.Read(info)
 		if err != nil {
-			return []byte{}, []byte{}, true
+			return []byte{}, []byte{}, true, false
 		}
 
 		num, n = binary.Uvarint(info)
@@ -895,14 +912,14 @@ func ReadAnyData(position int64, DataFileName string, comp bool, dict1 *map[int]
 		_, err = file.Seek(position, 0)
 		if err != nil {
 			log.Fatal(err)
-			return []byte{}, []byte{}, false
+			return []byte{}, []byte{}, false, false
 		}
 
 		info = make([]byte, 10)
 
 		_, err = file.Read(info)
 		if err != nil {
-			return []byte{}, []byte{}, true
+			return []byte{}, []byte{}, true, false
 		}
 
 		num, n = binary.Uvarint(info)
@@ -912,16 +929,16 @@ func ReadAnyData(position int64, DataFileName string, comp bool, dict1 *map[int]
 		_, err = file.Seek(position, 0)
 		if err != nil {
 			log.Fatal(err)
-			return []byte{}, []byte{}, false
+			return []byte{}, []byte{}, false, false
 		}
 
 		data := make([]byte, value_size)
 		_, err = file.Read(data)
 		if err != nil {
-			return []byte{}, []byte{}, false // mozda neka prijava gresaka npr za kraj fajla?
+			return []byte{}, []byte{}, false, false // mozda neka prijava gresaka npr za kraj fajla?
 		}
 
-		return []byte(key), data, false
+		return []byte(key), data, false, false
 
 	} else {
 		// cita bajtove podatka DO key i value u info
@@ -929,20 +946,35 @@ func ReadAnyData(position int64, DataFileName string, comp bool, dict1 *map[int]
 		info := make([]byte, KEY_SIZE_START)
 		_, err = file.Read(info)
 		if err != nil && err != io.EOF {
-			return []byte{}, []byte{}, true // mozda neka prijava gresaka npr za kraj fajla?
+			return []byte{}, []byte{}, true, false // mozda neka prijava gresaka npr za kraj fajla?
 		}
 
 		tombstone := info[TOMBSTONE_START] // jel ovo sad prepoznaje obrisane
 
 		//ako je tombstone 1 ne citaj dalje
 		if tombstone == 1 {
-			return []byte{}, []byte{}, false
+			info3 := make([]byte, KEY_SIZE_SIZE)
+			_, err = file.Read(info3)
+			if err != nil {
+				return []byte{}, []byte{}, false, true // mozda neka prijava gresaka npr za kraj fajla?
+			}
+
+			key_size := binary.LittleEndian.Uint64(info3)
+
+			// cita bajtove podatka, odnosno key data
+			data := make([]byte, key_size)
+			_, err = file.Read(data)
+			if err != nil {
+				return []byte{}, []byte{}, false, true // mozda neka prijava gresaka npr za kraj fajla?
+			}
+			
+			return []byte(data), []byte{}, false, true
 		}
 		//ako je tombstone 0 onda citaj sve
 		info2 := make([]byte, KEY_START-KEY_SIZE_START)
 		_, err = file.Read(info2)
 		if err != nil {
-			return []byte{}, []byte{}, false // mozda neka prijava gresaka npr za kraj fajla?
+			return []byte{}, []byte{}, false, false // mozda neka prijava gresaka npr za kraj fajla?
 		}
 
 		key_size := binary.LittleEndian.Uint64(info2[:KEY_SIZE_SIZE])
@@ -953,11 +985,11 @@ func ReadAnyData(position int64, DataFileName string, comp bool, dict1 *map[int]
 		data := make([]byte, key_size+value_size)
 		_, err = file.Read(data)
 		if err != nil {
-			return []byte{}, []byte{}, false // mozda neka prijava gresaka npr za kraj fajla?
+			return []byte{}, []byte{}, false, false // mozda neka prijava gresaka npr za kraj fajla?
 		}
 		key := data[:key_size]
 		val := data[key_size : key_size+value_size]
-		return key, val, false
+		return key, val, false, false
 	}
 }
 
