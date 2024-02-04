@@ -136,19 +136,51 @@ func main() {
 	}()
 
 	/*
-		for i := 1;i < 100;i++ {
+			for i := 1;i < 100;i++ {
+				key := "test" + strconv.Itoa(i)
+				value := []byte(strconv.Itoa(i))
+
+				done := Put(wal, &mt, cache, key, value, &tb, true)
+
+				if i % 4 == 0 {
+					_, done := Delete(wal, &mt, cache, key, &tb, lsm, conf.Compression, &dict1)
+
+					if !done {
+						fmt.Println("Neuspesno brisanje!")
+					}
+				}
+
+				if done {
+					fmt.Printf("Uspesno dodat/azuriran kljuc %s!\n", key)
+				} else {
+					fmt.Printf("GRESKA! Neuspesno dodavanje kljuca %s!\n", key)
+				}
+			}
+
+
+		for i := 1; i < 105; i++ {
 			key := "test" + strconv.Itoa(i)
+
+			// proslijedi na kraju false ako hoces da aktiviras token bucket
+			elem, done := Get(wal, &mt, cache, key, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
+
+			if done {
+				fmt.Printf("Vrednost pod kljucem %s: %s\n", key, elem)
+			} else {
+				fmt.Printf("GRESKA! Neuspesno dobavljanje kljuca %s!\n", key)
+			}
+		}
+	*/
+
+	/*
+
+		SKRIPTA 1:
+
+		for i := 1;i <= 100000;i++ {
+			key := "test" + strconv.Itoa(i % 100)
 			value := []byte(strconv.Itoa(i))
 
 			done := Put(wal, &mt, cache, key, value, &tb, true)
-
-			if i % 4 == 0 {
-				_, done := Delete(wal, &mt, cache, key, &tb, lsm, conf.Compression, &dict1)
-
-				if !done {
-					fmt.Println("Neuspesno brisanje!")
-				}
-			}
 
 			if done {
 				fmt.Printf("Uspesno dodat/azuriran kljuc %s!\n", key)
@@ -157,56 +189,24 @@ func main() {
 			}
 		}
 
-
-	for i := 1; i < 105; i++ {
-		key := "test" + strconv.Itoa(i)
-
-		// proslijedi na kraju false ako hoces da aktiviras token bucket
-		elem, done := Get(wal, &mt, cache, key, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
-
-		if done {
-			fmt.Printf("Vrednost pod kljucem %s: %s\n", key, elem)
-		} else {
-			fmt.Printf("GRESKA! Neuspesno dobavljanje kljuca %s!\n", key)
-		}
-	}
 	*/
 
 	/*
 
-	SKRIPTA 1:
+		SKRIPTA 2:
 
-	for i := 1;i <= 100000;i++ {
-		key := "test" + strconv.Itoa(i % 100)
-		value := []byte(strconv.Itoa(i))
+		for i := 1;i <= 100000;i++ {
+			key := "test" + strconv.Itoa(i % 50000)
+			value := []byte(strconv.Itoa(i))
 
-		done := Put(wal, &mt, cache, key, value, &tb, true)
+			done := Put(wal, &mt, cache, key, value, &tb, true)
 
-		if done {
-			fmt.Printf("Uspesno dodat/azuriran kljuc %s!\n", key)
-		} else {
-			fmt.Printf("GRESKA! Neuspesno dodavanje kljuca %s!\n", key)
+			if done {
+				fmt.Printf("Uspesno dodat/azuriran kljuc %s!\n", key)
+			} else {
+				fmt.Printf("GRESKA! Neuspesno dodavanje kljuca %s!\n", key)
+			}
 		}
-	}
-
-	*/
-
-	/*
-
-	SKRIPTA 2:
-	
-	for i := 1;i <= 100000;i++ {
-		key := "test" + strconv.Itoa(i % 50000)
-		value := []byte(strconv.Itoa(i))
-
-		done := Put(wal, &mt, cache, key, value, &tb, true)
-
-		if done {
-			fmt.Printf("Uspesno dodat/azuriran kljuc %s!\n", key)
-		} else {
-			fmt.Printf("GRESKA! Neuspesno dodavanje kljuca %s!\n", key)
-		}
-	}
 
 	*/
 
@@ -574,196 +574,201 @@ func main() {
 			}
 
 		case 6:
-			fmt.Println("1. Kreiraj CMS")
-			fmt.Println("2. Dodaj u CMS")
-			fmt.Println("3. Provera ucestalosti u CMS")
-			fmt.Println("4. Obrisi CMS")
-			fmt.Println("x. Vrati se")
-			fmt.Println("Unesite opciju: ")
-			scanner := bufio.NewScanner(os.Stdin)
-			scanner.Scan()
-			option := scanner.Text()
-			if option == "x" {
-				break
-			}
-			optionInt, _ := strconv.Atoi(option)
-
-			switch optionInt {
-			case 1:
-				fmt.Println("Unesite kljuc cms: ")
+			for {
+				fmt.Println("1. Kreiraj CMS")
+				fmt.Println("2. Dodaj u CMS")
+				fmt.Println("3. Provera ucestalosti u CMS")
+				fmt.Println("4. Obrisi CMS")
+				fmt.Println("x. Vrati se")
+				fmt.Println("Unesite opciju: ")
+				scanner := bufio.NewScanner(os.Stdin)
 				scanner.Scan()
-				key := scanner.Text()
-				key_real := "cms_" + key
-				_, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
-
-				if done {
-					fmt.Println("Greska! CMS sa datim kljucem vec postoji!")
-					continue
+				option := scanner.Text()
+				if option == "x" {
+					break
 				}
+				optionInt, _ := strconv.Atoi(option)
 
-				fmt.Println("Unesite sirinu cms-a: ")
-				var width float64
-				_, err := fmt.Scanf("%g", &width)
-				if err != nil {
-					fmt.Println("Greska pri unosu!")
-					continue
-				}
-				fmt.Println("Unesite broj hash funkcija cms-a: ")
-				var depth float64
-				_, err = fmt.Scanf("%g", &depth)
-				if err != nil {
-					fmt.Println("Greska pri unosu!")
-					continue
-				}
-				bytes, isOkay := CreateCMS(width, depth)
-				if isOkay {
-					done = false
-				} else {
-					done = Put(wal, &mt, cache, key_real, bytes, &tb, false)
-				}
+				switch optionInt {
+				case 1:
+					fmt.Println("Unesite kljuc cms: ")
+					scanner.Scan()
+					key := scanner.Text()
+					key_real := "cms_" + key
+					_, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
 
-				if done {
-					fmt.Printf("Uspesno dodat kljuc cms %s!\n", key)
-				} else {
-					fmt.Printf("GRESKA! Neuspesno dodavanje kljuca cms %s!\n", key)
-				}
-			case 2:
-				fmt.Println("Unesite kljuc cms: ")
-				scanner.Scan()
-				key := scanner.Text()
-				key_real := "cms_" + key
-				elem, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
-
-				if done {
-					cms, err := DecodeCMS(elem)
-
-					if err {
-						fmt.Printf("GRESKA! Neuspesno dobavljanje kljuca cms %s!\n", key)
+					if done {
+						fmt.Println("Greska! CMS sa datim kljucem vec postoji!")
 						continue
 					}
-					fmt.Println("Unesite element koji zelite dodati u cms: ")
-					scanner.Scan()
-					value := scanner.Text()
 
-					cms.AddToCMS(value)
-
-					bytes, err := EncodeCMS(cms)
-
-					var done bool
-
-					if err {
+					fmt.Println("Unesite sirinu cms-a: ")
+					var width float64
+					_, err := fmt.Scanf("%g", &width)
+					if err != nil {
+						fmt.Println("Greska pri unosu!")
+						continue
+					}
+					fmt.Println("Unesite broj hash funkcija cms-a: ")
+					var depth float64
+					_, err = fmt.Scanf("%g", &depth)
+					if err != nil {
+						fmt.Println("Greska pri unosu!")
+						continue
+					}
+					bytes, isOkay := CreateCMS(width, depth)
+					if isOkay {
 						done = false
 					} else {
 						done = Put(wal, &mt, cache, key_real, bytes, &tb, false)
 					}
 
 					if done {
-						fmt.Printf("Uspesno dodat element %s u cms!\n", value)
+						fmt.Printf("Uspesno dodat kljuc cms %s!\n", key)
 					} else {
-						fmt.Printf("GRESKA! Neuspesno dodavanje elementa %s u cms!\n", value)
+						fmt.Printf("GRESKA! Neuspesno dodavanje kljuca cms %s!\n", key)
 					}
-				} else {
-					fmt.Printf("GRESKA! Neuspesno dobavljanje kljuca %s!\n", key)
-				}
-			case 3:
-				fmt.Println("Unesite kljuc cms: ")
-				scanner.Scan()
-				key := scanner.Text()
-				key_real := "cms_" + key
-				elem, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, false)
-
-				if done {
-					cms, err := DecodeCMS(elem)
-
-					if err {
-						fmt.Printf("GRESKA! Neuspesno dobavljanje kljuca cms %s!\n", key)
-						continue
-					}
-
-					fmt.Println("Unesite element koji zelite proveriti u cms: ")
+				case 2:
+					fmt.Println("Unesite kljuc cms: ")
 					scanner.Scan()
-					value := scanner.Text()
+					key := scanner.Text()
+					key_real := "cms_" + key
+					elem, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
 
-					min := cms.SearchCSM(value)
+					if done {
+						cms, err := DecodeCMS(elem)
 
-					fmt.Printf("Min broj pojavljivanja elementa u cms je %d\n", min)
+						if err {
+							fmt.Printf("GRESKA! Neuspesno dobavljanje kljuca cms %s!\n", key)
+							continue
+						}
+						fmt.Println("Unesite element koji zelite dodati u cms: ")
+						scanner.Scan()
+						value := scanner.Text()
 
-				} else {
-					fmt.Printf("GRESKA! Neuspesno dobavljanje kljuca %s!\n", key)
+						cms.AddToCMS(value)
+
+						bytes, err := EncodeCMS(cms)
+
+						var done bool
+
+						if err {
+							done = false
+						} else {
+							done = Put(wal, &mt, cache, key_real, bytes, &tb, false)
+						}
+
+						if done {
+							fmt.Printf("Uspesno dodat element %s u cms!\n", value)
+						} else {
+							fmt.Printf("GRESKA! Neuspesno dodavanje elementa %s u cms!\n", value)
+						}
+					} else {
+						fmt.Printf("GRESKA! Neuspesno dobavljanje kljuca %s!\n", key)
+					}
+				case 3:
+					fmt.Println("Unesite kljuc cms: ")
+					scanner.Scan()
+					key := scanner.Text()
+					key_real := "cms_" + key
+					elem, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, false)
+
+					if done {
+						cms, err := DecodeCMS(elem)
+
+						if err {
+							fmt.Printf("GRESKA! Neuspesno dobavljanje kljuca cms %s!\n", key)
+							continue
+						}
+
+						fmt.Println("Unesite element koji zelite proveriti u cms: ")
+						scanner.Scan()
+						value := scanner.Text()
+
+						min := cms.SearchCSM(value)
+
+						fmt.Printf("Min broj pojavljivanja elementa u cms je %d\n", min)
+
+					} else {
+						fmt.Printf("GRESKA! Neuspesno dobavljanje kljuca %s!\n", key)
+					}
+				case 4:
+					fmt.Println("Unesite kljuc cms: ")
+					scanner.Scan()
+					key := scanner.Text()
+					key_real := "cms_" + key
+					_, done := Delete(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1)
+					if done {
+						fmt.Printf("Uspesno obrisan element pod kljucem %s!\n", key)
+					} else {
+						fmt.Printf("GRESKA! Neuspesno brisanje kljuca %s!\n", key)
+					}
+				default:
+					fmt.Println("Nepostojeca opcija. Pokusajte ponovo.")
 				}
-			case 4:
-				fmt.Println("Unesite kljuc cms: ")
-				scanner.Scan()
-				key := scanner.Text()
-				key_real := "cms_" + key
-				_, done := Delete(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1)
-				if done {
-					fmt.Printf("Uspesno obrisan element pod kljucem %s!\n", key)
-				} else {
-					fmt.Printf("GRESKA! Neuspesno brisanje kljuca %s!\n", key)
-				}
-			default:
-				fmt.Println("Nepostojeca opcija. Pokusajte ponovo.")
 			}
 
 		case 7:
-			fmt.Println("1. Cuvanje fingerprinta")
-			fmt.Println("2. Hemingova udaljenost")
-			fmt.Println("Unesite opciju: ")
-			scanner := bufio.NewScanner(os.Stdin)
-			scanner.Scan()
-			option := scanner.Text()
-			if option == "x" {
-				break
-			}
-			optionInt, _ := strconv.Atoi(option)
-			switch optionInt {
-			case 1:
-				fmt.Println("Unesite zeljeni tekst za simhash: ")
-				scanner.Scan()
-				text := scanner.Text()
-				key_real := "sh_" + text
-				_, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
-				if done {
-					fmt.Println("Greska! Text vec postoji!")
-					continue
-				} else {
-					textBytes := SimHash.SimHash(text)
-					done = Put(wal, &mt, cache, key_real, textBytes[:], &tb, false)
-					if done {
-						fmt.Printf("Uspesno dodat element u simhash!\n")
-					} else {
-						fmt.Printf("GRESKA! Neuspesno dodavanje elementa u simhash!\n")
-					}
-				}
-			case 2:
-				go fmt.Println("Unesite jedan tekst za racunanje hemingove distance: ")
-				scanner.Scan()
-				text1 := scanner.Text()
-				key_real1 := "sh_" + text1
-				elem1, done1 := Get(wal, &mt, cache, key_real1, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
-				var textBytes1 [16]byte
-				if done1 {
-					copy(textBytes1[:], elem1)
-				} else {
-					textBytes1 = SimHash.SimHash(text1)
-				}
+			for {
 
-				fmt.Println("Unesite drugi tekst za racunanje hemingove distance: ")
+				fmt.Println("1. Cuvanje fingerprinta")
+				fmt.Println("2. Hemingova udaljenost")
+				fmt.Println("Unesite opciju: ")
+				scanner := bufio.NewScanner(os.Stdin)
 				scanner.Scan()
-				text2 := scanner.Text()
-				key_real2 := "sh_" + text2
-				elem2, done2 := Get(wal, &mt, cache, key_real2, &tb, lsm, conf.Compression, &dict1, conf.OneFile, false)
-				var textBytes2 [16]byte
-				if done2 {
-					copy(textBytes2[:], elem2)
-				} else {
-					textBytes2 = SimHash.SimHash(text2)
+				option := scanner.Text()
+				if option == "x" {
+					break
 				}
-				distance := SimHash.HammingDistance(textBytes1, textBytes2)
-				fmt.Printf("Hemingova distanca za trazene tekstove je %d\n", distance)
-			default:
-				fmt.Println("Nepostojeca opcija. Pokusajte ponovo.")
+				optionInt, _ := strconv.Atoi(option)
+				switch optionInt {
+				case 1:
+					fmt.Println("Unesite zeljeni tekst za simhash: ")
+					scanner.Scan()
+					text := scanner.Text()
+					key_real := "sh_" + text
+					_, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
+					if done {
+						fmt.Println("Greska! Text vec postoji!")
+						continue
+					} else {
+						textBytes := SimHash.SimHash(text)
+						done = Put(wal, &mt, cache, key_real, textBytes[:], &tb, false)
+						if done {
+							fmt.Printf("Uspesno dodat element u simhash!\n")
+						} else {
+							fmt.Printf("GRESKA! Neuspesno dodavanje elementa u simhash!\n")
+						}
+					}
+				case 2:
+					go fmt.Println("Unesite jedan tekst za racunanje hemingove distance: ")
+					scanner.Scan()
+					text1 := scanner.Text()
+					key_real1 := "sh_" + text1
+					elem1, done1 := Get(wal, &mt, cache, key_real1, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
+					var textBytes1 [16]byte
+					if done1 {
+						copy(textBytes1[:], elem1)
+					} else {
+						textBytes1 = SimHash.SimHash(text1)
+					}
+
+					fmt.Println("Unesite drugi tekst za racunanje hemingove distance: ")
+					scanner.Scan()
+					text2 := scanner.Text()
+					key_real2 := "sh_" + text2
+					elem2, done2 := Get(wal, &mt, cache, key_real2, &tb, lsm, conf.Compression, &dict1, conf.OneFile, false)
+					var textBytes2 [16]byte
+					if done2 {
+						copy(textBytes2[:], elem2)
+					} else {
+						textBytes2 = SimHash.SimHash(text2)
+					}
+					distance := SimHash.HammingDistance(textBytes1, textBytes2)
+					fmt.Printf("Hemingova distanca za trazene tekstove je %d\n", distance)
+				default:
+					fmt.Println("Nepostojeca opcija. Pokusajte ponovo.")
+				}
 			}
 
 		case 8:
