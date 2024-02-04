@@ -534,6 +534,6 @@ func (m *Memtable) flushToDisk(lsm *Config.LSMTree, dil_s int, dil_i int, oneFil
 		//SSTable.SizeTieredCompaction(lsm, dil_s, dil_i, oneFile, comp, dict1, dict2)
 	} else {
 		println("Usao2")
-		//SSTable.LevelTieredCompaction(*lsm, dil_s, dil_i, oneFile, comp, dict1, dict2)
+		//SSTable.LevelTieredCompaction(lsm, dil_s, dil_i, oneFile, comp, dict1, dict2)
 	}
 }
