@@ -455,7 +455,7 @@ func main() {
 				scannerhll.Scan()
 				optionhll := scannerhll.Text()
 				if optionhll == "x" {
-					continue
+					break
 				}
 
 				optionhllInt, _ := strconv.Atoi(optionhll)
