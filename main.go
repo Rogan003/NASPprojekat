@@ -768,38 +768,40 @@ func main() {
 			// redni broj  - rbr
 			cnt := lsm.CountOfLevels // broj nivoa
 
+			scanner := bufio.NewScanner(os.Stdin)
 			var levelStr, rbrStr string
-			fmt.Printf("Unesite broj nivoa (levela): ")
-			fmt.Scanf("%s", &levelStr)
-
-			level, err := strconv.Atoi(levelStr) // npr. 1. level (kod nas 0.)
-			if err != nil {
+		
+			fmt.Print("Unesite broj nivoa (levela): ")
+			scanner.Scan()
+			levelStr = scanner.Text()
+		
+			level, err := strconv.Atoi(levelStr)
+			if err != nil || level < 1 || level > cnt {
 				fmt.Print("GRESKA! pogresan unos nivoa.\n")
 				continue
 			}
-			if level < 1 || level > cnt {
-				fmt.Print("GRESKA! pogresan unos nivoa.\n")
-				continue
-			}
-
-			fmt.Printf("Unesite redni broj sstabele: ")
-			fmt.Scanf("%s", &rbrStr)
-
-			rbr, err := strconv.Atoi(rbrStr) // npr. 3. tabela (kod nas 2.)
-			if err != nil {
+		
+			fmt.Print("Unesite redni broj sstabele: ")
+			scanner.Scan()
+			rbrStr = scanner.Text()
+		
+			rbr, err := strconv.Atoi(rbrStr)
+			if err != nil || rbr < 1 {
 				fmt.Print("GRESKA! pogresan unos rednog broja sstabele.\n")
 				continue
 			}
 			brSST := lsm.Levels[level-1]
-			if rbr < 1 || rbr > brSST {
+			if rbr > brSST {
 				fmt.Print("GRESKA! pogresan unos rednog broja sstabele.\n")
 				continue
 			}
-
-			level--
+		
+			//level--
 			key1 := strconv.Itoa(level)
-			rbr--
+			//rbr--
 			key2 := strconv.Itoa(rbr)
+
+			//fmt.Println(key1, "   ", key2)
 
 			mtFileName := "files_SSTable/merkleTreeFile_" + key1 + "_" + key2 + ".db"
 			oneFileName := "files_SSTable/oneFile_" + key1 + "_" + key2 + ".db"
@@ -838,6 +840,7 @@ func main() {
 	// ZA VESU OVDE DA DOVRSI FUNKCIJE
 			// 'postoji' = 1 ---> ne radi se o oneFile
 			if postoji == 1 {   
+				fmt.Println("\n\n\nPRVI\n\n\n")
 				// ucitavamo trenutni merkle te sstabele za citanje
 				mtCurrent := MerkleTree.MerkleTree{}
 				mtCurrent.Deserialize(mtFileName)
@@ -852,7 +855,22 @@ func main() {
 				mtNew := MerkleTree.MerkleTree{}
 				mtNew.Init(data)
 
-					// arrayOfDiffPoints := mtCurrent.Compare(mtNew)   // []DiffPoint
+				arrayOfDiffPoints := mtCurrent.Compare(&mtNew)   // []DiffPoint
+				if (len(arrayOfDiffPoints) == 0) {
+					fmt.Print("INFO: nema razlika u ova dva fajla!\n")
+					continue
+				}
+				fmt.Println("RAZLIKE:")
+				for _, diffPoint := range arrayOfDiffPoints {
+					// Print information about each field
+					fmt.Printf("Nivo stabla: %d", diffPoint.Level)
+					fmt.Printf("  |  Redni broj: %d\n", diffPoint.Pos)
+					fmt.Printf("Podatak prije izmjene: %v\n", *diffPoint.Node1)
+					fmt.Printf("Podatak nakon izmjene: %v\n", *diffPoint.Node2)
+					fmt.Println("-----------")
+				}
+				fmt.Println("INFO: Ukupno razlika:", len(arrayOfDiffPoints) / 2)
+
 				// dalje cu ja ispisati sta su greske navodno, a moze se ispisati i
 				// cijela promjenljiva cini mi se
  
@@ -863,8 +881,7 @@ func main() {
 				// treba izvuci merkle dio iz tog oneFile
 
 				oneFileName := "files_SSTable/oneFile_" + key1 + "_" + key2 + ".db"
-
-				// mt := SSTable.OneFileMerkle(oneFileName)   // --> dobijamo cijeli merkle
+				mtCurrent := SSTable.OneFileMerkle(oneFileName)   // --> dobijamo cijeli merkle
 
 				//	'data' je [][]byte iz oneFile sstabele
 				data := SSTable.OneFileDataToBytes(oneFileName, conf.Compression)  // --> dobijamo [][]byte
@@ -872,7 +889,22 @@ func main() {
 				mtNew := MerkleTree.MerkleTree{}
 				mtNew.Init(data)
 
-					// arrayOfDiffPoints := mtCurrent.Compare(mtNew)   // []DiffPoint
+				arrayOfDiffPoints := mtCurrent.Compare(&mtNew)   // []DiffPoint
+				if (len(arrayOfDiffPoints) == 0) {
+					fmt.Print("\nINFO: nema razlika u ova dva fajla!\n")
+					continue
+				}
+				fmt.Println("RAZLIKE:")
+				for _, diffPoint := range arrayOfDiffPoints {
+					// Print information about each field
+					fmt.Printf("Nivo stabla: %d", diffPoint.Level)
+					fmt.Printf("  |  Redni broj: %d\n", diffPoint.Pos)
+					fmt.Printf("Podatak prije izmjene: %v\n", *diffPoint.Node1)
+					fmt.Printf("Podatak nakon izmjene: %v\n", *diffPoint.Node2)
+					fmt.Println("-----------")
+				}
+				fmt.Println("\nINFO: Ukupno razlika:", len(arrayOfDiffPoints) / 2)
+
 				// dalje cu ja ispisati sta su greske navodno, a moze se ispisati i
 				// cijela promjenljiva cini mi se
 			}
