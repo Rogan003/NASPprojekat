@@ -125,9 +125,6 @@ func (cms *CMS) ToBytes() ([]byte, error) {
 	}
 
 	for _, hash := range cms.Data {
-		hashSizeInt := make([]byte, 8)
-		binary.LittleEndian.PutUint64(hashSizeInt, uint64(len(hash)))
-		data = append(data, hashSizeInt...)
 		byteSlice := make([]byte, len(hash)*4) // Assuming int is 4 bytes
 		for i, num := range hash {
 			binary.LittleEndian.PutUint32(byteSlice[i*4:], uint32(num))
@@ -152,11 +149,8 @@ func (cms *CMS) FromBytes(bytess []byte) error {
 		bytess = bytess[length:]
 	}
 
-	for i := 0; i < int(cms.M); i++ {
-		length := binary.LittleEndian.Uint64(bytess[:8])
-		bytess = bytess[8:]
-
-		intSlice := make([]int, length)
+	for i := 0; i < int(cms.K); i++ {
+		intSlice := make([]int, cms.M)
 		for j := 0; j < len(intSlice); j++ {
 			intSlice[j] = int(binary.LittleEndian.Uint32(bytess[:4]))
 			bytess = bytess[4:]

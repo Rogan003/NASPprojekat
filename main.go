@@ -713,6 +713,7 @@ func main() {
 
 				fmt.Println("1. Cuvanje fingerprinta")
 				fmt.Println("2. Hemingova udaljenost")
+				fmt.Println("x. Vrati se")
 				fmt.Println("Unesite opciju: ")
 				scanner := bufio.NewScanner(os.Stdin)
 				scanner.Scan()
