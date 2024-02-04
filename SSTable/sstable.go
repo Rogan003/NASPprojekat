@@ -16,9 +16,9 @@ import (
 	"io"
 	"log"
 
-	// "math"
+	"math"
 	"os"
-	// "sort"
+	"sort"
 )
 
 const (
@@ -2139,62 +2139,70 @@ func levelMerge(level int, lsm *Config.LSMTree, dil_s int, dil_i int, comp bool,
 	//pa da se potraze ostale tabele u sledecem nivou
 
 	//za file na visem nivou-uzimamo poslednju tabelu jer eto??
-	println("KOMPAKCIJA POKRENUTA")
-	br := lsm.Levels[level-1]
+	for{
+		println("KOMPAKCIJA POKRENUTA")
+		println("LEVEL NA POCETKU :", level)
+		br := lsm.Levels[level-1]
 
-	dataFile := "files_SSTable/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".db"
-	indexFile := "files_SSTable/indexFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".db"
-	summaryFile := "files_SSTable/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".db"
-	bloomFile := "files_SSTable/bloomFilterFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".db"
-	merkleFile := "files_SSTable/merkleTreeFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".db"
+		dataFile := "files_SSTable/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".db"
+		indexFile := "files_SSTable/indexFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".db"
+		summaryFile := "files_SSTable/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".db"
+		bloomFile := "files_SSTable/bloomFilterFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".db"
+		merkleFile := "files_SSTable/merkleTreeFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".db"
 
-	//trazimo opseg indeksa
-	summary, _ := os.OpenFile(summaryFile, os.O_RDWR, 0777)
-	SummaryContent := LoadSummary(summary)
-	summary.Close()
-	//SummaryContent := LoadSummary(summaryFile)
+		//trazimo opseg indeksa
+		summary, _ := os.OpenFile(summaryFile, os.O_RDWR, 0777)
+		SummaryContent := LoadSummary(summary)
+		summary.Close()
+		//SummaryContent := LoadSummary(summaryFile)
 
-	bottomIdx := SummaryContent.FirstKey
-	topIdx := SummaryContent.LastKey
+		bottomIdx := SummaryContent.FirstKey
+		topIdx := SummaryContent.LastKey
 
-	//nizovi putanja SSTable-ova kojima odgovaraju indeksi
-	dataFiles, indexFiles, summaryFiles, bloomFiles, merkleFiles, entriesAdd := findOtherTables(level+1, bottomIdx, topIdx, lsm, dil_s, dil_i, comp, dict1, dict2)
-	fmt.Printf("datafiles: %v\n", dataFiles)
-	// ---------------------------------------------------------------------------------
-	// splitovali smo sve sstable koje se preklapaju u opsegu do ovde
-	// one koje ne odgovaraju smo vec "prepisali" na ista mjesta
-	// a ostale entryje sa odgovarajucim kljucevima smo pokupili i stavili u "entriesAdd"
-	// -> sada trebam skontati kako dodati sve ove Entryje na vec izdvojene entryje
-	// -> ajde da vidimo
+		//nizovi putanja SSTable-ova kojima odgovaraju indeksi
+		dataFiles, indexFiles, summaryFiles, bloomFiles, merkleFiles, entriesAdd := findOtherTables(level+1, bottomIdx, topIdx, lsm, dil_s, dil_i, comp, dict1, dict2)
+		fmt.Printf("datafiles: %v\n", dataFiles)
+		// ---------------------------------------------------------------------------------
+		// splitovali smo sve sstable koje se preklapaju u opsegu do ovde
+		// one koje ne odgovaraju smo vec "prepisali" na ista mjesta
+		// a ostale entryje sa odgovarajucim kljucevima smo pokupili i stavili u "entriesAdd"
+		// -> sada trebam skontati kako dodati sve ove Entryje na vec izdvojene entryje
+		// -> ajde da vidimo
 
-	num := len(dataFiles)
+		num := len(dataFiles)
 
-	dataFiles = append(dataFiles, dataFile)
-	indexFiles = append(indexFiles, indexFile)
-	summaryFiles = append(summaryFiles, summaryFile)
-	bloomFiles = append(bloomFiles, bloomFile)
-	merkleFiles = append(merkleFiles, merkleFile)
-	//println("datafiles: ")
-	fmt.Printf("datafiles: %v\n", dataFiles)
-	//Sada treba mergovati tabele
-	//if len(dataFile) > 1{
-	levelMergeFiles(level, dataFiles, indexFiles, summaryFiles, bloomFiles, merkleFiles, lsm, num, entriesAdd, dil_s, dil_i, comp, dict1, dict2)
-	//}
-	// oduzmi jednu iz levela sto smo prebacili dole
-	lsm.Levels[level-1]--
-	// (dodaj tu jednu iz levela na [level + 1], i oduzmi num merge-ovanih)
-	lsm.Levels[level] += 1   // dodaj spojenu koju smo prebacili tu
-	lsm.Levels[level] -= num // oduzmi sve koje smo spojili sa tog nivoa
+		dataFiles = append(dataFiles, dataFile)
+		indexFiles = append(indexFiles, indexFile)
+		summaryFiles = append(summaryFiles, summaryFile)
+		bloomFiles = append(bloomFiles, bloomFile)
+		merkleFiles = append(merkleFiles, merkleFile)
+		
+		fmt.Printf("datafiles: %v\n", dataFiles)
+		
+		levelMergeFiles(level, dataFiles, indexFiles, summaryFiles, bloomFiles, merkleFiles, lsm, num, entriesAdd, dil_s, dil_i, comp, dict1, dict2)
+		//}
+		// oduzmi jednu iz levela sto smo prebacili dole
+		lsm.Levels[level-1]--
+		// (dodaj tu jednu iz levela na [level + 1], i oduzmi num merge-ovanih)
+		lsm.Levels[level] += 1   // dodaj spojenu koju smo prebacili tu
+		lsm.Levels[level] -= num // oduzmi sve koje smo spojili sa tog nivoa
 
-	fmt.Printf("PRE REKURZIJE %v\n", lsm.DataFilesNames)
-	// ** T: provjeriti da li je okej uslov za level tiered?
-	if lsm.Levels[level] > int(float64(lsm.MaxSSTables)*math.Pow(float64(lsm.T), float64(level))) && (level+1) != lsm.CountOfLevels {
-		// proverava broj fajlova na sledećem nivou, i ne treba da pozove merge ako je na 3. nivou tj ako je nivo 2
-		println("level : ", level)
-		println("count of levels :", lsm.CountOfLevels)
-		levelMerge(level+1, lsm, dil_s, dil_i, comp, dict1, dict2)
+		fmt.Printf("PRE REKURZIJE %v\n", lsm.DataFilesNames)
+		// ** T: provjeriti da li je okej uslov za level tiered?
+		if lsm.Levels[level] > int(float64(lsm.MaxSSTables)*math.Pow(float64(lsm.T), float64(level))) && (level+1 < lsm.CountOfLevels) {
+			// proverava broj fajlova na sledećem nivou, i ne treba da pozove merge ako je na 3. nivou tj ako je nivo 2
+			
+			println("count of levels :", lsm.CountOfLevels)
+			// levelMerge(level+1, lsm, dil_s, dil_i, comp, dict1, dict2)
+			println("level : ", level)
+			level+=1
+			continue
+		}else{
+			
+			break
+		}
+		fmt.Printf("NA KRAJU KOMPAKCIJA %v\n", lsm.DataFilesNames)
 	}
-	fmt.Printf("NA KRAJU KOMPAKCIJA %v\n", lsm.DataFilesNames)
 }
 
 func findOtherTables(level int, bottomIdx string, topIdx string, lsm *Config.LSMTree, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) ([]string, []string, []string, []string, []string, []*Config.Entry) {
@@ -2207,69 +2215,72 @@ func findOtherTables(level int, bottomIdx string, topIdx string, lsm *Config.LSM
 
 	var entriesAdd []*Config.Entry // za pocetak je nil
 
-	for i := 1; i <= lsm.Levels[level]; i++ {
-		summaryFile := "files_SSTable/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db"
+	if level < lsm.CountOfLevels{
 
-		sumarry, _ := os.OpenFile(summaryFile, os.O_RDWR, 0777)
-		SummaryContent := LoadSummary(sumarry)
+	
+		for i := 1; i <= lsm.Levels[level]; i++ {
+			summaryFile := "files_SSTable/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db"
 
-		FirstKey := SummaryContent.FirstKey
-		LastKey := SummaryContent.LastKey
+			sumarry, _ := os.OpenFile(summaryFile, os.O_RDWR, 0777)
+			SummaryContent := LoadSummary(sumarry)
 
-		var dataFile = "files_SSTable/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db"
-		var indexFile = "files_SSTable/indexFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db"
-		//var summaryFile = "files_SSTable/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db"   // vec ima gore deklarisano
-		var bloomFile = "files_SSTable/bloomFilterFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db"
-		var merkleFile = "files_SSTable/merkleTreeFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db"
+			FirstKey := SummaryContent.FirstKey
+			LastKey := SummaryContent.LastKey
 
-		if FirstKey >= bottomIdx && FirstKey <= topIdx && LastKey >= bottomIdx && LastKey <= topIdx {
-			dataFiles = append(dataFiles, dataFile)
-			indexFiles = append(indexFiles, indexFile)
-			summaryFiles = append(summaryFiles, summaryFile)
-			bloomFiles = append(bloomFiles, bloomFile)
-			merkleFiles = append(merkleFiles, merkleFile)
-		} else {
+			var dataFile = "files_SSTable/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db"
+			var indexFile = "files_SSTable/indexFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db"
+			//var summaryFile = "files_SSTable/summaryFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db"   // vec ima gore deklarisano
+			var bloomFile = "files_SSTable/bloomFilterFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db"
+			var merkleFile = "files_SSTable/merkleTreeFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db"
 
-			// NPR. ukupan prvi opseg = [30 - 80] ---> [bottomIdx - topIdx]
+			if FirstKey >= bottomIdx && FirstKey <= topIdx && LastKey >= bottomIdx && LastKey <= topIdx {
+				dataFiles = append(dataFiles, dataFile)
+				indexFiles = append(indexFiles, indexFile)
+				summaryFiles = append(summaryFiles, summaryFile)
+				bloomFiles = append(bloomFiles, bloomFile)
+				merkleFiles = append(merkleFiles, merkleFile)
+			} else {
 
-			// u ovoj sstabeli je npr. [60 - 95] ---> [FirstKey - LastKey]
-			// prvi se nalazi u opsegu
-			if FirstKey >= bottomIdx && FirstKey <= topIdx {
-				// k1, k2       k2, k3
-				// 60  80		 80 95
-				k1 := FirstKey
-				k2 := topIdx
-				k3 := LastKey
+				// NPR. ukupan prvi opseg = [30 - 80] ---> [bottomIdx - topIdx]
 
-				// mogu poslati u jednu funckiju npr. splitSSTable(1, 30, 40)
-				// ona vrati entriesRewrite, entriesAdd
-				// (entriesRewrite - entry za rewrite samo)							 //  80 - 95
-				// (entriesAdd     - entry za dodati u novu, veliku sstaeblu)   //  60 - 80
-				// saljemo "false" jer nije "lower" (uporedjujemo sa "višim" kljucem iz opsega - topIdx ( == 80 u ovom slucaju))
-				entriesAdd = splitSSTable(k1, k2, k3, false, dataFile, indexFile, summaryFile, bloomFile, merkleFile, lsm, dil_s, dil_i, comp, dict1, dict2)			
-			}
+				// u ovoj sstabeli je npr. [60 - 95] ---> [FirstKey - LastKey]
+				// prvi se nalazi u opsegu
+				if FirstKey >= bottomIdx && FirstKey <= topIdx {
+					// k1, k2       k2, k3
+					// 60  80		 80 95
+					k1 := FirstKey
+					k2 := topIdx
+					k3 := LastKey
 
-			// NPR. ukupan prvi opseg = [30 - 80] ---> [bottomIdx - topIdx]
+					// mogu poslati u jednu funckiju npr. splitSSTable(1, 30, 40)
+					// ona vrati entriesRewrite, entriesAdd
+					// (entriesRewrite - entry za rewrite samo)							 //  80 - 95
+					// (entriesAdd     - entry za dodati u novu, veliku sstaeblu)   //  60 - 80
+					// saljemo "false" jer nije "lower" (uporedjujemo sa "višim" kljucem iz opsega - topIdx ( == 80 u ovom slucaju))
+					entriesAdd = splitSSTable(k1, k2, k3, false, dataFile, indexFile, summaryFile, bloomFile, merkleFile, lsm, dil_s, dil_i, comp, dict1, dict2)			
+				}
 
-			// u ovoj sstabeli je npr. [1 - 40] ---> [FirstKey - LastKey]
-			// drugi se nalazi u opsegu
-			if LastKey >= bottomIdx && LastKey <= topIdx {
-				// k1, k2       k2, k3
-				// 1   30		 30, 40
-				k1 := FirstKey
-				k2 := bottomIdx
-				k3 := LastKey
+				// NPR. ukupan prvi opseg = [30 - 80] ---> [bottomIdx - topIdx]
 
-				// mogu poslati u jednu funckiju npr. splitSSTable(1, 30, 40)
-				// ona vrati entriesRewrite, entriesAdd
-				// (entriesRewrite - entry za rewrite samo)							  //  1 - 30
-				// (entriesAdd     - entry za dodati u novu, veliku sstaeblu)    // 30 - 40
-				// saljemo "true" jer je "lower" (uporedjujemo sa "nižim" kljucem iz opsega - topIdx ( == 30 u ovom slucaju))
-				entriesAdd = splitSSTable(k1, k2, k3, true, dataFile, indexFile, summaryFile, bloomFile, merkleFile, lsm, dil_s, dil_i, comp, dict1, dict2)
+				// u ovoj sstabeli je npr. [1 - 40] ---> [FirstKey - LastKey]
+				// drugi se nalazi u opsegu
+				if LastKey >= bottomIdx && LastKey <= topIdx {
+					// k1, k2       k2, k3
+					// 1   30		 30, 40
+					k1 := FirstKey
+					k2 := bottomIdx
+					k3 := LastKey
+
+					// mogu poslati u jednu funckiju npr. splitSSTable(1, 30, 40)
+					// ona vrati entriesRewrite, entriesAdd
+					// (entriesRewrite - entry za rewrite samo)							  //  1 - 30
+					// (entriesAdd     - entry za dodati u novu, veliku sstaeblu)    // 30 - 40
+					// saljemo "true" jer je "lower" (uporedjujemo sa "nižim" kljucem iz opsega - topIdx ( == 30 u ovom slucaju))
+					entriesAdd = splitSSTable(k1, k2, k3, true, dataFile, indexFile, summaryFile, bloomFile, merkleFile, lsm, dil_s, dil_i, comp, dict1, dict2)
+				}
 			}
 		}
 	}
-
 	// ***** TREBA VRATITI PRAZAN entriesAdd ako nema preklapanja!! (nil)
 	return dataFiles, indexFiles, summaryFiles, bloomFiles, merkleFiles, entriesAdd
 }
