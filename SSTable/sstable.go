@@ -2345,114 +2345,125 @@ func LevelTieredCompaction(lsm *Config.LSMTree, dil_s int, dil_i int, oneFile bo
 	}
 }
 
-// func levelMergeOneFile(level int, lsm Config.LSMTree, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int){
+func levelMergeOneFile(level int, lsm *Config.LSMTree, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int){
 
-// 	br := lsm.Levels[level]
+	for{
+		br := lsm.Levels[level-1]
 
-// 	//izabrali smo tabelu na visem nivou
-// 	sstableFile := "files_SSTable/oneFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".db"
+		//izabrali smo tabelu na visem nivou
+		sstableFile := "files_SSTable/oneFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".db"
 
-// 	//treba dobaviti indekse iz sstableFile iz summarija
-// 	SummaryContent := LoadSummaryOneFile(sstableFile, dil_s, dil_i, comp, dict1,dict2)
+		//treba dobaviti indekse iz sstableFile iz summarija
+		SummaryContent := LoadSummaryOneFile(sstableFile, dil_s, dil_i, comp, dict1,dict2)
 
-// 	bottomIdx := SummaryContent.FirstKey
-// 	topIdx := SummaryContent.LastKey
+		bottomIdx := SummaryContent.FirstKey
+		topIdx := SummaryContent.LastKey
 
-// 	//naci tabele koje su sa sledeceg nivoa
+		//naci tabele koje su sa sledeceg nivoa
 
-// 	sstableFiles,entriesAdd := findOtherTablesOneFile(level+1, bottomIdx, topIdx, lsm, dil_s, dil_i,comp, dict1, dict2)
+		sstableFiles,entriesAdd := findOtherTablesOneFile(level+1, bottomIdx, topIdx, lsm, dil_s, dil_i,comp, dict1, dict2)
 
-// 	//sve tabele dodati u neki niz koji ce se proslediti funkciji koja ce da merguje sve
+		//sve tabele dodati u neki niz koji ce se proslediti funkciji koja ce da merguje sve
 
-// 	num := len(sstableFiles)
+		num := len(sstableFiles)
 
-// 	sstableFiles = append(sstableFiles, sstableFile)
+		sstableFiles = append(sstableFiles, sstableFile)
 
-// 	levelMergeFilesOneFile(level, sstableFiles, lsm, num, entriesAdd, dil_s, dil_i, comp, dict1, dict2)
+		levelMergeFilesOneFile(level, sstableFiles, lsm, num, entriesAdd, dil_s, dil_i, comp, dict1, dict2)
 
-// 	lsm.Levels[level]--
-// 	// (dodaj tu jednu iz levela na [level + 1], i oduzmi num merge-ovanih)
-// 	lsm.Levels[level+1] += 1   // dodaj spojenu koju smo prebacili tu
-// 	lsm.Levels[level+1] -= num // oduzmi sve koje smo spojili sa tog nivoa
+		lsm.Levels[level-1]--
+		// (dodaj tu jednu iz levela na [level + 1], i oduzmi num merge-ovanih)
+		lsm.Levels[level] += 1   // dodaj spojenu koju smo prebacili tu
+		lsm.Levels[level] -= num // oduzmi sve koje smo spojili sa tog nivoa
 
-// 	// ** T: provjeriti da li je okej uslov za level tiered?
-// 	if lsm.Levels[level+1] == int(float64(lsm.MaxSSTables)*math.Pow(float64(lsm.T), float64(level+1))) && level != lsm.CountOfLevels {
-// 		// proverava broj fajlova na sledećem nivou, i ne treba da pozove merge ako je na 3. nivou tj ako je nivo 2
-// 		levelMergeOneFile(level+1, lsm, dil_s, dil_i, comp, dict1, dict2)
-// 	}
-// }
+		// ** T: provjeriti da li je okej uslov za level tiered?
+		if lsm.Levels[level] > int(float64(lsm.MaxSSTables)*math.Pow(float64(lsm.T), float64(level))) && (level+1 < lsm.CountOfLevels) {
+			// proverava broj fajlova na sledećem nivou, i ne treba da pozove merge ako je na 3. nivou tj ako je nivo 2
+			level += 1
+			continue
+		}else{
+			break
+		}
+	}
+}
 
-// func levelMergeFilesOneFile(level int, sstableFiles []string, lsm Config.LSMTree, num int, entriesAdd []*Config.Entry, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int){
+func levelMergeFilesOneFile(level int, sstableFiles []string, lsm *Config.LSMTree, num int, entriesAdd []*Config.Entry, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int){
 
-// 	files, err := openedFiles(sstableFiles)
-// 	if err != nil{
-// 		panic(err)
-// 	}
+	files, err := openFiles(sstableFiles)
+	if err != nil{
+		panic(err)
+	}
 
-// 	var entries []*Config.Entry
+	var entries []*Config.Entry
 
-// 	entries = entriesAdd
+	entries = entriesAdd
 
-// 	var sortedAllEntries []*Config.Entry
+	var sortedAllEntries []*Config.Entry
 
-// 	for _, file := range files {
+	for _, file := range files {
 
-// 		dataOffset
-// 	}
-// }
+		dataOffset
+	}
+}
 
-// func findOtherTablesOneFile(level int, bottomIdx int, topIdx int,lsm Config.LSMTree, dil_s int, dil_i int, comp bool,  dict1 *map[int]string, dict2 *map[string]int) []string{
+func findOtherTablesOneFile(level int, bottomIdx string, topIdx string,lsm *Config.LSMTree, dil_s int, dil_i int, comp bool,  dict1 *map[int]string, dict2 *map[string]int) ([]string, []*Config.Entry){
 
-// 	var otherFiles []string
+	var otherFiles []string
 
-// 	for i := 1 ; i <= lsm.LevelNumber[level]; i++ {
+	var entriesAdd []*Config.Entry
 
-// 		nextSSTableFile := "files_SSTable/oneFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db"
+	if level < lsm.CountOfLevels{
+	//for i := 1 ; i <= lsm.LevelNumber[level]; i++ {
+		for i := 1 ; i <= lsm.Levels[level]; i++ {
 
-// 		summary := LoadSummaryOneFile(nextSSTableFile, dil_s, dil_i, comp, dict1, dict2)
+			nextSSTableFile := "files_SSTable/oneFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db"
 
-// 		FirstKey := summary.FirstKey
-// 		LastKey := summary.LastKey
+			summary := LoadSummaryOneFile(nextSSTableFile, dil_s, dil_i, comp, dict1, dict2)
 
-// 		if FirstKey >= bottomIdx && FirstKey <= topIdx && LastKey >= bottomIdx && LastKey <= topIdx {
-// 			otherFiles = append(otherFiles, nextSSTableFile)
-// 		}else{
+			FirstKey := summary.FirstKey
+			LastKey := summary.LastKey
 
-// 			if FirstKey >= bottomIdx && FirstKey <= topIdx{
-// 				k1 := FirstKey
-// 				k2 := topIdx
-// 				k3 := LastKey
+			if FirstKey >= bottomIdx && FirstKey <= topIdx && LastKey >= bottomIdx && LastKey <= topIdx {
+				otherFiles = append(otherFiles, nextSSTableFile)
+			}else{
 
-// 				//dodati entriesAddOneFile
-// 			}
+				if FirstKey >= bottomIdx && FirstKey <= topIdx{
+					k1 := FirstKey
+					k2 := topIdx
+					k3 := LastKey
 
-// 			if LastKey >= bottomIdx && LastKey <= topIdx{
-// 				k1 := FirstKey
-// 				k2 := bottomIdx
-// 				k3 := LastKey
-// 				//dodati entriesAddOneFile
-// 			}
-// 		}
-// 	}
-// 	//proveriti kako vratiti entriesAdd ako nema preklapanja ??????
-// 	return otherFiles, entriesAdd
-// }
+					//entriesAdd = splitSSTableOneFile
+					//dodati entriesAddOneFile
+				}
 
-// func LoadSummaryOneFile(FileName string, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) *SStableSummary{
+				if LastKey >= bottomIdx && LastKey <= topIdx{
+					k1 := FirstKey
+					k2 := bottomIdx
+					k3 := LastKey
+					//dodati entriesAddOneFile
+				}
+			}
+		}
+	}
+		//proveriti kako vratiti entriesAdd ako nema preklapanja ??????
+	return otherFiles, entriesAdd
+}
 
-// 	file, err := os.OpenFile(FileName, os.O_RDWR|os.O_CREATE, 0777)
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	defer file.Close()
+func LoadSummaryOneFile(FileName string, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) *SStableSummary{
 
-// 	summaryOffsetSize := make([]byte, KEY_SIZE_SIZE)
-// 	_, _ = file.Read(summaryOffsetBytes)
-// 	summaryOffset := binary.LittleEndian.Uint64(summaryOffsetBytes)
-// 	file.Seek(int64(summaryOffset), 0)
-// 	summary := LoadSummary(file)
-// 	return sumarry
-// }
+	file, err := os.OpenFile(FileName, os.O_RDWR|os.O_CREATE, 0777)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	summaryOffsetSize := make([]byte, KEY_SIZE_SIZE)
+	_, _ = file.Read(summaryOffsetBytes)
+	summaryOffset := binary.LittleEndian.Uint64(summaryOffsetBytes)
+	file.Seek(int64(summaryOffset), 0)
+	summary := LoadSummary(file)
+	return sumarry
+}
 
 func levelMerge(level int, lsm *Config.LSMTree, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) {
 	//treba da se izabere tabela koja se merguje
@@ -2808,11 +2819,7 @@ func levelMergeFiles(level int, dataFiles []string, indexFiles []string, summary
 	}
 
 	// takodje brisemo i iz lsm ovo isto kao gore
-	// removeFileName(lsm, dataFileName)
-	// removeFileName(lsm, indexFileName)
-	// removeFileName(lsm, summaryFileName)
-	// removeFileName(lsm, bloomFileName)
-	// removeFileName(lsm, merkleFileName)
+	
 	lsm.DataFilesNames = removeFileName(lsm.DataFilesNames, dataFileName)
 	lsm.IndexFilesNames = removeFileName(lsm.IndexFilesNames, indexFileName)
 	lsm.SummaryFilesNames = removeFileName(lsm.SummaryFilesNames, summaryFileName)
