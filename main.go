@@ -14,9 +14,9 @@ import (
 	//"NASPprojekat/CountMinSketch"
 	//"NASPprojekat/HyperLogLog"
 	//"NASPprojekat/BTree"
-	"NASPprojekat/MerkleTree"
 	"NASPprojekat/Cache"
 	"NASPprojekat/Memtable"
+	"NASPprojekat/MerkleTree"
 	"NASPprojekat/WriteAheadLog"
 
 	"NASPprojekat/SSTable"
@@ -58,33 +58,6 @@ func main() {
 	println("size ", conf.SizedCompaction)
 	mt.Init(conf.MemtableStructure, int(conf.MemtableSize), conf.MemtableNumber, lsm, conf.DegreeOfDilutionSummary, conf.DegreeOfDilutionIndex, conf.OneFile, conf.SizedCompaction, conf.Compression, &dict1, &dict2)
 
-	// interval moze biti "1m", "1h", "3h", "1d"  itd... (u configu)
-	interval, err := time.ParseDuration(conf.TokenBucketInterval)
-	if err != nil {
-		fmt.Println("GRESKA kod parsiranja intervala (tokenBucket main.go):", err)
-		return
-	}
-	tb := TokenBucket.TokenBucket{}
-	tb.Init(conf.TokenBucketSize, interval)
-	//u config.json "token_bucket_interval": "1m",
-
-	/*tbBytes, found := Get(wal, &mt, cache, "tb_token_bucket", &tb, lsm, true)
-	if found {
-		tb2, err := DecodeTB(tbBytes)
-		tb = *tb2 // Token Bucket => taj ucitani iz sistema sto postoji vec
-		if err {
-			fmt.Println("Greska pri ucitavanju sistema (DecodeTB main.go)!")
-			return
-		}
-	} else {
-		// tb ostaje novi napravljen, tj. prazan tb
-		// ne treba se nista raditi
-	}
-	*/
-
-	/*tb := TokenBucket.TokenBucket{}
-	tb.Init(conf.TokenBucketSize, time.Minute)*/
-
 	/*
 		mt.Init(conf.MemtableStructure, int(conf.MemtableSize), conf.MemtableNumber, lsm)
 		mt.Add("2", make([]byte, 10))
@@ -125,43 +98,72 @@ func main() {
 	cache := Cache.NewLRUCache(int(conf.CacheCapacity))
 
 	// TOKEN BUCKET
-	// dodati
-
-	/*for i := 3; i <= 10; i++ {
-		key := "test"
-		v := strconv.Itoa(i)
-		key += string(v)
-		value := []byte(v)
-		Put(wal, &mt, cache, key, value, &tb)
+	// interval moze biti "1m", "1h", "3h", "1d"  itd... (u configu)
+	interval, err := time.ParseDuration(conf.TokenBucketInterval)
+	if err != nil {
+		fmt.Println("GRESKA kod parsiranja intervala (tokenBucket main.go):", err)
+		return
 	}
-	*/
+	tb := TokenBucket.TokenBucket{}
+	tb.Init(conf.TokenBucketSize, interval)
+	//u config.json "token_bucket_interval": "1m",
+
+	tbBytes, found := Get(wal, &mt, cache, "tb_token_bucket", &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
+	//fmt.Println("\n\n\n", tbBytes, "\n\n\n")
+	if found && len(tbBytes) != 0 {
+		//fmt.Println("\n\n\nTokeBucket ocitan!")
+		tb2, err := DecodeTB(tbBytes)
+		if err {
+			fmt.Println("Greska pri ucitavanju sistema (DecodeTB main.go)!")
+			return
+		}
+		tb = *tb2 // Token Bucket => taj ucitani iz sistema sto postoji vec
+		//fmt.Println(tb, "\n\n\n")
+	} else {
+		// tb ostaje novi napravljen, tj. prazan tb
+		// ne treba se nista raditi
+	}
+	defer func() {
+		//fmt.Println("\n\nCUVAM TOKENB")
+		//tbBytes, _ := Get(wal, &mt, cache, "tb_token_bucket", &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
+		tbBytes, err := EncodeTB(&tb)
+		if err {
+			fmt.Println("Greska! (EncodeTB main.go)!")
+			return
+		}
+		//fmt.Println(tbBytes)
+		defer Put(wal, &mt, cache, "tb_token_bucket", tbBytes, &tb, true)
+	}()
+
 	/*
-	for i := 1;i < 50;i++ {
-		key := "test" + strconv.Itoa(i)
-		value := []byte(strconv.Itoa(i))
-	
-		done := Put(wal, &mt, cache, key, value, &tb)
-		
-		if i % 4 == 0 {
-			_, done := Delete(wal, &mt, cache, key, &tb, lsm, conf.Compression, &dict1)
-	
-			if !done {
-				fmt.Println("Neuspesno brisanje!")
+		for i := 1;i < 50;i++ {
+			key := "test" + strconv.Itoa(i)
+			value := []byte(strconv.Itoa(i))
+
+			done := Put(wal, &mt, cache, key, value, &tb, true)
+
+			if i % 4 == 0 {
+				_, done := Delete(wal, &mt, cache, key, &tb, lsm, conf.Compression, &dict1)
+
+				if !done {
+					fmt.Println("Neuspesno brisanje!")
+				}
+			}
+
+			if done {
+				fmt.Printf("Uspesno dodat/azuriran kljuc %s!\n", key)
+			} else {
+				fmt.Printf("GRESKA! Neuspesno dodavanje kljuca %s!\n", key)
 			}
 		}
-	
-		if done {
-			fmt.Printf("Uspesno dodat/azuriran kljuc %s!\n", key)
-		} else {
-			fmt.Printf("GRESKA! Neuspesno dodavanje kljuca %s!\n", key)
-		}
-	}
 	*/
-	for i := 1;i < 55;i++ {
+
+	for i := 1; i < 55; i++ {
 		key := "test" + strconv.Itoa(i)
-	
-		elem, done := Get(&mt, cache, key, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
-	
+
+		// proslijedi na kraju false ako hoces da aktiviras token bucket
+		elem, done := Get(wal, &mt, cache, key, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
+
 		if done {
 			fmt.Printf("Vrednost pod kljucem %s: %s\n", key, elem)
 		} else {
@@ -208,7 +210,7 @@ func main() {
 			fmt.Println("Unesite vrednost elementa: ")
 			scanner.Scan()
 			value := scanner.Bytes()
-			done := Put(wal, &mt, cache, key, value, &tb)
+			done := Put(wal, &mt, cache, key, value, &tb, false)
 
 			if done {
 				fmt.Printf("Uspesno dodat/azuriran kljuc %s!\n", key)
@@ -226,7 +228,7 @@ func main() {
 				continue
 			}
 
-			elem, done := Get(&mt, cache, key, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
+			elem, done := Get(wal, &mt, cache, key, &tb, lsm, conf.Compression, &dict1, conf.OneFile, false)
 
 			if done {
 				fmt.Printf("Vrednost pod kljucem %s: %s\n", key, elem)
@@ -276,7 +278,7 @@ func main() {
 					key := scanner.Text()
 					key_real := "bf_" + key
 
-					_, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
+					_, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
 
 					if done {
 						fmt.Println("Greska! BF sa datim kljucem vec postoji!")
@@ -304,7 +306,7 @@ func main() {
 					if isOkay {
 						done = false
 					} else {
-						done = Put(wal, &mt, cache, key_real, bytes, &tb)
+						done = Put(wal, &mt, cache, key_real, bytes, &tb, false)
 					}
 
 					if done {
@@ -318,7 +320,7 @@ func main() {
 					scanner.Scan()
 					key := scanner.Text()
 					key_real := "bf_" + key
-					elem, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
+					elem, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
 
 					if done {
 						bf, err := DecodeBF(elem)
@@ -341,7 +343,7 @@ func main() {
 						if err {
 							done = false
 						} else {
-							done = Put(wal, &mt, cache, key_real, bytes, &tb)
+							done = Put(wal, &mt, cache, key_real, bytes, &tb, false)
 						}
 
 						if done {
@@ -358,7 +360,7 @@ func main() {
 					scanner.Scan()
 					key := scanner.Text()
 					key_real := "bf_" + key
-					elem, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
+					elem, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, false)
 
 					if done {
 						bf, err := DecodeBF(elem)
@@ -424,7 +426,7 @@ func main() {
 					scanner.Scan()
 					key := scanner.Text()
 					key_real := "hll_" + key
-					_, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
+					_, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
 
 					if done {
 						fmt.Println("Greska! HLL sa datim kljucem vec postoji! ")
@@ -444,7 +446,7 @@ func main() {
 					if isOk {
 						done = false
 					} else {
-						done = Put(wal, &mt, cache, key_real, bytes, &tb)
+						done = Put(wal, &mt, cache, key_real, bytes, &tb, false)
 					}
 
 					if done {
@@ -458,7 +460,7 @@ func main() {
 					scanner.Scan()
 					key := scanner.Text()
 					key_real := "hll_" + key
-					elem, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
+					elem, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
 
 					if done {
 						hll, err := DecodeHLL(elem)
@@ -481,7 +483,7 @@ func main() {
 						if err {
 							done = false
 						} else {
-							done = Put(wal, &mt, cache, key_real, bytes, &tb)
+							done = Put(wal, &mt, cache, key_real, bytes, &tb, false)
 						}
 
 						if done {
@@ -498,7 +500,7 @@ func main() {
 					scanner.Scan()
 					key := scanner.Text()
 					key_real := "hll_" + key
-					elem, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
+					elem, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, false)
 
 					if done {
 						hll, err := DecodeHLL(elem)
@@ -553,7 +555,7 @@ func main() {
 				scanner.Scan()
 				key := scanner.Text()
 				key_real := "cms_" + key
-				_, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
+				_, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
 
 				if done {
 					fmt.Println("Greska! CMS sa datim kljucem vec postoji!")
@@ -578,7 +580,7 @@ func main() {
 				if isOkay {
 					done = false
 				} else {
-					done = Put(wal, &mt, cache, key_real, bytes, &tb)
+					done = Put(wal, &mt, cache, key_real, bytes, &tb, false)
 				}
 
 				if done {
@@ -591,7 +593,7 @@ func main() {
 				scanner.Scan()
 				key := scanner.Text()
 				key_real := "cms_" + key
-				elem, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
+				elem, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
 
 				if done {
 					cms, err := DecodeCMS(elem)
@@ -613,7 +615,7 @@ func main() {
 					if err {
 						done = false
 					} else {
-						done = Put(wal, &mt, cache, key_real, bytes, &tb)
+						done = Put(wal, &mt, cache, key_real, bytes, &tb, false)
 					}
 
 					if done {
@@ -629,7 +631,7 @@ func main() {
 				scanner.Scan()
 				key := scanner.Text()
 				key_real := "cms_" + key
-				elem, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
+				elem, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, false)
 
 				if done {
 					cms, err := DecodeCMS(elem)
@@ -682,13 +684,13 @@ func main() {
 				scanner.Scan()
 				text := scanner.Text()
 				key_real := "sh_" + text
-				_, done := Get(&mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
+				_, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
 				if done {
 					fmt.Println("Greska! Text vec postoji!")
 					continue
 				} else {
 					textBytes := SimHash.SimHash(text)
-					done = Put(wal, &mt, cache, key_real, textBytes[:], &tb)
+					done = Put(wal, &mt, cache, key_real, textBytes[:], &tb, false)
 					if done {
 						fmt.Printf("Uspesno dodat element u simhash!\n")
 					} else {
@@ -700,7 +702,7 @@ func main() {
 				scanner.Scan()
 				text1 := scanner.Text()
 				key_real1 := "sh_" + text1
-				elem1, done1 := Get(&mt, cache, key_real1, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
+				elem1, done1 := Get(wal, &mt, cache, key_real1, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
 				var textBytes1 [16]byte
 				if done1 {
 					copy(textBytes1[:], elem1)
@@ -712,7 +714,7 @@ func main() {
 				scanner.Scan()
 				text2 := scanner.Text()
 				key_real2 := "sh_" + text2
-				elem2, done2 := Get(&mt, cache, key_real2, &tb, lsm, conf.Compression, &dict1, conf.OneFile)
+				elem2, done2 := Get(wal, &mt, cache, key_real2, &tb, lsm, conf.Compression, &dict1, conf.OneFile, false)
 				var textBytes2 [16]byte
 				if done2 {
 					copy(textBytes2[:], elem2)
@@ -761,8 +763,7 @@ func main() {
 			fmt.Scanf("%s", &key)
 			PrefixIter(&mt, key, lsm, conf.Compression, &dict1)
 
-
-		// uporedi Merkle	
+		// uporedi Merkle
 		case 12:
 			// nivo        - level
 			// redni broj  - rbr
@@ -770,21 +771,21 @@ func main() {
 
 			scanner := bufio.NewScanner(os.Stdin)
 			var levelStr, rbrStr string
-		
+
 			fmt.Print("Unesite broj nivoa (levela): ")
 			scanner.Scan()
 			levelStr = scanner.Text()
-		
+
 			level, err := strconv.Atoi(levelStr)
 			if err != nil || level < 1 || level > cnt {
 				fmt.Print("GRESKA! pogresan unos nivoa.\n")
 				continue
 			}
-		
+
 			fmt.Print("Unesite redni broj sstabele: ")
 			scanner.Scan()
 			rbrStr = scanner.Text()
-		
+
 			rbr, err := strconv.Atoi(rbrStr)
 			if err != nil || rbr < 1 {
 				fmt.Print("GRESKA! pogresan unos rednog broja sstabele.\n")
@@ -795,7 +796,7 @@ func main() {
 				fmt.Print("GRESKA! pogresan unos rednog broja sstabele.\n")
 				continue
 			}
-		
+
 			//level--
 			key1 := strconv.Itoa(level)
 			//rbr--
@@ -805,7 +806,6 @@ func main() {
 
 			mtFileName := "files_SSTable/merkleTreeFile_" + key1 + "_" + key2 + ".db"
 			oneFileName := "files_SSTable/oneFile_" + key1 + "_" + key2 + ".db"
-
 
 			// otvaramo prvo posebno merkle file, gledamo da li postoji
 			// -> 'postoji' = 1, ako postoji poseban (nije oneFile)
@@ -836,11 +836,10 @@ func main() {
 				postoji = 2
 			}
 
-
-	// ZA VESU OVDE DA DOVRSI FUNKCIJE
+			// ZA VESU OVDE DA DOVRSI FUNKCIJE
 			// 'postoji' = 1 ---> ne radi se o oneFile
-			if postoji == 1 {   
-				fmt.Println("\n\n\nPRVI\n\n\n")
+			if postoji == 1 {
+				//fmt.Println("\n\n\nPRVI\n\n\n")
 				// ucitavamo trenutni merkle te sstabele za citanje
 				mtCurrent := MerkleTree.MerkleTree{}
 				mtCurrent.Deserialize(mtFileName)
@@ -855,8 +854,8 @@ func main() {
 				mtNew := MerkleTree.MerkleTree{}
 				mtNew.Init(data)
 
-				arrayOfDiffPoints := mtCurrent.Compare(&mtNew)   // []DiffPoint
-				if (len(arrayOfDiffPoints) == 0) {
+				arrayOfDiffPoints := mtCurrent.Compare(&mtNew) // []DiffPoint
+				if len(arrayOfDiffPoints) == 0 {
 					fmt.Print("INFO: nema razlika u ova dva fajla!\n")
 					continue
 				}
@@ -869,28 +868,27 @@ func main() {
 					fmt.Printf("Podatak nakon izmjene: %v\n", *diffPoint.Node2)
 					fmt.Println("-----------")
 				}
-				fmt.Println("INFO: Ukupno razlika:", len(arrayOfDiffPoints) / 2)
+				fmt.Println("INFO: Ukupno razlika:", len(arrayOfDiffPoints)/2)
 
 				// dalje cu ja ispisati sta su greske navodno, a moze se ispisati i
 				// cijela promjenljiva cini mi se
- 
 
-			// 'postoji' = 2 ---> u pitanju je oneFile	
-			} else {          
+				// 'postoji' = 2 ---> u pitanju je oneFile
+			} else {
 				// vec smo pokusali otvoriti, znaci da postoji
 				// treba izvuci merkle dio iz tog oneFile
 
 				oneFileName := "files_SSTable/oneFile_" + key1 + "_" + key2 + ".db"
-				mtCurrent := SSTable.OneFileMerkle(oneFileName)   // --> dobijamo cijeli merkle
+				mtCurrent := SSTable.OneFileMerkle(oneFileName) // --> dobijamo cijeli merkle
 
 				//	'data' je [][]byte iz oneFile sstabele
-				data := SSTable.OneFileDataToBytes(oneFileName, conf.Compression)  // --> dobijamo [][]byte
+				data := SSTable.OneFileDataToBytes(oneFileName, conf.Compression) // --> dobijamo [][]byte
 
 				mtNew := MerkleTree.MerkleTree{}
 				mtNew.Init(data)
 
-				arrayOfDiffPoints := mtCurrent.Compare(&mtNew)   // []DiffPoint
-				if (len(arrayOfDiffPoints) == 0) {
+				arrayOfDiffPoints := mtCurrent.Compare(&mtNew) // []DiffPoint
+				if len(arrayOfDiffPoints) == 0 {
 					fmt.Print("\nINFO: nema razlika u ova dva fajla!\n")
 					continue
 				}
@@ -903,12 +901,11 @@ func main() {
 					fmt.Printf("Podatak nakon izmjene: %v\n", *diffPoint.Node2)
 					fmt.Println("-----------")
 				}
-				fmt.Println("\nINFO: Ukupno razlika:", len(arrayOfDiffPoints) / 2)
+				fmt.Println("\nINFO: Ukupno razlika:", len(arrayOfDiffPoints)/2)
 
 				// dalje cu ja ispisati sta su greske navodno, a moze se ispisati i
 				// cijela promjenljiva cini mi se
 			}
-
 
 		case 'x':
 			break
