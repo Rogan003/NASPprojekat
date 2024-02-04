@@ -92,8 +92,9 @@ func NewLMSTree(Config Config) *LSMTree {
 			continue
 		}
 
-		if strings.HasSuffix(file.Name(), ".db") && strings.HasPrefix(file.Name(), "bloomFilterFile") {
+		if strings.HasSuffix(file.Name(), ".db") && strings.HasPrefix(file.Name(), "bloomFile") {
 			path := "files_SSTable/" + file.Name()
+
 			filterFile = append(filterFile, path)
 
 			lvlStr := strings.TrimPrefix(file.Name(), "bloomFilterFile_")
@@ -128,7 +129,7 @@ func NewLMSTree(Config Config) *LSMTree {
 			path := "files_SSTable/" + file.Name()
 			summaryFile = append(summaryFile, path)
 
-		} else if strings.HasSuffix(file.Name(), ".db") && strings.HasPrefix(file.Name(), "merkleTreeFile") {
+		} else if strings.HasSuffix(file.Name(), ".db") && strings.HasPrefix(file.Name(), "merkleFile") {
 			path := "files_SSTable/" + file.Name()
 			merkleFile = append(merkleFile, path)
 
