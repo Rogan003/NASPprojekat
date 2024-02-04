@@ -1,11 +1,10 @@
 package MerkleTree
 
 import (
-	"bytes"
 	"crypto/sha1"
-	"encoding/gob"
+	"encoding/binary"
 	"encoding/hex"
-	"fmt"
+	//"fmt"
 	"os"
 	"reflect"
 )
@@ -121,6 +120,9 @@ func (mt *MerkleTree) Init(data [][]byte) {
 		lvl++
 		arr = arr2
 	}
+
+
+	//fmt.Println("INIT: ", allHashes, "\n\n")
 }
 
 // vraca strukturu DiffPoint koja sadrzi nivo promjene, cvor koji je izmijenjen i razlicite heseve
@@ -130,7 +132,7 @@ func (mt1 *MerkleTree) Compare(mt2 *MerkleTree) []DiffPoint {
 
 	// ako su root isti -> strukture su iste, vraca nil
 	if reflect.DeepEqual(root1.Data, root2.Data) {
-		fmt.Println("Strukture su potpuno iste!")
+		//fmt.Println("Strukture su potpuno iste!")
 		return nil
 	}
 
@@ -194,13 +196,22 @@ func (mt1 *MerkleTree) Compare(mt2 *MerkleTree) []DiffPoint {
 	return differences
 }
 
+func (n *Node) String() string {
+	return hex.EncodeToString(n.Data[:])
+}
+
+func Hash(data []byte) [20]byte {
+	return sha1.Sum(data)
+}
+
+/*
 // Serijalizujemo u stvari pomocnu strukturu Tree (pogledaj gore sta sadrzi)
 func (mt *MerkleTree) Serialize(fileName string) {
 	// *****VAZNO*****
 	//var f = ""
 	//f += "files%c"
 	//f += fileName
-	/* ako testiramo ovde, iz custom maina, onda dodati: "../files%" ("../" ispred files) */
+	// ako testiramo ovde, iz custom maina, onda dodati: "../files%" ("../" ispred files)
 	file, err := os.OpenFile(fileName, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
 		panic(err)
@@ -215,19 +226,20 @@ func (mt *MerkleTree) Serialize(fileName string) {
 	if err != nil {
 		panic(err)
 	}
-}
+}*/
 
 /*
-	Deserialize pomocnu strukturu Tree, iz koje izvlacimo sve
 
-prethodne hasheve i pravimo ispocetka MerkleTree
-*/
+	//Deserialize pomocnu strukturu Tree, iz koje izvlacimo sve
+
+//prethodne hasheve i pravimo ispocetka MerkleTree
+
 func (mt *MerkleTree) Deserialize(fileName string) {
 	// *****VAZNO*****
 	//var f = ""
 	//f += "files%c"
 	// += fileName         // merkletree.gob
-	/* ako testiramo ovde, iz custom maina, onda dodati: "../files%" ("../" ispred files) */
+	// ako testiramo ovde, iz custom maina, onda dodati: "../files%" ("../" ispred files)
 	file, err := os.OpenFile(fileName, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
 		panic(err)
@@ -278,16 +290,9 @@ func (mt *MerkleTree) Deserialize(fileName string) {
 		arr = arr2
 	}
 }
+*/
 
-func (n *Node) String() string {
-	return hex.EncodeToString(n.Data[:])
-}
-
-func Hash(data []byte) [20]byte {
-	return sha1.Sum(data)
-}
-
-
+/*
 func (mt *MerkleTree) ToBytes() ([]byte, error) {
 
 	t := Tree{allHashes, lTree}
@@ -301,9 +306,9 @@ func (mt *MerkleTree) ToBytes() ([]byte, error) {
 	}
 
 	return network.Bytes(), nil
-}
+}*/
 
-
+/*
 func (mt *MerkleTree) FromBytes(bytess []byte) error {
 
 	t := Tree{}
@@ -352,18 +357,175 @@ func (mt *MerkleTree) FromBytes(bytess []byte) error {
 	}
 
 	return nil
+}*/
+
+
+// Serijalizujemo u stvari pomocnu strukturu Tree (pogledaj gore sta sadrzi)
+func (mt *MerkleTree) Serialize(path string) {
+
+	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	bytess, _ := mt.ToBytes()
+	_, err = file.Write(bytess)
+	if err != nil {
+		panic(err)
+	} 
 }
+
+
+func (mt *MerkleTree) ToBytes() ([]byte, error) {
+
+	t := Tree{allHashes, lTree}
+	data := make([]byte, 0)
+
+	//fmt.Println("ToBytes")
+	//fmt.Println(t)
+
+	// Serialize Length
+	lengthBytes := make([]byte, 8)
+	binary.LittleEndian.PutUint64(lengthBytes, uint64(t.Length))
+	data = append(data, lengthBytes...)
+
+	// Serialize Hashes
+	for _, hash := range t.Hashes {
+		hashSizeBytes := make([]byte, 8)
+		binary.LittleEndian.PutUint64(hashSizeBytes, uint64(len(hash)))
+		data = append(data, hashSizeBytes...)
+
+		data = append(data, hash...)
+	}
+
+	return data, nil
+}
+
+
+
+//Deserialize pomocnu strukturu Tree, iz koje izvlacimo sve
+//prethodne hasheve i pravimo ispocetka MerkleTree
+func (mt *MerkleTree) Deserialize(path string) error {
+
+	//fmt.Println("Usao")
+	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0666)
+	if err != nil {
+		//fmt.Println("Ne posotji???")
+		return err
+	}
+	defer file.Close()
+
+	file.Seek(0, 0)
+
+	fi, err2 := file.Stat()
+	if err2 != nil {
+		return err2
+	}
+
+	data := make([]byte, fi.Size())
+	_, err = file.Read(data)
+	if err != nil {
+		return err
+	}
+
+	mt.FromBytes(data)
+	return nil
+}
+
+func (mt *MerkleTree) FromBytes(bytess []byte) error {
+	t := Tree{}
+
+	t.Length = int(binary.LittleEndian.Uint64(bytess[:8]))
+	//fmt.Println("1")
+	bytess = bytess[8:]
+	//fmt.Println("2")
+
+	allHashes = make([][]byte, t.Length * t.Length)
+	s := 0
+
+	curLen := t.Length
+	for true {
+		if (curLen == 0) {
+			break
+		}
+		s += curLen
+		curLen = curLen / 2
+		if (curLen % 2 == 1 && curLen != 1) {
+			curLen++
+		}
+	}
+
+
+	for i := 0; i < s; i++ {
+		hashSize := binary.LittleEndian.Uint64(bytess[:8])
+		bytess = bytess[8:]
+		allHashes[i] = bytess[:hashSize]
+		//fmt.Println(allHashes[i])
+		bytess = bytess[hashSize:]
+	}
+
+
+	t.Hashes = make([][]byte, s)
+
+	//fmt.Println(s)
+	//fmt.Println("TU SAM")
+	for i := 0; i < s; i++ {
+		t.Hashes[i] = allHashes[i]
+		//fmt.Println(allHashes[i])
+	}
+
+	//fmt.Println(t)
+
+	//fmt.Println("4")
+	arr := []Node{}
+	for i := 0; i < t.Length; i++ {
+		curNode := Node{t.Hashes[i], nil, nil, 0, i}
+		arr = append(arr, curNode)
+	}
+
+	cur := t.Length
+	lvl := 1
+	for true {
+		br := 0
+		arr2 := []Node{}
+		for i := 0; i < len(arr); i += 2 {
+			nodeLeft := arr[i]
+			nodeRight := arr[i+1]
+			curNode := Node{t.Hashes[cur], &nodeLeft, &nodeRight, lvl, br}
+			arr2 = append(arr2, curNode)
+			br++
+			cur++
+		}
+		if len(arr2) == 1 {
+			// onda je root...
+			mt.Root = &arr2[0]
+			break
+		}
+		if len(arr2)%2 == 1 {
+			lastNode := Node{t.Hashes[cur], nil, nil, lvl, len(arr2)}
+			arr2 = append(arr2, lastNode)
+			cur++
+		}
+		lvl++
+		arr = arr2
+	}
+
+	return nil
+}
+
+
 
 /*
 func main() {
 	arr1 := make([][]byte, 10, 100)
 	var mt1 = MerkleTree{}
 
-   var elem1 = []byte("1")
+	var elem1 = []byte("1")
 	var elem2 = []byte("2")
-   var elem3 = []byte("3")
-   var elem4 = []byte("4")
-   var elem5 = []byte("6")
+	var elem3 = []byte("3")
+	var elem4 = []byte("4")
+	var elem5 = []byte("6")
 
 	arr1[0] = elem1
 	arr1[1] = elem2
@@ -372,17 +534,16 @@ func main() {
 	arr1[4] = elem5
 
 	mt1.Init(arr1)
-	mt1.Serialize("merkletree1.gob")
-
+	mt1.Serialize("merkletree1.db")
 
 	arr2 := make([][]byte, 10, 100)
 	var mt2 = MerkleTree{}
 
-   var elem6 = []byte("1")
+	var elem6 = []byte("1")
 	var elem7 = []byte("2")
-   var elem8 = []byte("2")
-   var elem9 = []byte("4")
-   var elem10 = []byte("5")
+	var elem8 = []byte("2")
+	var elem9 = []byte("4")
+	var elem10 = []byte("5")
 
 	arr2[0] = elem6
 	arr2[1] = elem7
@@ -391,13 +552,15 @@ func main() {
 	arr2[4] = elem10
 
 	mt2.Init(arr2)
-	mt2.Serialize("merkletree2.gob")
+	mt2.Serialize("merkletree2.db")
 
 	var mt11 = MerkleTree{}
-	mt11.Deserialize("merkletree1.gob")
+	mt11.Deserialize("merkletree1.db")
+	fmt.Println(mt11)
+
 
 	var mt12 = MerkleTree{}
-	mt12.Deserialize("merkletree2.gob")
+	mt12.Deserialize("merkletree2.db")
 
 	fmt.Println()
 	fmt.Println(mt11.Compare(&mt12))
