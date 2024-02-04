@@ -61,9 +61,9 @@ func Get(memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *T
 		}
 	} else {
 		foundBF, fileBFIn := SearchTroughBloomFilters(key, lsm) // trazi u disku
-		if foundBF {                                          // ovde nesto potencijalno ne valja, mozda treba dodati putanje u bloomFilterFilesNames?
+		if foundBF {                                            // ovde nesto potencijalno ne valja, mozda treba dodati putanje u bloomFilterFilesNames?
 			fmt.Println("Mozda postoji na disku.")
-			
+
 			for _, fileBF := range fileBFIn { // NIJE ISTO DA LI GA JE PRVO PRONASAO OBRISANOG ILI NE, jako vazno!
 				//ucitavamo summary i index fajlove za sstable u kojem je mozda element (saznali preko bloomfiltera)
 				summaryFileName := lsm.SummaryFilesNames[fileBF]
@@ -75,6 +75,7 @@ func Get(memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *T
 				}
 
 				if reflect.DeepEqual(foundValue, []byte{}) {
+					println("prazno")
 					continue
 				}
 
@@ -546,19 +547,19 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 
 		for works {
 			/*
-			if len(lastDeletedElems) > (pageSize + memtable.N + len(sstables)) && lastElem != "{" {
-				keys := make([]string, 0)
+				if len(lastDeletedElems) > (pageSize + memtable.N + len(sstables)) && lastElem != "{" {
+					keys := make([]string, 0)
 
-				for key := range lastDeletedElems {
-					if key < lastElem {
-						keys = append(keys, key)
+					for key := range lastDeletedElems {
+						if key < lastElem {
+							keys = append(keys, key)
+						}
 					}
-				}
 
-				for _, key := range keys {
-					delete(lastDeletedElems, key)
-				}
-			}*/
+					for _, key := range keys {
+						delete(lastDeletedElems, key)
+					}
+				}*/
 
 			keys := make([]string, pageSize)
 			vals := make([][]byte, pageSize)
@@ -614,7 +615,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 									}
 
 									keyHelp := memElems[mem_indexes[i%memtable.N]].Transaction.Key
-									
+
 									var foundElem bool = false
 									if memElems[mem_indexes[i%memtable.N]].Tombstone {
 										lastDeletedElems[keyHelp] = true
@@ -993,9 +994,9 @@ func Delete(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.
 
 	// provjeravamo disk
 	foundBF, fileBFIn := SearchTroughBloomFilters(key, lsm) // trazi u disku
-	if foundBF {                                          // ovde nesto potencijalno ne valja, mozda treba dodati putanje u bloomFilterFilesNames?
+	if foundBF {                                            // ovde nesto potencijalno ne valja, mozda treba dodati putanje u bloomFilterFilesNames?
 		fmt.Println("Mozda postoji na disku.")
-			
+
 		for _, fileBF := range fileBFIn {
 			//ucitavamo summary i index fajlove za sstable u kojem je mozda element (saznali preko bloomfiltera)
 			summaryFileName := lsm.SummaryFilesNames[fileBF]
