@@ -1,8 +1,7 @@
 package BloomFilter
 
 import (
-	"encoding/gob"
-	"bytes"
+	"encoding/binary"
 	"os"
 )
 
@@ -65,9 +64,8 @@ func (bf BloomFilter) Serialize(path string) {
 	}
 	defer file.Close()
 
-	encoder := gob.NewEncoder(file)
-	err = encoder.Encode(bf)
-
+	bytess, _ := bf.ToBytes()
+	_, err = file.Write(bytess)
 	if err != nil {
 		panic(err)
 	}
@@ -82,39 +80,67 @@ func (bf *BloomFilter) Deserialize(path string) error {
 	}
 	defer file.Close()
 
-	decoder := gob.NewDecoder(file)
 	file.Seek(0, 0)
-	for {
-		err = decoder.Decode(bf)
-		if err != nil {
-			return err
-		}
+
+	fi, err2 := file.Stat()
+	if err2 != nil {
+		return err2
 	}
-	//zasto je unreachable???
+
+	data := make([]byte, fi.Size())
+	_, err = file.Read(data)
+	if err != nil {
+		return err
+	}
+
+	bf.FromBytes(data)
+
 	return nil
 }
 
 func (bf *BloomFilter) ToBytes() ([]byte, error) {
-	var network bytes.Buffer
-    enc := gob.NewEncoder(&network)
+	data := make([]byte, 0)
 
-    err := enc.Encode(*bf)
-    if err != nil {
-        return nil, err
-    }
+	kBytes := make([]byte, 8)
+	binary.LittleEndian.PutUint64(kBytes, uint64(bf.K))
+	data = append(data, kBytes...)
 
-    return network.Bytes(), nil
+	mSizeBytes := make([]byte, 8)
+	binary.LittleEndian.PutUint64(mSizeBytes, uint64(len(bf.M)))
+	data = append(data, mSizeBytes...)
+	
+	data = append(data, bf.M...)
+
+	for _, hash := range bf.Seeds {
+		hashSizeBytes := make([]byte, 8)
+		binary.LittleEndian.PutUint64(hashSizeBytes, uint64(len(hash.Seed)))
+		data = append(data, hashSizeBytes...)
+		
+		data = append(data, hash.Seed...)
+	}
+
+	return data, nil
 }
 
 func (bf *BloomFilter) FromBytes(bytess []byte) error {
-	network := bytes.NewBuffer(bytess)
-    dec := gob.NewDecoder(network)
+	bf.K = uint(binary.LittleEndian.Uint64(bytess[:8]))
+	bytess = bytess[8:]
 
-    err := dec.Decode(&bf)
+	bf.Seeds = make([]HashWithSeed, bf.K)
 
-    if err != nil {
-        return err
-    }
+	mSize := binary.LittleEndian.Uint64(bytess[:8])
+	bytess = bytess[8:]
 
-    return nil
+	bf.M = bytess[:mSize]
+	bytess = bytess[mSize:]
+
+	for i := 0;i < int(bf.K);i++ {
+		length := binary.LittleEndian.Uint64(bytess[:8])
+		bytess = bytess[8:]
+
+		bf.Seeds[i] = HashWithSeed{Seed : bytess[:length]}
+		bytess = bytess[length:]
+	}
+
+	return nil
 }
