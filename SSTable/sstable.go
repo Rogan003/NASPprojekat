@@ -1701,7 +1701,7 @@ func mergeOneFile(level int, lsm *Config.LSMTree, dil_s int, dil_i int, comp boo
 	mergeOneFiles(level, sstableFile, lsm, dil_s, dil_i, comp, dict1, dict2)
 	lsm.Levels[level-1] = 0
 	lsm.Levels[level]++
-	if lsm.Levels[level] == lsm.MaxSSTables && level != lsm.CountOfLevels { // proverava broj fajlova na sledećem nivou, i ne treba da pozove merge ako je na 3. nivou tj ako je nivo 2
+	if lsm.Levels[level] == lsm.MaxSSTables && level != lsm.CountOfLevels-1 { // proverava broj fajlova na sledećem nivou, i ne treba da pozove merge ako je na 3. nivou tj ako je nivo 2
 		mergeOneFile(level+1, lsm, dil_s, dil_i, comp, dict1, dict2)
 	}
 }
@@ -1968,7 +1968,7 @@ func merge(level int, lsm *Config.LSMTree, dil_s int, dil_i int, comp bool, dict
 	mergeFiles(level, dataFile, indexFile, summaryFile, bloomFile, merkleFile, lsm, dil_s, dil_i, comp, dict1, dict2)
 	lsm.Levels[level-1] = 0
 	lsm.Levels[level]++
-	if lsm.Levels[level] == lsm.MaxSSTables && level != lsm.CountOfLevels { // proverava broj fajlova na sledećem nivou, i ne treba da pozove merge ako je na 3. nivou tj ako je nivo 2
+	if lsm.Levels[level] == lsm.MaxSSTables && level != lsm.CountOfLevels-1 { // proverava broj fajlova na sledećem nivou, i ne treba da pozove merge ako je na 3. nivou tj ako je nivo 2
 		merge(level+1, lsm, dil_s, dil_i, comp, dict1, dict2)
 	}
 }
