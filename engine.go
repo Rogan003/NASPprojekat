@@ -224,7 +224,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 		}
 
 		for index, _ := range indexes2 {
-			indexes[index] = -1
+			indexes2[index] = -1
 		}
 
 		// citanje pozicija u index fajlovima odakle treba da se krece skeniranje
@@ -595,7 +595,6 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 					if err == io.EOF {
 						dataPosition := SSTable.ScanIndexInOneFile(indexPosition, summaryOffset, key1, file)
 						notFound := -1
-
 						indexes2[index] = int(dataPosition)
 
 						if dataPosition == int64(notFound) {
@@ -618,7 +617,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 					if string(keyValue) > key1 {
 						dataPosition := SSTable.ScanIndexInOneFile(indexPosition, summaryOffset, key1, file)
 						notFound := -1
-
+						fmt.Println(string(keyValue))
 						indexes2[index] = int(dataPosition)
 
 						if dataPosition == int64(notFound) {
@@ -636,7 +635,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 							if err == io.EOF {
 								dataPosition := SSTable.ScanIndexInOneFile(indexPosition, summaryOffset, key1, file)
 								notFound := -1
-
+								fmt.Println(string(keyValue))
 								indexes2[index] = int(dataPosition)
 
 								if dataPosition == int64(notFound) {
@@ -865,7 +864,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 				}
 			}
 		}
-
+		
 		forward := true
 		works := true
 		lastElemsTables := make([]string, 0)
@@ -1215,7 +1214,8 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 										// pomeramo se na poziciju u dataFile gde je nas podatak
 										_, err = file.Seek(int64(indexes2[index]), 0)
 										if err != nil {
-											log.Fatal(err)
+											indexes2[index] = -1
+											break
 										}
 
 										if comp {

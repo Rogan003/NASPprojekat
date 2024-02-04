@@ -746,7 +746,7 @@ func ScanIndexInOneFile(startPosition uint64, endPosition uint64, key string, fi
 		currentKey, position := ReadFromIndex(file)
 		println("Currentkey u indexu ", currentKey, "  position ", position)
 		offset, err = file.Seek(0, io.SeekCurrent)
-		if offset == int64(endPosition) {
+		if offset >= int64(endPosition) {
 			return int64(lastPos)
 		}
 
@@ -910,14 +910,12 @@ func LoadSummary(summary *os.File) *SStableSummary {
 func ReadAnyData(position int64, DataFileName string, comp bool, dict1 *map[int]string) ([]byte, []byte, bool, bool) {
 	file, err := os.OpenFile(DataFileName, os.O_RDWR, 0777)
 	if err != nil {
-		log.Fatal(err)
 		return []byte{}, []byte{}, false, false
 	}
 	defer file.Close()
 	// pomeramo se na poziciju u dataFile gde je nas podatak
 	_, err = file.Seek(position, 0)
 	if err != nil {
-		log.Fatal(err)
 		return []byte{}, []byte{}, false, false
 	}
 
@@ -938,7 +936,6 @@ func ReadAnyData(position int64, DataFileName string, comp bool, dict1 *map[int]
 			position += int64(TIMESTAMP_START + n + 1)
 			_, err = file.Seek(position, 0)
 			if err != nil {
-				log.Fatal(err)
 				return []byte{}, []byte{}, false, true
 			}
 
@@ -956,7 +953,6 @@ func ReadAnyData(position int64, DataFileName string, comp bool, dict1 *map[int]
 		position += int64(TIMESTAMP_START + n + 1)
 		_, err = file.Seek(position, 0)
 		if err != nil {
-			log.Fatal(err)
 			return []byte{}, []byte{}, false, false
 		}
 
@@ -973,7 +969,6 @@ func ReadAnyData(position int64, DataFileName string, comp bool, dict1 *map[int]
 		position += int64(n)
 		_, err = file.Seek(position, 0)
 		if err != nil {
-			log.Fatal(err)
 			return []byte{}, []byte{}, false, false
 		}
 
@@ -990,7 +985,6 @@ func ReadAnyData(position int64, DataFileName string, comp bool, dict1 *map[int]
 		position += int64(n)
 		_, err = file.Seek(position, 0)
 		if err != nil {
-			log.Fatal(err)
 			return []byte{}, []byte{}, false, false
 		}
 
