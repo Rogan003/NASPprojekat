@@ -1799,54 +1799,160 @@ func levelFileNames(dataFileNames []string, substring string) []string {
 }
 
 // cita iz fajla za merge, vraca procutani entry ili nil ako smo dosli do kraja fajla
-func readMerge(file *os.File) *Config.Entry {
+func readMerge(file *os.File, comp bool, dict1 *map[int]string) *Config.Entry {
+	if comp {
+		position, err := file.Seek(0, 1)
+		if err != nil {
+			return nil
+		}
 
-	// cita bajtove podatka DO key i value u info
-	// CRC (4B)   | Timestamp (8B) | Tombstone(1B) | Key Size (8B) | Value Size (8B)
-	info := make([]byte, KEY_SIZE_START)
-	_, err := file.Read(info)
-	if err != nil {
-		return nil
-	}
-	tombstone := info[TOMBSTONE_START:KEY_SIZE_START]
-	//ako je tombstone 1 procitaj odmah sledeci
-	if tombstone[0] == 1 {
-		info := make([]byte, KEY_SIZE_SIZE)
+		entry := Config.Entry{}
+
+		info := make([]byte, KEY_SIZE_START)
 		_, err = file.Read(info)
 		if err != nil {
 			return nil
 		}
-		key_size := binary.LittleEndian.Uint64(info)
-		info = make([]byte, key_size)
+
+		entry.Crc = binary.LittleEndian.Uint32(info[:TIMESTAMP_START])
+
+		num, n := binary.Uvarint(info[TIMESTAMP_START:])
+
+		entry.Timestamp = num
+
+		tombstone := info[TIMESTAMP_START+n]
+
+		if tombstone == 1 {
+			info = make([]byte, 10)
+
+			position += int64(TIMESTAMP_START + n + 1)
+			_, err = file.Seek(position, 0)
+			if err != nil {
+				log.Fatal(err)
+				return nil
+			}
+
+			_, err = file.Read(info)
+			if err != nil {
+				return nil
+			}
+
+			_, n := binary.Uvarint(info)
+
+			position += int64(n)
+			_, err = file.Seek(position, 0)
+			if err != nil {
+				log.Fatal(err)
+				return nil
+			}
+
+			return readMerge(file, comp, dict1)
+		}
+
+		entry.Tombstone = false
+
+		position += int64(TIMESTAMP_START + n + 1)
+		_, err = file.Seek(position, 0)
+		if err != nil {
+			log.Fatal(err)
+			return nil
+		}
+
+		info = make([]byte, VALUE_SIZE_SIZE)
+
 		_, err = file.Read(info)
 		if err != nil {
 			return nil
 		}
-		return readMerge(file)
-	}
-	//ako je tombstone 0 onda citaj sve podatke entrya
-	info2 := make([]byte, KEY_START-KEY_SIZE_START)
-	_, err = file.Read(info2)
-	if err != nil {
-		return nil
+
+		num, n = binary.Uvarint(info)
+		value_size := num
+
+		position += int64(n)
+		_, err = file.Seek(position, 0)
+		if err != nil {
+			log.Fatal(err)
+			return nil
+		}
+
+		info = make([]byte, 10)
+
+		_, err = file.Read(info)
+		if err != nil {
+			return nil
+		}
+
+		num, n = binary.Uvarint(info)
+		key := (*dict1)[int(num)]
+
+		position += int64(n)
+		_, err = file.Seek(position, 0)
+		if err != nil {
+			log.Fatal(err)
+			return nil
+		}
+
+		data := make([]byte, value_size)
+		_, err = file.Read(data)
+		if err != nil {
+			return nil
+		}
+
+		entry.Transaction.Key = key
+		entry.Transaction.Value = data
+
+		return &entry
+
+	} else {
+		// cita bajtove podatka DO key i value u info
+		// CRC (4B)   | Timestamp (8B) | Tombstone(1B) | Key Size (8B) | Value Size (8B)
+		info := make([]byte, KEY_SIZE_START)
+		_, err := file.Read(info)
+		if err != nil {
+			return nil
+		}
+		tombstone := info[TOMBSTONE_START:KEY_SIZE_START]
+		//ako je tombstone 1 procitaj odmah sledeci
+		if tombstone[0] == 1 {
+			info := make([]byte, KEY_SIZE_SIZE)
+			_, err = file.Read(info)
+			if err != nil {
+				return nil
+			}
+			key_size := binary.LittleEndian.Uint64(info)
+			info = make([]byte, key_size)
+			_, err = file.Read(info)
+			if err != nil {
+				return nil
+			}
+			return readMerge(file, comp, dict1)
+		}
+		//ako je tombstone 0 onda citaj sve podatke entrya
+		info2 := make([]byte, KEY_START-KEY_SIZE_START)
+		_, err = file.Read(info2)
+		if err != nil {
+			return nil
+		}
+
+		key_size := binary.LittleEndian.Uint64(info2[:KEY_SIZE_SIZE])
+		value_size := binary.LittleEndian.Uint64(info2[KEY_SIZE_SIZE:])
+
+		// cita bajtove podatka, odnosno key i value u data
+		//| Key | Value |
+		data := make([]byte, key_size+value_size)
+		_, err = file.Read(data)
+		if err != nil {
+			return nil
+		}
+		info = append(info, info2...)
+		info = append(info, data...)
+
+		entry := Config.ToEntry(info)
+		println("readMerge ", entry.Transaction.Key)
+		return &entry
 	}
 
-	key_size := binary.LittleEndian.Uint64(info2[:KEY_SIZE_SIZE])
-	value_size := binary.LittleEndian.Uint64(info2[KEY_SIZE_SIZE:])
-
-	// cita bajtove podatka, odnosno key i value u data
-	//| Key | Value |
-	data := make([]byte, key_size+value_size)
-	_, err = file.Read(data)
-	if err != nil {
-		return nil
-	}
-	info = append(info, info2...)
-	info = append(info, data...)
-
-	entry := Config.ToEntry(info)
-	println("readMerge ", entry.Transaction.Key)
-	return &entry
+	return nil
 }
 
 // vraca true ako su svi elementi niza nil, false kao je bar jedan razlicit od nil
@@ -1954,7 +2060,7 @@ func mergeFiles(level int, dataFile *os.File, indexFile *os.File, summaryFile *o
 	var sortedAllEntries []*Config.Entry
 	//u entries cuvamo trenutne entie na kojim smo iz svakog sstablea sa ovog nivoa
 	for _, file := range levelFiles {
-		entry := readMerge(file)
+		entry := readMerge(file, comp, dict1)
 		entries = append(entries, entry)
 	}
 	for {
@@ -1967,7 +2073,7 @@ func mergeFiles(level int, dataFile *os.File, indexFile *os.File, summaryFile *o
 		sortedAllEntries = append(sortedAllEntries, minEntry)
 		//citamo naredne entye za fajlove koji su bili na min entry
 		for _, index := range minKeyArray {
-			newEntry := readMerge(levelFiles[index])
+			newEntry := readMerge(levelFiles[index], comp, dict1)
 			entries[index] = newEntry
 		}
 
@@ -2436,7 +2542,7 @@ func levelMergeFiles(level int, dataFiles []string, indexFiles []string, summary
 	//u entries cuvamo trenutne entie na kojim smo iz svakog sstablea sa ovog nivoa
 	
 	for _, file := range levelFiles {
-		entry := readMerge(file)
+		entry := readMerge(file, comp, dict1)
 		entries = append(entries, entry)
 	}
 
@@ -2449,7 +2555,7 @@ func levelMergeFiles(level int, dataFiles []string, indexFiles []string, summary
 		sortedAllEntries = append(sortedAllEntries, minEntry)
 		//citamo naredne entye za fajlove koji su bili na min entry
 		for _, index := range minKeyArray {
-			newEntry := readMerge(levelFiles[index])
+			newEntry := readMerge(levelFiles[index], comp, dict1)
 			entries[index] = newEntry
 		}
 	}
