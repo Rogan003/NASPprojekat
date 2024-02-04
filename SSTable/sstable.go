@@ -2384,23 +2384,23 @@ func LevelTieredCompaction(lsm *Config.LSMTree, dil_s int, dil_i int, oneFile bo
 	}
 }
 
-func levelMergeOneFile(level int, lsm *Config.LSMTree, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int){
+func levelMergeOneFile(level int, lsm *Config.LSMTree, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) {
 
-	for{
+	for {
 		br := lsm.Levels[level-1]
 
 		//izabrali smo tabelu na visem nivou
 		sstableFile := "files_SSTable/oneFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".db"
 
 		//treba dobaviti indekse iz sstableFile iz summarija
-		SummaryContent := LoadSummaryOneFile(sstableFile, dil_s, dil_i, comp, dict1,dict2)
+		SummaryContent := LoadSummaryOneFile(sstableFile, dil_s, dil_i, comp, dict1, dict2)
 
 		bottomIdx := SummaryContent.FirstKey
 		topIdx := SummaryContent.LastKey
 
 		//naci tabele koje su sa sledeceg nivoa
 
-		sstableFiles,entriesAdd := findOtherTablesOneFile(level+1, bottomIdx, topIdx, lsm, dil_s, dil_i,comp, dict1, dict2)
+		sstableFiles, entriesAdd := findOtherTablesOneFile(level+1, bottomIdx, topIdx, lsm, dil_s, dil_i, comp, dict1, dict2)
 
 		//sve tabele dodati u neki niz koji ce se proslediti funkciji koja ce da merguje sve
 
@@ -2420,16 +2420,16 @@ func levelMergeOneFile(level int, lsm *Config.LSMTree, dil_s int, dil_i int, com
 			// proverava broj fajlova na sledećem nivou, i ne treba da pozove merge ako je na 3. nivou tj ako je nivo 2
 			level += 1
 			continue
-		}else{
+		} else {
 			break
 		}
 	}
 }
 
-func levelMergeFilesOneFile(level int, sstableFiles []string, lsm *Config.LSMTree, num int, entriesAdd []*Config.Entry, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int){
+func levelMergeFilesOneFile(level int, sstableFiles []string, lsm *Config.LSMTree, num int, entriesAdd []*Config.Entry, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) {
 
 	files, err := openFiles(sstableFiles)
-	if err != nil{
+	if err != nil {
 		panic(err)
 	}
 
@@ -2445,15 +2445,16 @@ func levelMergeFilesOneFile(level int, sstableFiles []string, lsm *Config.LSMTre
 	}
 }
 
-func findOtherTablesOneFile(level int, bottomIdx string, topIdx string,lsm *Config.LSMTree, dil_s int, dil_i int, comp bool,  dict1 *map[int]string, dict2 *map[string]int) ([]string, []*Config.Entry){
+
+func findOtherTablesOneFile(level int, bottomIdx string, topIdx string, lsm *Config.LSMTree, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) ([]string, []*Config.Entry) {
 
 	var otherFiles []string
 
 	var entriesAdd []*Config.Entry
 
-	if level < lsm.CountOfLevels{
-	//for i := 1 ; i <= lsm.LevelNumber[level]; i++ {
-		for i := 1 ; i <= lsm.Levels[level]; i++ {
+	if level < lsm.CountOfLevels {
+		//for i := 1 ; i <= lsm.LevelNumber[level]; i++ {
+		for i := 1; i <= lsm.Levels[level]; i++ {
 
 			nextSSTableFile := "files_SSTable/oneFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(i) + ".db"
 
@@ -2464,31 +2465,123 @@ func findOtherTablesOneFile(level int, bottomIdx string, topIdx string,lsm *Conf
 
 			if FirstKey >= bottomIdx && FirstKey <= topIdx && LastKey >= bottomIdx && LastKey <= topIdx {
 				otherFiles = append(otherFiles, nextSSTableFile)
-			}else{
+			} else {
 
-				if FirstKey >= bottomIdx && FirstKey <= topIdx{
+				// NPR. ukupan prvi opseg = [30 - 80] ---> [bottomIdx - topIdx]
+
+				// u ovoj sstabeli je npr. [60 - 95] ---> [FirstKey - LastKey]
+				// prvi se nalazi u opsegu
+				if FirstKey >= bottomIdx && FirstKey <= topIdx {
 					k1 := FirstKey
 					k2 := topIdx
 					k3 := LastKey
 
-					//entriesAdd = splitSSTableOneFile
-					//dodati entriesAddOneFile
+					entriesAdd = splitSSTableOneFile(k1, k2, k3, false, nextSSTableFile, lsm, dil_s, dil_i, comp, dict1, dict2) //dodati entriesAddOneFile
 				}
 
-				if LastKey >= bottomIdx && LastKey <= topIdx{
+				// NPR. ukupan prvi opseg = [30 - 80] ---> [bottomIdx - topIdx]
+
+				// u ovoj sstabeli je npr. [1 - 40] ---> [FirstKey - LastKey]
+				// drugi se nalazi u opsegu
+				if LastKey >= bottomIdx && LastKey <= topIdx {
 					k1 := FirstKey
 					k2 := bottomIdx
 					k3 := LastKey
 					//dodati entriesAddOneFile
+
+					// mogu poslati u jednu funckiju npr. splitSSTable(1, 30, 40)
+					// ona vrati entriesRewrite, entriesAdd
+					// (entriesRewrite - entry za rewrite samo)							  //  1 - 30
+					// (entriesAdd     - entry za dodati u novu, veliku sstaeblu)    // 30 - 40
+					// saljemo "true" jer je "lower" (uporedjujemo sa "nižim" kljucem iz opsega - topIdx ( == 30 u ovom slucaju))
+					entriesAdd = splitSSTableOneFile(k1, k2, k3, false, nextSSTableFile, lsm, dil_s, dil_i, comp, dict1, dict2)
 				}
 			}
 		}
 	}
-		//proveriti kako vratiti entriesAdd ako nema preklapanja ??????
+	//proveriti kako vratiti entriesAdd ako nema preklapanja ??????
 	return otherFiles, entriesAdd
 }
 
-func LoadSummaryOneFile(FileName string, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) *SStableSummary{
+func splitSSTableOneFile(k1 string, k2 string, k3 string, lower bool, currentOneFile string, lsm *Config.LSMTree, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) []*Config.Entry {
+	// k1 = 1               1 - 30
+	// k2 = 30             30 - 40
+	// k3 = 40
+	// otvaramo samo taj jedan fajl koji treba rewrite  // onaj od   1 - 40
+
+	entriesRewrite, entriesAdd := GetSplitEntriesOneFile(currentOneFile, k2, lower, comp, dict1)
+	// sada napravimo nove splitovane oneFile SSTabele od ovih entrija koje smo izdvojili
+	// koji ne idu u veliku oneFile SSTabelu (ovi od  1 - 30) ,  (od 30 - 40 bi trebali ici u veliki SSTable)
+
+	// prije return treba UPISATI ove REWRITE ENTRIES (to su dijelovi kkljuceva koji nisu u izabranom opsegu)
+	err := os.Remove(currentOneFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// takodje brisemo i iz lsm ovo isto kao gore
+	lsm.DataFilesNames = removeFileName(lsm.DataFilesNames, currentOneFile)
+
+	//pravljenje novog oneFile sstablea od svih sstableova ovog nivoa koji su sada spojeni
+	MakeDataOneFile(entriesRewrite, currentOneFile, dil_s, dil_i, comp, dict1, dict2)
+
+	return entriesAdd
+}
+
+
+// vraca sve entrije, ali splitovane u dva dijela prema kljucu, zbog preklapanja opsega
+// filename  - naziv fajla nad kojim radimo
+// borderKey - kljuc nakon koga splitujemo
+// lower     - true: firstKey NE UPADA u opseg,   false: firstKey UPADA u opseg
+func GetSplitEntriesOneFile(OneFileName string, borderKey string, lower bool, comp bool, dict *map[int]string) ([]*Config.Entry, []*Config.Entry) {
+	file, _ := os.OpenFile(OneFileName, os.O_RDONLY, 0777)
+	file.Seek(KEY_SIZE_SIZE, 0)
+
+	indexOffsetBytes := make([]byte, KEY_SIZE_SIZE)
+
+	_, _ = file.Read(indexOffsetBytes)
+
+	indexOffset := binary.LittleEndian.Uint64(indexOffsetBytes)
+
+	dataOffsetBytes := make([]byte, KEY_SIZE_SIZE)
+
+	_, _ = file.Read(dataOffsetBytes)
+
+	//dataOffset := binary.LittleEndian.Uint64(dataOffsetBytes)
+	//position := int64(dataOffset)
+
+	var entriesRewrite []*Config.Entry // svi procitani entry koji ce se rewrite u novu malu SSTabelu
+	var entriesAdd []*Config.Entry     // svi procitani entry koji ce se spojiti sa velikom tabelom
+
+
+	for {
+		 entry := readMergeOneFile(file, int(indexOffset), comp, dict)
+
+		 if entry == nil {
+			  break
+		 }
+
+		 if lower { // manji kljuc od border kljuca ide u rewrite
+			if entry.Transaction.Key >= borderKey {
+				entriesAdd = append(entriesAdd, entry) // 30 - 40
+			} else {
+				entriesRewrite = append(entriesRewrite, entry) // 1 - 30
+			}
+		} else { // veci kljuc od border kljuca ide u rewrite
+			if entry.Transaction.Key <= borderKey {
+				entriesAdd = append(entriesAdd, entry) // 60 - 80
+			} else {
+				entriesRewrite = append(entriesRewrite, entry) // 80 - 96
+			}
+		}
+
+	}
+
+	return entriesRewrite, entriesAdd
+}
+
+
+func LoadSummaryOneFile(FileName string, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) *SStableSummary {
 
 	file, err := os.OpenFile(FileName, os.O_RDWR|os.O_CREATE, 0777)
 	if err != nil {
@@ -2496,13 +2589,14 @@ func LoadSummaryOneFile(FileName string, dil_s int, dil_i int, comp bool, dict1 
 	}
 	defer file.Close()
 
-	summaryOffsetSize := make([]byte, KEY_SIZE_SIZE)
+	summaryOffsetBytes := make([]byte, KEY_SIZE_SIZE)
 	_, _ = file.Read(summaryOffsetBytes)
 	summaryOffset := binary.LittleEndian.Uint64(summaryOffsetBytes)
 	file.Seek(int64(summaryOffset), 0)
 	summary := LoadSummary(file)
-	return sumarry
+	return summary
 }
+
 
 func levelMerge(level int, lsm *Config.LSMTree, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) {
 	//treba da se izabere tabela koja se merguje
