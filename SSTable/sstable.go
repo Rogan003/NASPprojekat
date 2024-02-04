@@ -1643,7 +1643,7 @@ func mergeOneFiles(level int, sstableFile *os.File, lsm *Config.LSMTree, dil_s i
 
 	//u entries cuvamo trenutne entie na kojim smo iz svakog sstablea sa ovog nivoa
 	for i, file := range levelFiles {
-		entry := readMergeOneFile(file, eofList[i])
+		entry := readMergeOneFile(file, eofList[i], comp, dict1)
 		entries = append(entries, entry)
 	}
 	for _, e := range entries {
@@ -1658,7 +1658,7 @@ func mergeOneFiles(level int, sstableFile *os.File, lsm *Config.LSMTree, dil_s i
 		sortedAllEntries = append(sortedAllEntries, minEntry)
 		//citamo naredne entye za fajlove koji su bili na min entry
 		for _, index := range minKeyArray {
-			newEntry := readMergeOneFile(levelFiles[index], eofList[index])
+			newEntry := readMergeOneFile(levelFiles[index], eofList[index], comp, dict1)
 			entries[index] = newEntry
 		}
 
@@ -1679,7 +1679,7 @@ func mergeOneFiles(level int, sstableFile *os.File, lsm *Config.LSMTree, dil_s i
 }
 
 // cita iz fajla za merge, vraca procutani entry ili nil ako smo dosli do kraja fajla
-func readMergeOneFile(file *os.File, endposition int) *Config.Entry {
+func readMergeOneFile(file *os.File, endposition int, comp bool, dict1 *map[int]string) *Config.Entry {
 	println("USAO U READMERGEONEFILE")
 	// cita bajtove podatka DO key i value u info
 	// CRC (4B)   | Timestamp (8B) | Tombstone(1B) | Key Size (8B) | Value Size (8B)
@@ -1694,53 +1694,160 @@ func readMergeOneFile(file *os.File, endposition int) *Config.Entry {
 		return nil
 	}
 
-	info := make([]byte, KEY_SIZE_START)
-	_, err = file.Read(info)
-	if err != nil {
-		return nil
-	}
-	tombstone := info[TOMBSTONE_START:KEY_SIZE_START]
-	//ako je tombstone 1 procitaj odmah sledeci
-	println("USAOAOO ")
+	if comp {
+		position := currentOffset
 
-	if tombstone[0] == 1 {
+		entry := Config.Entry{}
 
-		info2 := make([]byte, KEY_SIZE_SIZE)
+		info := make([]byte, KEY_SIZE_START)
+		_, err = file.Read(info)
+		if err != nil {
+			return nil
+		}
+
+		entry.Crc = binary.LittleEndian.Uint32(info[:TIMESTAMP_START])
+
+		num, n := binary.Uvarint(info[TIMESTAMP_START:])
+
+		entry.Timestamp = num
+
+		tombstone := info[TIMESTAMP_START+n]
+
+		if tombstone == 1 {
+			info = make([]byte, 10)
+
+			position += int64(TIMESTAMP_START + n + 1)
+			_, err = file.Seek(position, 0)
+			if err != nil {
+				log.Fatal(err)
+				return nil
+			}
+
+			_, err = file.Read(info)
+			if err != nil {
+				return nil
+			}
+			entry.Tombstone = true
+			num, n := binary.Uvarint(info)
+			key := (*dict1)[int(num)]
+			entry.Transaction.Key = key
+			position += int64(n)
+			_, err = file.Seek(position, 0)
+			if err != nil {
+				log.Fatal(err)
+				return nil
+			}
+
+			return &entry
+		}
+
+		entry.Tombstone = false
+
+		position += int64(TIMESTAMP_START + n + 1)
+		_, err = file.Seek(position, 0)
+		if err != nil {
+			log.Fatal(err)
+			return nil
+		}
+
+		info = make([]byte, VALUE_SIZE_SIZE)
+
+		_, err = file.Read(info)
+		if err != nil {
+			return nil
+		}
+
+		num, n = binary.Uvarint(info)
+		value_size := num
+
+		position += int64(n)
+		_, err = file.Seek(position, 0)
+		if err != nil {
+			log.Fatal(err)
+			return nil
+		}
+
+		info = make([]byte, 10)
+
+		_, err = file.Read(info)
+		if err != nil {
+			return nil
+		}
+
+		num, n = binary.Uvarint(info)
+		key := (*dict1)[int(num)]
+
+		position += int64(n)
+		_, err = file.Seek(position, 0)
+		if err != nil {
+			log.Fatal(err)
+			return nil
+		}
+
+		data := make([]byte, value_size)
+		_, err = file.Read(data)
+		if err != nil {
+			return nil
+		}
+
+		entry.Transaction.Key = key
+		entry.Transaction.Value = data
+
+		return &entry
+
+	} else {
+		info := make([]byte, KEY_SIZE_START)
+		_, err = file.Read(info)
+		if err != nil {
+			return nil
+		}
+		tombstone := info[TOMBSTONE_START:KEY_SIZE_START]
+		//ako je tombstone 1 procitaj odmah sledeci
+		println("USAOAOO ")
+
+		if tombstone[0] == 1 {
+			info2 := make([]byte, KEY_SIZE_SIZE)
+			_, err = file.Read(info2)
+			if err != nil {
+				return nil
+			}
+			key_size := binary.LittleEndian.Uint64(info2)
+			key := make([]byte, key_size)
+			_, err = file.Read(key)
+			if err != nil {
+				return nil
+			}
+			info = append(info, info2...)
+			info3 := make([]byte, VALUE_SIZE_SIZE)
+			info = append(info, info3...)
+			info = append(info, key...)
+			entry := Config.ToEntry(info)
+			return &entry
+		}
+		//ako je tombstone 0 onda citaj sve podatke entrya
+		info2 := make([]byte, KEY_START-KEY_SIZE_START)
 		_, err = file.Read(info2)
 		if err != nil {
 			return nil
 		}
-		key_size := binary.LittleEndian.Uint64(info2)
-		info3 := make([]byte, key_size)
-		_, err = file.Read(info3)
+
+		key_size := binary.LittleEndian.Uint64(info2[:KEY_SIZE_SIZE])
+		value_size := binary.LittleEndian.Uint64(info2[KEY_SIZE_SIZE:])
+
+		// cita bajtove podatka, odnosno key i value u data
+		//| Key | Value |
+		data := make([]byte, key_size+value_size)
+		_, err = file.Read(data)
 		if err != nil {
 			return nil
 		}
-		return readMergeOneFile(file, endposition)
+		info = append(info, info2...)
+		info = append(info, data...)
+
+		entry := Config.ToEntry(info)
+
+		return &entry
 	}
-	//ako je tombstone 0 onda citaj sve podatke entrya
-	info2 := make([]byte, KEY_START-KEY_SIZE_START)
-	_, err = file.Read(info2)
-	if err != nil {
-		return nil
-	}
-
-	key_size := binary.LittleEndian.Uint64(info2[:KEY_SIZE_SIZE])
-	value_size := binary.LittleEndian.Uint64(info2[KEY_SIZE_SIZE:])
-
-	// cita bajtove podatka, odnosno key i value u data
-	//| Key | Value |
-	data := make([]byte, key_size+value_size)
-	_, err = file.Read(data)
-	if err != nil {
-		return nil
-	}
-	info = append(info, info2...)
-	info = append(info, data...)
-
-	entry := Config.ToEntry(info)
-
-	return &entry
 }
 
 func merge(level int, lsm *Config.LSMTree, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) {
@@ -1836,9 +1943,10 @@ func readMerge(file *os.File, comp bool, dict1 *map[int]string) *Config.Entry {
 			if err != nil {
 				return nil
 			}
-
-			_, n := binary.Uvarint(info)
-
+			entry.Tombstone = true
+			num, n := binary.Uvarint(info)
+			key := (*dict1)[int(num)]
+			entry.Transaction.Key = key
 			position += int64(n)
 			_, err = file.Seek(position, 0)
 			if err != nil {
@@ -1846,7 +1954,7 @@ func readMerge(file *os.File, comp bool, dict1 *map[int]string) *Config.Entry {
 				return nil
 			}
 
-			return readMerge(file, comp, dict1)
+			return &entry
 		}
 
 		entry.Tombstone = false
