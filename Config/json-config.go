@@ -92,7 +92,7 @@ func NewLMSTree(Config Config) *LSMTree {
 			continue
 		}
 
-		if strings.HasSuffix(file.Name(), ".db") && strings.HasPrefix(file.Name(), "bloomFile") {
+		if strings.HasSuffix(file.Name(), ".db") && strings.HasPrefix(file.Name(), "bloomFilterFile") {
 			path := "files_SSTable/" + file.Name()
 
 			filterFile = append(filterFile, path)

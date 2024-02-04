@@ -152,9 +152,10 @@ func DataFileToBytes(DataFileName string, comp bool) [][]byte {
 				_, n := binary.Uvarint(info)
 
 				byteData = append(byteData, info[:n]...)
+				retVal = append(retVal, byteData)
 
 				position += int64(n)
-
+				
 				continue
 			}
 
@@ -246,6 +247,7 @@ func DataFileToBytes(DataFileName string, comp bool) [][]byte {
 				}
 
 				byteData = append(byteData, data...)
+				retVal = append(retVal, byteData)
 
 				continue
 			}
@@ -341,6 +343,7 @@ func OneFileDataToBytes(OneFileName string, comp bool) [][]byte {
 				_, n := binary.Uvarint(info)
 
 				byteData = append(byteData, info[:n]...)
+				retVal = append(retVal, byteData)
 
 				position += int64(n)
 
@@ -435,6 +438,7 @@ func OneFileDataToBytes(OneFileName string, comp bool) [][]byte {
 				}
 
 				byteData = append(byteData, data...)
+				retVal = append(retVal, byteData)
 
 				position += int64(VALUE_SIZE_START) + int64(key_size)
 
