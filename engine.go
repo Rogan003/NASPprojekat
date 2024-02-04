@@ -617,7 +617,6 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 					if string(keyValue) > key1 {
 						dataPosition := SSTable.ScanIndexInOneFile(indexPosition, summaryOffset, key1, file)
 						notFound := -1
-						fmt.Println(string(keyValue))
 						indexes2[index] = int(dataPosition)
 
 						if dataPosition == int64(notFound) {
@@ -635,7 +634,6 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 							if err == io.EOF {
 								dataPosition := SSTable.ScanIndexInOneFile(indexPosition, summaryOffset, key1, file)
 								notFound := -1
-								fmt.Println(string(keyValue))
 								indexes2[index] = int(dataPosition)
 
 								if dataPosition == int64(notFound) {
@@ -655,14 +653,14 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 
 			if indexes2[index] != -1 {
 				file, err := os.OpenFile(value, os.O_RDONLY, 0777)
-				
+
 				if err != nil {
 					log.Fatal(err)
 					indexes2[index] = -1
 					break
 				}
 				defer file.Close()
-				
+
 				file.Seek(0, 0)
 				summaryOffsetBytes := make([]byte, SSTable.KEY_SIZE_SIZE)
 				indexOffsetBytes := make([]byte, SSTable.KEY_SIZE_SIZE)
@@ -674,7 +672,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 				indexOffset := binary.LittleEndian.Uint64(indexOffsetBytes)
 
 				position := indexes2[index]
-				
+
 				defer file.Close()
 				// pomeramo se na poziciju u dataFile gde je nas podatak
 				_, err = file.Seek(int64(position), 0)
@@ -864,7 +862,7 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 				}
 			}
 		}
-		
+
 		forward := true
 		works := true
 		lastElemsTables := make([]string, 0)
@@ -1193,14 +1191,14 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 										break
 									} else if string(keyHelp) <= keys[in] {
 										file, err := os.OpenFile(value, os.O_RDONLY, 0777)
-				
+
 										if err != nil {
 											log.Fatal(err)
 											indexes2[index] = -1
 											break
 										}
 										defer file.Close()
-										
+
 										file.Seek(0, 0)
 										summaryOffsetBytes := make([]byte, SSTable.KEY_SIZE_SIZE)
 										indexOffsetBytes := make([]byte, SSTable.KEY_SIZE_SIZE)

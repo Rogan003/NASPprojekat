@@ -78,9 +78,6 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 	var newlines []string
 	newlines = append(newlines, lines[oldestMemIdx:]...)
 	newlines = append(newlines, lines[:oldestMemIdx]...)
-	for _, element := range lines {
-		fmt.Println("nova linija ", element)
-	}
 
 	//uzimamo pocetak odakle krece remakeWAL (uzimamo pocetak najstarijeg memtablea)
 	offset := 0
@@ -126,13 +123,10 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 	}
 
 	//redom ucitavamo fajlove sa segmentima
-	//fmt.Println("svi segmenti: ",segmentsFiles)
 	for _, fileName := range segementsFiles {
 		for {
-			//fmt.Println("filemame",fileName)
 			entry, next, jump := wal.readEntry(fileName, offset)
-			fmt.Println("kljuc ", entry.Transaction.Key)
-			fmt.Println(jump)
+
 			//ako smo zavrsili sa citanjem svih entrya izadji iz fje
 			if reflect.DeepEqual(entry, Config.Entry{}) { // mislim da ovo ne valja skroz? mozda i valja
 				break
@@ -145,7 +139,7 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 			if entry.Tombstone {
 				//ako je operacija brisanja
 				did, index, lwm := mem.Delete(entry.Transaction.Key) // dodao za lwm i index kod brisanja? jel treba? ja mislim da je okej
-				
+
 				if !did { // novo
 					index = mem.R
 					mem.AddAndDelete(entry.Transaction.Key, entry.Transaction.Value)
@@ -154,7 +148,7 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 				if lwm != -1 {
 					wal.lowWaterMark = lwm
 				}
-				
+
 				wal.currentMemIndex = int64(index)
 
 			} else {
@@ -173,7 +167,6 @@ func (wal *WAL) RemakeWAL(mem *Memtable.NMemtables) error {
 
 	}
 
-	println("Celo ime ", wal.lastSegment.Name())
 	fileInfo, err := os.Stat(wal.lastSegment.Name())
 	if err != nil {
 		fmt.Println("Error getting file information:", err)
@@ -250,8 +243,6 @@ func (wal *WAL) WriteInFile(entry *Config.Entry, path string) (error, bool) {
 	}
 
 	entryBytes := entry.ToByte()
-	print("duzina entry koji se unosi :")
-	println(len(entryBytes))
 
 	//remainingCapacity := Config.MaxSegmentSize - fileInfo.Size()
 	remainingCapacity := wal.segmentSize - fi.Size()
@@ -428,22 +419,18 @@ func (wal *WAL) readEntry(path string, offset int) (Config.Entry, int, bool) {
 		log.Fatal(err)
 		return Config.Entry{}, 0, false
 	}
-	//println("segmenti ",segementsFiles[0])
 	if isInSegments(nextPath, segementsFiles) {
 		if err != nil {
 			log.Fatal(err)
 			return Config.Entry{}, 0, false
 		}
 
-		//println("next path ",nextPath)
-		//nextPath = "files_WAL/segment2.log"
 		file2, err := os.OpenFile("files_WAL/"+nextPath, os.O_RDWR, 0644) // promenio sam os.O_RDONLY
 
 		fi, err2 := file2.Stat()
 		if err2 != nil {
 			return Config.Entry{}, 0, false
 		}
-		//println("file 2 velicina",fi.Size())
 		if fi.Size() == 0 {
 			file2.Truncate(1)
 		}
@@ -555,11 +542,9 @@ func (wal *WAL) readEntry(path string, offset int) (Config.Entry, int, bool) {
 
 				if len(buffer) < 8 {
 					help := buffer
-					// println("duzina",len(buffer))
-					// println("duzina2",len(buffer2))
+
 					bytesLeft := buffer2[:(8 - len(buffer))]
 
-					// println(bytesLeft)
 					keySize := binary.LittleEndian.Uint64(append(help, bytesLeft...))
 					buffer2 = buffer2[(8 - len(buffer)):]
 
@@ -750,7 +735,6 @@ func (wal *WAL) OpenWAL(mem *Memtable.NMemtables) error {
 	} else {
 		//otvaramo fajl poslednjeg segmenta
 		lastSegmentPath := "files_WAL/" + segments[len(segments)-1]
-		println(lastSegmentPath)
 		lastSegmentFile, err := os.OpenFile(lastSegmentPath, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0644) //0644 - vlasnik moze da cita i pise, ostali mogu samo da citaju
 		if err != nil {
 			return err
@@ -802,10 +786,7 @@ func (wal *WAL) AddEntry(entry *Config.Entry) error {
 	}
 	//pamtimo koliko je zauzet trneutno
 	wal.CurrentSize = fileInfo.Size()
-	print("currentsize :")
-	println(wal.CurrentSize)
-	//print("lastSeg :")
-	//println(wal.lastSegment.Name())
+
 	return nil
 
 }
@@ -928,8 +909,6 @@ func Put(wal *WAL, mem *Memtable.NMemtables, key string, value []byte) bool { //
 		wal.updateMemSeg(entry, memIndex)
 		//wal.DeleteSegments() treba da se desava samo nakon flush-a, a ne nakon svakog prelaska na novu memtabelu
 	}
-	print("low water mark ")
-	println(wal.lowWaterMark)
 	return true
 }
 

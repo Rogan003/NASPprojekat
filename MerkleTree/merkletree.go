@@ -4,6 +4,7 @@ import (
 	"crypto/sha1"
 	"encoding/binary"
 	"encoding/hex"
+
 	//"fmt"
 	"os"
 	"reflect"
@@ -120,7 +121,6 @@ func (mt *MerkleTree) Init(data [][]byte) {
 		lvl++
 		arr = arr2
 	}
-
 
 	//fmt.Println("INIT: ", allHashes, "\n\n")
 }
@@ -359,7 +359,6 @@ func (mt *MerkleTree) FromBytes(bytess []byte) error {
 	return nil
 }*/
 
-
 // Serijalizujemo u stvari pomocnu strukturu Tree (pogledaj gore sta sadrzi)
 func (mt *MerkleTree) Serialize(path string) {
 
@@ -373,17 +372,13 @@ func (mt *MerkleTree) Serialize(path string) {
 	_, err = file.Write(bytess)
 	if err != nil {
 		panic(err)
-	} 
+	}
 }
-
 
 func (mt *MerkleTree) ToBytes() ([]byte, error) {
 
 	t := Tree{allHashes, lTree}
 	data := make([]byte, 0)
-
-	//fmt.Println("ToBytes")
-	//fmt.Println(t)
 
 	// Serialize Length
 	lengthBytes := make([]byte, 8)
@@ -402,16 +397,12 @@ func (mt *MerkleTree) ToBytes() ([]byte, error) {
 	return data, nil
 }
 
-
-
-//Deserialize pomocnu strukturu Tree, iz koje izvlacimo sve
-//prethodne hasheve i pravimo ispocetka MerkleTree
+// Deserialize pomocnu strukturu Tree, iz koje izvlacimo sve
+// prethodne hasheve i pravimo ispocetka MerkleTree
 func (mt *MerkleTree) Deserialize(path string) error {
 
-	//fmt.Println("Usao")
 	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
-		//fmt.Println("Ne posotji???")
 		return err
 	}
 	defer file.Close()
@@ -437,47 +428,36 @@ func (mt *MerkleTree) FromBytes(bytess []byte) error {
 	t := Tree{}
 
 	t.Length = int(binary.LittleEndian.Uint64(bytess[:8]))
-	//fmt.Println("1")
 	bytess = bytess[8:]
-	//fmt.Println("2")
 
-	allHashes = make([][]byte, t.Length * t.Length)
+	allHashes = make([][]byte, t.Length*t.Length)
 	s := 0
 
 	curLen := t.Length
 	for true {
-		if (curLen == 0) {
+		if curLen == 0 {
 			break
 		}
 		s += curLen
 		curLen = curLen / 2
-		if (curLen % 2 == 1 && curLen != 1) {
+		if curLen%2 == 1 && curLen != 1 {
 			curLen++
 		}
 	}
-
 
 	for i := 0; i < s; i++ {
 		hashSize := binary.LittleEndian.Uint64(bytess[:8])
 		bytess = bytess[8:]
 		allHashes[i] = bytess[:hashSize]
-		//fmt.Println(allHashes[i])
 		bytess = bytess[hashSize:]
 	}
 
-
 	t.Hashes = make([][]byte, s)
 
-	//fmt.Println(s)
-	//fmt.Println("TU SAM")
 	for i := 0; i < s; i++ {
 		t.Hashes[i] = allHashes[i]
-		//fmt.Println(allHashes[i])
 	}
 
-	//fmt.Println(t)
-
-	//fmt.Println("4")
 	arr := []Node{}
 	for i := 0; i < t.Length; i++ {
 		curNode := Node{t.Hashes[i], nil, nil, 0, i}
@@ -513,8 +493,6 @@ func (mt *MerkleTree) FromBytes(bytess []byte) error {
 
 	return nil
 }
-
-
 
 /*
 func main() {

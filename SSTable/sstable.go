@@ -522,26 +522,18 @@ func GetFromOneFile(key string, FileName string, comp bool, dict *map[int]string
 	summaryOffset := binary.LittleEndian.Uint64(summaryOffsetBytes)
 	indexOffset := binary.LittleEndian.Uint64(indexOffsetBytes)
 
-	println("sum ", summaryOffset)
-	println("idx ", indexOffset)
 	//skace na summary deo
 	file.Seek(int64(summaryOffset), 0)
 	summary := LoadSummary(file)
-	len, _ := FileLength(file)
-	print("DUszina fajl ", len)
 	// ako je trazeni kljuc u tom opsegu, podatak bi trebalo da se nalazi u ovom sstable
 	if summary.FirstKey <= key && key <= summary.LastKey {
-		println("USAO u opseg")
-		println("prvi kljuc ", summary.FirstKey)
-		println("zadnji kljuc ", summary.LastKey)
+
 		var indexPosition = indexOffset
 		for {
-			//println(indexPosition)
 			//citamo velicinu kljucax
 			keySizeBytes := make([]byte, KEY_SIZE_SIZE)
 			_, err := file.Read(keySizeBytes)
 			if err == io.EOF {
-				println(" getfromone file 1")
 				dataPosition := findInIndexInOneFile(indexPosition, summaryOffset, key, file)
 				notFound := -1
 				if dataPosition == uint64(notFound) {
@@ -563,13 +555,7 @@ func GetFromOneFile(key string, FileName string, comp bool, dict *map[int]string
 				panic(err)
 			}
 
-			println("key value, ", string(keyValue))
-			println("nas key ", key)
-			println("bool ", string(keyValue) > key)
-
 			if string(keyValue) > key {
-				println(" getfromone file 2")
-				//OVO RESITI
 				dataPosition := findInIndexInOneFile(indexPosition, summaryOffset, key, file)
 				notFound := -1
 				if dataPosition == uint64(notFound) {
@@ -579,12 +565,10 @@ func GetFromOneFile(key string, FileName string, comp bool, dict *map[int]string
 				_, data, _, del := ReadDataOneFile(int64(dataPosition), int64(indexOffset), FileName, key, comp, dict)
 				return data, del
 			} else {
-				println(" getfromone file 3")
 				// citanje pozicije za taj kljuc u indexFile
 				positionBytes := make([]byte, KEY_SIZE_SIZE)
 				_, err = file.Read(positionBytes)
 				position := binary.LittleEndian.Uint64(positionBytes)
-				println("position key Value ", position)
 				indexPosition = position
 				if err != nil {
 					if err == io.EOF {
@@ -618,12 +602,8 @@ func Get(key string, SummaryFileName string, IndexFileName string, DataFileName 
 	summary := LoadSummary(sumarryFile)
 	defer sumarryFile.Close()
 
-	println("prvi kljucu get: ", summary.FirstKey)
-	println("drugi kljucu get: ", summary.LastKey)
-
 	// ako je trazeni kljuc u tom opsegu, podatak bi trebalo da se nalazi u ovom sstable
 	if summary.FirstKey <= key && key <= summary.LastKey {
-		println("usaoo u summ")
 		var indexPosition = uint64(0)
 		for {
 			//citamo velicinu kljuca
@@ -679,30 +659,25 @@ func Get(key string, SummaryFileName string, IndexFileName string, DataFileName 
 					}
 					fmt.Println(err)
 					sumarryFile.Close()
-					println("OVDE1")
 					return []byte{}, false
 				}
 				continue
 			}
 		}
 	}
-	//println("OVDE2")
 	return []byte{}, false
 }
 
 func findInIndexInOneFile(startPosition uint64, endPosition uint64, key string, file *os.File) uint64 {
-	println("Statrpos ", startPosition)
 	// od date pozicije citamo
 	_, err := file.Seek(int64(startPosition), 0)
 	if err != nil {
 		log.Fatal(err)
 	}
 	offset, err := file.Seek(0, io.SeekCurrent)
-	println("Nakon pomeranja ", offset)
 	var lastPos int64 = -1
 	for {
 		currentKey, position := ReadFromIndex(file)
-		println("Currentkey u indexu ", currentKey, "  position ", position)
 		if position == -1 {
 			if lastPos == -1 {
 				notFound := -1
@@ -744,7 +719,6 @@ func ScanIndexInOneFile(startPosition uint64, endPosition uint64, key string, fi
 	var lastPos int64 = -1
 	for {
 		currentKey, position := ReadFromIndex(file)
-		println("Currentkey u indexu ", currentKey, "  position ", position)
 		offset, err = file.Seek(0, io.SeekCurrent)
 		if offset >= int64(endPosition) {
 			return int64(lastPos)
@@ -1548,7 +1522,6 @@ func NodeToBytes(node Config.Entry, comp bool, dict1 *map[int]string, dict2 *map
 }
 
 func MakeDataOneFile(nodes []*Config.Entry, FileName string, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) error {
-	println("USLO U MAKEONEFILE")
 	file, err := os.OpenFile(FileName, os.O_RDWR|os.O_CREATE, 0777)
 	if err != nil {
 		panic(err)
@@ -1568,7 +1541,6 @@ func MakeDataOneFile(nodes []*Config.Entry, FileName string, dil_s int, dil_i in
 	//bloomfilter
 	bfsize := make([]byte, KEY_SIZE_SIZE)
 	bf := BloomFilter.BloomFilter{}
-	//println("Velicina nodes ", len(nodes))
 	bf.Init(len(nodes), 0.01)
 
 	for _, val := range nodes {
@@ -1624,9 +1596,7 @@ func MakeDataOneFile(nodes []*Config.Entry, FileName string, dil_s int, dil_i in
 	var offsetIndexList []int64
 	indexOffset, err := FileLength(file)
 	for i, el := range offsetList {
-		//println("nodes ", nodes[i].Transaction.Key)
 		if i%dil_i == 0 {
-			//println("pise u index ", nodes[i].Transaction.Key)
 			indexOff := AddToIndex(el, nodes[i].Transaction.Key, file)
 			offsetIndexList = append(offsetIndexList, indexOff)
 		}
@@ -1837,7 +1807,6 @@ func mergeAllFiles(lista []*os.File, level int, lsm *Config.LSMTree, dil_s int, 
 			break
 		}
 		minKeyArray, minEntry := findMinKeyEntry(entries)
-		println("min key in mergeFiles ", minEntry.Transaction.Key)
 		sortedAllEntries = append(sortedAllEntries, minEntry)
 		//citamo naredne entye za fajlove koji su bili na min entry
 		for _, index := range minKeyArray {
@@ -1961,9 +1930,7 @@ func mergeOneFiles(level int, sstableFile *os.File, lsm *Config.LSMTree, dil_s i
 		entry := readMergeOneFile(file, eofList[i], comp, dict1)
 		entries = append(entries, entry)
 	}
-	for _, e := range entries {
-		println("entry ", e.Transaction.Key)
-	}
+
 	for {
 		//procitali smo sve fajlove do kraja
 		if areAllNil(entries) {
@@ -1995,7 +1962,6 @@ func mergeOneFiles(level int, sstableFile *os.File, lsm *Config.LSMTree, dil_s i
 
 // cita iz fajla za merge, vraca procutani entry ili nil ako smo dosli do kraja fajla
 func readMergeOneFile(file *os.File, endposition int, comp bool, dict1 *map[int]string) *Config.Entry {
-	println("USAO U READMERGEONEFILE")
 	// cita bajtove podatka DO key i value u info
 	// CRC (4B)   | Timestamp (8B) | Tombstone(1B) | Key Size (8B) | Value Size (8B)
 
@@ -2118,7 +2084,6 @@ func readMergeOneFile(file *os.File, endposition int, comp bool, dict1 *map[int]
 		}
 		tombstone := info[TOMBSTONE_START:KEY_SIZE_START]
 		//ako je tombstone 1 procitaj odmah sledeci
-		println("USAOAOO ")
 
 		if tombstone[0] == 1 {
 			info2 := make([]byte, KEY_SIZE_SIZE)
@@ -2376,7 +2341,6 @@ func readMerge(file *os.File, comp bool, dict1 *map[int]string) *Config.Entry {
 		info = append(info, data...)
 
 		entry := Config.ToEntry(info)
-		println("readMerge ", entry.Transaction.Key)
 		return &entry
 	}
 
@@ -2497,7 +2461,6 @@ func mergeFiles(level int, dataFile *os.File, indexFile *os.File, summaryFile *o
 			break
 		}
 		minKeyArray, minEntry := findMinKeyEntry(entries)
-		println("min key in mergeFiles ", minEntry.Transaction.Key)
 		sortedAllEntries = append(sortedAllEntries, minEntry)
 		//citamo naredne entye za fajlove koji su bili na min entry
 		for _, index := range minKeyArray {
@@ -2842,8 +2805,7 @@ func levelMerge(level int, lsm *Config.LSMTree, dil_s int, dil_i int, comp bool,
 
 	//za file na visem nivou-uzimamo poslednju tabelu jer eto??
 	for {
-		println("KOMPAKCIJA POKRENUTA")
-		println("LEVEL NA POCETKU :", level)
+
 		br := lsm.Levels[level-1]
 
 		dataFile := "files_SSTable/dataFile_" + strconv.Itoa(level) + "_" + strconv.Itoa(br) + ".db"
