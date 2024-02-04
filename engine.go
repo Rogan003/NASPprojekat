@@ -21,8 +21,9 @@ import (
 )
 
 // isItTokenBucket = true  -> radi se o nekom pozivu koji nije koristnik pozvao, nego mi rucno
-//                            jer nam treba nesto preko Get ili Put
-//	                = false -> radi se o pozivu koje je korisnik pozvao iz maina (skida se 1 tokenBucket)
+//
+//	                           jer nam treba nesto preko Get ili Put
+//		                = false -> radi se o pozivu koje je korisnik pozvao iz maina (skida se 1 tokenBucket)
 func Get(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *TokenBucket.TokenBucket, lsm *Config.LSMTree, comp bool, dict *map[int]string, oneFile bool, isItTokenBucket bool) ([]byte, bool) {
 
 	if isItTokenBucket == false {
@@ -32,19 +33,18 @@ func Get(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.LRU
 			return nil, false
 		}
 		/*
-		tbBytes, err := tb.ToBytes()
-		if err != nil {
-			fmt.Println("GRESKA! greska kod toBytes(tokenBucket) (Get - engine.go)!\n", key)
-		}
+			tbBytes, err := tb.ToBytes()
+			if err != nil {
+				fmt.Println("GRESKA! greska kod toBytes(tokenBucket) (Get - engine.go)!\n", key)
+			}
 
-		done := Put(WAL, memtable, cache, "tb_token_bucket", tbBytes, tb, true)
-		if done {
-			//fmt.Println("Uspjesno cuvanje tokenBucket\n", key)
-		} else {
-			fmt.Println("GRESKA! greska kod cuvanja tokenBucket!\n", key)
-		}*/
+			done := Put(WAL, memtable, cache, "tb_token_bucket", tbBytes, tb, true)
+			if done {
+				//fmt.Println("Uspjesno cuvanje tokenBucket\n", key)
+			} else {
+				fmt.Println("GRESKA! greska kod cuvanja tokenBucket!\n", key)
+			}*/
 	}
-
 
 	data, found, _, deleted := memtable.Get(key)
 	if found {
@@ -67,9 +67,12 @@ func Get(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.LRU
 		foundBF, fileBF := SearchTroughBloomFiltersOneFile(key, lsm)
 		println("bf ", foundBF, " filename ", fileBF)
 		if foundBF {
-			foundValue := SSTable.GetFromOneFile(key, lsm.OneFilesNames[fileBF])
+			foundValue, del := SSTable.GetFromOneFile(key, lsm.OneFilesNames[fileBF], comp, dict)
+			if del {
+				return nil, false
+			}
+
 			if reflect.DeepEqual(foundValue, []byte{}) {
-				println("prazno")
 				return nil, false
 			}
 
@@ -93,7 +96,6 @@ func Get(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.LRU
 				}
 
 				if reflect.DeepEqual(foundValue, []byte{}) {
-					println("prazno")
 					continue
 				}
 
@@ -952,10 +954,10 @@ func PrefixIter(memtable *Memtable.NMemtables, prefix string, lsm *Config.LSMTre
 	PrefixScan(memtable, prefix, 1, lsm, comp, dict, 1)
 }
 
-
 // isItTokenBucket = true  -> radi se o nekom pozivu koji nije korisnik pozvao, nego mi rucno
-//                            jer nam treba nesto preko Get ili Put
-//	                = false -> radi se o pozivu koje je korisnik pozvao iz maina (skida se 1 tokenBucket)
+//
+//	                           jer nam treba nesto preko Get ili Put
+//		                = false -> radi se o pozivu koje je korisnik pozvao iz maina (skida se 1 tokenBucket)
 func Put(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, value []byte, tb *TokenBucket.TokenBucket, isItTokenBucket bool) bool {
 
 	if isItTokenBucket == false {
@@ -966,17 +968,17 @@ func Put(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.LRU
 		}
 
 		/*
-		tbBytes, err := tb.ToBytes()
-		if err != nil {
-			fmt.Println("GRESKA! greska kod toBytes(tokenBucket) (Put - engine.go)!\n", key)
-		}
+			tbBytes, err := tb.ToBytes()
+			if err != nil {
+				fmt.Println("GRESKA! greska kod toBytes(tokenBucket) (Put - engine.go)!\n", key)
+			}
 
-		done := Put(WAL, memtable, cache, "tb_token_bucket", tbBytes, tb, true)
-		if done {
-			//fmt.Println("Uspjesno cuvanje tokenBucket\n", key)
-		} else {
-			fmt.Println("GRESKA! greska kod cuvanja tokenBucket!\n", key)
-		}*/
+			done := Put(WAL, memtable, cache, "tb_token_bucket", tbBytes, tb, true)
+			if done {
+				//fmt.Println("Uspjesno cuvanje tokenBucket\n", key)
+			} else {
+				fmt.Println("GRESKA! greska kod cuvanja tokenBucket!\n", key)
+			}*/
 	}
 
 	//prvo staviti podatak WAL
@@ -1142,7 +1144,6 @@ func DecodeCMS(bytes []byte) (*CountMinSketch.CMS, bool) {
 
 	return &cms, false
 }
-
 
 func EncodeTB(tb *TokenBucket.TokenBucket) ([]byte, bool) {
 	bytes, err := tb.ToBytes()
