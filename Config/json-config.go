@@ -129,7 +129,7 @@ func NewLMSTree(Config Config) *LSMTree {
 			path := "files_SSTable/" + file.Name()
 			summaryFile = append(summaryFile, path)
 
-		} else if strings.HasSuffix(file.Name(), ".db") && strings.HasPrefix(file.Name(), "merkleFile") {
+		} else if strings.HasSuffix(file.Name(), ".db") && strings.HasPrefix(file.Name(), "merkleTreeFile") {
 			path := "files_SSTable/" + file.Name()
 			merkleFile = append(merkleFile, path)
 

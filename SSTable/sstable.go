@@ -16,9 +16,9 @@ import (
 	"io"
 	"log"
 
-	// "math"
+	"math"
 	"os"
-	// "sort"
+	"sort"
 )
 
 const (
@@ -1748,8 +1748,8 @@ func merge(level int, lsm *Config.LSMTree, dil_s int, dil_i int, comp bool, dict
 	dataFile, _ := os.Create("files_SSTable/dataFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".db")
 	indexFile, _ := os.Create("files_SSTable/indexFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".db")
 	summaryFile, _ := os.Create("files_SSTable/summaryFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".db")
-	bloomFile, _ := os.Create("files_SSTable/bloomFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".db")
-	merkleFile, _ := os.Create("files_SSTable/merkleFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".db")
+	bloomFile, _ := os.Create("files_SSTable/bloomFilterFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".db")
+	merkleFile, _ := os.Create("files_SSTable/merkleTreeFile_" + strconv.Itoa(level+1) + "_" + strconv.Itoa(br) + ".db")
 
 	lsm.DataFilesNames = append(lsm.DataFilesNames, dataFile.Name())
 	lsm.IndexFilesNames = append(lsm.IndexFilesNames, indexFile.Name())

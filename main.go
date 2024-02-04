@@ -136,7 +136,7 @@ func main() {
 	}()
 
 	/*
-		for i := 1;i < 50;i++ {
+		for i := 1;i < 100;i++ {
 			key := "test" + strconv.Itoa(i)
 			value := []byte(strconv.Itoa(i))
 
@@ -158,7 +158,7 @@ func main() {
 		}
 	*/
 
-	for i := 1; i < 55; i++ {
+	for i := 1; i < 105; i++ {
 		key := "test" + strconv.Itoa(i)
 
 		// proslijedi na kraju false ako hoces da aktiviras token bucket
