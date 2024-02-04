@@ -727,21 +727,21 @@ func ScanIndexInOneFile(startPosition uint64, endPosition uint64, key string, fi
 		println("Currentkey u indexu ", currentKey, "  position ", position)
 		offset, err = file.Seek(0, io.SeekCurrent)
 		if offset == int64(endPosition) {
-			return uint64(lastPos)
+			return int64(lastPos)
 		}
 
 		if currentKey > key { // valjda nece nikada biti da je lastPos prazan?
 			if lastPos == -1 {
 				notFound := -1
-				return uint64(notFound)
+				return int64(notFound)
 			}
-			return uint64(lastPos)
+			return int64(lastPos)
 		}
 
 		lastPos = position
 	}
 
-	return -1
+	return int64(-1)
 }
 
 // vraca offset za dataFile, nakon sto nadje u indexFile
@@ -2400,7 +2400,8 @@ func levelMergeOneFile(level int, lsm *Config.LSMTree, dil_s int, dil_i int, com
 
 		//naci tabele koje su sa sledeceg nivoa
 
-		sstableFiles, entriesAdd := findOtherTablesOneFile(level+1, bottomIdx, topIdx, lsm, dil_s, dil_i, comp, dict1, dict2)
+		// sstableFiles, entriesAdd := findOtherTablesOneFile(level+1, bottomIdx, topIdx, lsm, dil_s, dil_i, comp, dict1, dict2) OVO JE BILO
+		sstableFiles, _ := findOtherTablesOneFile(level+1, bottomIdx, topIdx, lsm, dil_s, dil_i, comp, dict1, dict2)
 
 		//sve tabele dodati u neki niz koji ce se proslediti funkciji koja ce da merguje sve
 
@@ -2408,7 +2409,7 @@ func levelMergeOneFile(level int, lsm *Config.LSMTree, dil_s int, dil_i int, com
 
 		sstableFiles = append(sstableFiles, sstableFile)
 
-		levelMergeFilesOneFile(level, sstableFiles, lsm, num, entriesAdd, dil_s, dil_i, comp, dict1, dict2)
+		// levelMergeFilesOneFile(level, sstableFiles, lsm, num, entriesAdd, dil_s, dil_i, comp, dict1, dict2)
 
 		lsm.Levels[level-1]--
 		// (dodaj tu jednu iz levela na [level + 1], i oduzmi num merge-ovanih)
@@ -2425,7 +2426,7 @@ func levelMergeOneFile(level int, lsm *Config.LSMTree, dil_s int, dil_i int, com
 		}
 	}
 }
-
+/*
 func levelMergeFilesOneFile(level int, sstableFiles []string, lsm *Config.LSMTree, num int, entriesAdd []*Config.Entry, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) {
 
 	files, err := openFiles(sstableFiles)
@@ -2444,7 +2445,7 @@ func levelMergeFilesOneFile(level int, sstableFiles []string, lsm *Config.LSMTre
 		dataOffset
 	}
 }
-
+*/
 
 func findOtherTablesOneFile(level int, bottomIdx string, topIdx string, lsm *Config.LSMTree, dil_s int, dil_i int, comp bool, dict1 *map[int]string, dict2 *map[string]int) ([]string, []*Config.Entry) {
 

@@ -208,11 +208,17 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 		}
 
 		sstables := lsm.DataFilesNames
+		sstablesOne := lsm.OneFilesNames
 		indexes := make([]int, len(sstables))
+		indexes2 := make([]int, len(sstablesOne))
 		lastDeletedElems := make(map[string]bool)
 
 		// postavljamo sve na -1 kako bi znali ako neki sstable nema range koji nama treba
 		for index, _ := range indexes {
+			indexes[index] = -1
+		}
+
+		for index, _ := range indexes2 {
 			indexes[index] = -1
 		}
 
@@ -558,6 +564,303 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 			}
 		}
 
+		for index, value := range sstablesOne {
+			file, _ := os.OpenFile(value, os.O_RDONLY, 0777)
+			file.Seek(0, 0)
+			summaryOffsetBytes := make([]byte, SSTable.KEY_SIZE_SIZE)
+			indexOffsetBytes := make([]byte, SSTable.KEY_SIZE_SIZE)
+
+			_, _ = file.Read(summaryOffsetBytes)
+			_, _ = file.Read(indexOffsetBytes)
+
+			summaryOffset := binary.LittleEndian.Uint64(summaryOffsetBytes)
+			indexOffset := binary.LittleEndian.Uint64(indexOffsetBytes)
+
+			//skace na summary deo
+			file.Seek(int64(summaryOffset), 0)
+			summary := SSTable.LoadSummary(file)
+
+			// ako je trazeni kljuc u tom opsegu, podatak bi trebalo da se nalazi u ovom sstable
+			if !(summary.FirstKey > key2 || summary.LastKey < key1) {
+
+				var indexPosition = indexOffset
+				for {
+					keySizeBytes := make([]byte, SSTable.KEY_SIZE_SIZE)
+					_, err := file.Read(keySizeBytes)
+					if err == io.EOF {
+						dataPosition := SSTable.ScanIndexInOneFile(indexPosition, summaryOffset, key1, file)
+						notFound := -1
+
+						indexes2[index] = int(dataPosition)
+
+						if dataPosition == int64(notFound) {
+							file.Close()
+						}
+
+						break
+					}
+
+					keySize := int64(binary.LittleEndian.Uint64(keySizeBytes))
+
+					//citamo keySize bajtiva da bi dobili kljuc
+					keyValue := make([]byte, keySize)
+					_, err = file.Read(keyValue)
+
+					if err != nil {
+						panic(err)
+					}
+
+					if string(keyValue) > key1 {
+						dataPosition := SSTable.ScanIndexInOneFile(indexPosition, summaryOffset, key1, file)
+						notFound := -1
+
+						indexes2[index] = int(dataPosition)
+
+						if dataPosition == int64(notFound) {
+							file.Close()
+						}
+
+						break
+					} else {
+						// citanje pozicije za taj kljuc u indexFile
+						positionBytes := make([]byte, SSTable.KEY_SIZE_SIZE)
+						_, err = file.Read(positionBytes)
+						position := binary.LittleEndian.Uint64(positionBytes)
+						indexPosition = position
+						if err != nil {
+							if err == io.EOF {
+								dataPosition := SSTable.ScanIndexInOneFile(indexPosition, summaryOffset, key1, file)
+								notFound := -1
+
+								indexes2[index] = int(dataPosition)
+
+								if dataPosition == int64(notFound) {
+									file.Close()
+								}
+
+								break
+							}
+							fmt.Println(err)
+							file.Close()
+							break
+						}
+						continue
+					}
+				}
+			}
+
+			if indexes2[index] != -1 {
+				file, err := os.OpenFile(value, os.O_RDONLY, 0777)
+				
+				if err != nil {
+					log.Fatal(err)
+					indexes2[index] = -1
+					break
+				}
+				defer file.Close()
+				
+				file.Seek(0, 0)
+				summaryOffsetBytes := make([]byte, SSTable.KEY_SIZE_SIZE)
+				indexOffsetBytes := make([]byte, SSTable.KEY_SIZE_SIZE)
+
+				_, _ = file.Read(summaryOffsetBytes)
+				_, _ = file.Read(indexOffsetBytes)
+
+				binary.LittleEndian.Uint64(summaryOffsetBytes)
+				indexOffset := binary.LittleEndian.Uint64(indexOffsetBytes)
+
+				position := indexes2[index]
+				
+				defer file.Close()
+				// pomeramo se na poziciju u dataFile gde je nas podatak
+				_, err = file.Seek(int64(position), 0)
+				if err != nil {
+					log.Fatal(err)
+					indexes2[index] = -1
+					break
+				}
+
+				for {
+					if position >= int(indexOffset) {
+						indexes2[index] = -1
+						break
+					}
+
+					if comp {
+						oldPos := position
+						_, err = file.Seek(int64(position), 0)
+						if err != nil {
+							indexes2[index] = -1
+							break
+						}
+
+						info := make([]byte, SSTable.KEY_SIZE_START)
+						_, err = file.Read(info)
+						if err != nil {
+							indexes2[index] = -1
+							break
+						}
+
+						num, n := binary.Uvarint(info[SSTable.TIMESTAMP_START:])
+
+						tombstone := info[SSTable.TIMESTAMP_START+n]
+
+						if tombstone == 1 {
+							info = make([]byte, 10)
+
+							position += SSTable.TIMESTAMP_START + n + 1
+							_, err = file.Seek(int64(position), 0)
+							if err != nil {
+								indexes2[index] = -1
+								break
+							}
+
+							_, err = file.Read(info)
+							if err != nil {
+								indexes2[index] = -1
+								break
+							}
+
+							num, n := binary.Uvarint(info)
+							position += n
+							key := (*dict)[int(num)]
+
+							if key >= key1 && key <= key2 {
+								indexes2[index] = oldPos
+								break
+							} else if key2 < key {
+								indexes2[index] = -1
+								break
+							}
+
+							continue
+						}
+
+						position += SSTable.TIMESTAMP_START + n + 1
+						_, err = file.Seek(int64(position), 0)
+						if err != nil {
+							indexes2[index] = -1
+							break
+						}
+
+						info = make([]byte, SSTable.VALUE_SIZE_SIZE)
+
+						_, err = file.Read(info)
+						if err != nil {
+							indexes2[index] = -1
+							break
+						}
+
+						num, n = binary.Uvarint(info)
+						value_size := num
+
+						position += n
+						_, err = file.Seek(int64(position), 0)
+						if err != nil {
+							indexes2[index] = -1
+							break
+						}
+
+						info = make([]byte, 10)
+
+						_, err = file.Read(info)
+						if err != nil {
+							indexes2[index] = -1
+							break
+						}
+
+						num, n = binary.Uvarint(info)
+						key := (*dict)[int(num)]
+
+						if key >= key1 && key <= key2 {
+							indexes2[index] = oldPos
+							break
+						} else if key2 < key {
+							indexes2[index] = -1
+							break
+						}
+
+						position += n + int(value_size)
+
+					} else {
+						// cita bajtove podatka DO key i value u info
+						// CRC (4B)   | Timestamp (8B) | Tombstone(1B) | Key Size (8B) | Value Size (8B)
+						info := make([]byte, SSTable.KEY_SIZE_START)
+						_, err = file.Read(info)
+						if err != nil {
+							indexes2[index] = -1
+							break
+						}
+
+						tombstone := info[SSTable.TOMBSTONE_START] // jel ovo sad prepoznaje obrisane
+
+						//ako je tombstone 1 ne citaj dalje
+						if tombstone == 1 {
+							info3 := make([]byte, SSTable.KEY_SIZE_SIZE)
+							_, err = file.Read(info3)
+							if err != nil {
+								indexes2[index] = -1
+								break
+							}
+
+							key_size := binary.LittleEndian.Uint64(info3)
+
+							// cita bajtove podatka, odnosno key data
+							data := make([]byte, key_size)
+							_, err = file.Read(data)
+							if err != nil {
+								indexes2[index] = -1
+								break
+							}
+							key := data[:key_size]
+
+							if string(key) >= key1 && string(key) <= key2 {
+								indexes2[index] = position
+								break
+							} else if key2 < string(key) {
+								indexes2[index] = -1
+								break
+							}
+
+							position += SSTable.VALUE_SIZE_START + int(key_size)
+
+							continue
+						}
+						//ako je tombstone 0 onda citaj sve
+						info2 := make([]byte, SSTable.KEY_START-SSTable.KEY_SIZE_START)
+						_, err = file.Read(info2)
+						if err != nil {
+							indexes2[index] = -1
+							break
+						}
+
+						key_size := binary.LittleEndian.Uint64(info2[:SSTable.KEY_SIZE_SIZE])
+						value_size := binary.LittleEndian.Uint64(info2[SSTable.KEY_SIZE_SIZE:])
+
+						// cita bajtove podatka, odnosno key i value u data
+						//| Key | Value |
+						data := make([]byte, key_size+value_size)
+						_, err = file.Read(data)
+						if err != nil {
+							indexes2[index] = -1
+							break
+						}
+						key := data[:key_size]
+
+						if string(key) >= key1 && string(key) <= key2 {
+							indexes2[index] = position
+							break
+						} else if key2 < string(key) {
+							indexes2[index] = -1
+							break
+						}
+
+						position += SSTable.KEY_START + int(key_size+value_size)
+					}
+				}
+			}
+		}
+
 		forward := true
 		works := true
 		lastElemsTables := make([]string, 0)
@@ -840,6 +1143,220 @@ func RangeScan(memtable *Memtable.NMemtables, key1 string, key2 string, pageSize
 												value_size := binary.LittleEndian.Uint64(info2[SSTable.KEY_SIZE_SIZE:])
 
 												indexes[index] += int(SSTable.KEY_START) + int(key_size) + int(value_size)
+											}
+										}
+
+									} else if string(keyHelp) > keys[in] {
+										break
+									}
+								}
+							}
+
+							for index, value := range sstablesOne {
+								if indexes2[index] == -1 {
+									continue
+								}
+
+								for {
+									keyHelp, valHelp, end, del := SSTable.ReadAnyData(int64(indexes2[index]), value, comp, dict)
+
+									if end {
+										indexes2[index] = -1
+										break
+									}
+
+									var foundElem bool = false
+									if del {
+										foundElem = true
+										lastDeletedElems[string(keyHelp)] = true
+
+									} else {
+										_, found := lastDeletedElems[string(keyHelp)]
+
+										if found {
+											foundElem = true
+										}
+									}
+
+									if !foundElem && string(keyHelp) != lastElem && string(keyHelp) < keys[in] && string(keyHelp) <= key2 && !bytes.Equal(keyHelp, []byte{}) && !(string(keyHelp)[0:3] == "bf_" || string(keyHelp)[0:4] == "cms_" || string(keyHelp)[0:4] == "hll_" || string(keyHelp)[0:3] == "sh_" || string(keyHelp)[0:3] == "tb_") {
+										keys[in] = string(keyHelp)
+										vals[in] = valHelp
+										lastElemsTables[lastIter+in] = ("S" + strconv.Itoa(index))
+										lastElemsPos[lastIter+in] = indexes2[index]
+										break
+									} else if string(keyHelp) > key2 {
+										indexes2[index] = -1
+										break
+									} else if string(keyHelp) <= keys[in] {
+										file, err := os.OpenFile(value, os.O_RDONLY, 0777)
+				
+										if err != nil {
+											log.Fatal(err)
+											indexes2[index] = -1
+											break
+										}
+										defer file.Close()
+										
+										file.Seek(0, 0)
+										summaryOffsetBytes := make([]byte, SSTable.KEY_SIZE_SIZE)
+										indexOffsetBytes := make([]byte, SSTable.KEY_SIZE_SIZE)
+
+										_, _ = file.Read(summaryOffsetBytes)
+										_, _ = file.Read(indexOffsetBytes)
+
+										binary.LittleEndian.Uint64(summaryOffsetBytes)
+										indexOffset := binary.LittleEndian.Uint64(indexOffsetBytes)
+
+										// pomeramo se na poziciju u dataFile gde je nas podatak
+										_, err = file.Seek(int64(indexes2[index]), 0)
+										if err != nil {
+											log.Fatal(err)
+										}
+
+										if comp {
+											_, err := file.Seek(int64(indexes2[index]), 0)
+											if err != nil {
+												indexes2[index] = -1
+												break
+											}
+
+											info := make([]byte, SSTable.KEY_SIZE_START)
+											_, err = file.Read(info)
+											if err != nil {
+												indexes2[index] = -1
+												break
+											}
+
+											num, n := binary.Uvarint(info[SSTable.TIMESTAMP_START:])
+
+											tombstone := info[SSTable.TIMESTAMP_START+n]
+
+											if tombstone == 1 {
+												info = make([]byte, 10)
+
+												indexes2[index] += SSTable.TIMESTAMP_START + n + 1
+												_, err = file.Seek(int64(indexes2[index]), 0)
+												if err != nil {
+													indexes2[index] = -1
+													break
+												}
+
+												_, err = file.Read(info)
+												if err != nil {
+													indexes2[index] = -1
+													break
+												}
+
+												num, n := binary.Uvarint(info)
+												indexes2[index] += n
+												key := (*dict)[int(num)]
+
+												if key2 < key {
+													indexes2[index] = -1
+													break
+												}
+
+												if indexes2[index] >= int(indexOffset) {
+													indexes2[index] = -1
+												}
+
+												continue
+											}
+
+											indexes2[index] += SSTable.TIMESTAMP_START + n + 1
+											_, err = file.Seek(int64(indexes2[index]), 0)
+											if err != nil {
+												indexes2[index] = -1
+												break
+											}
+
+											info = make([]byte, SSTable.VALUE_SIZE_SIZE)
+
+											_, err = file.Read(info)
+											if err != nil {
+												indexes2[index] = -1
+												break
+											}
+
+											num, n = binary.Uvarint(info)
+											value_size := num
+
+											indexes2[index] += n
+											_, err = file.Seek(int64(indexes2[index]), 0)
+											if err != nil {
+												indexes2[index] = -1
+												break
+											}
+
+											info = make([]byte, 10)
+
+											_, err = file.Read(info)
+											if err != nil {
+												indexes2[index] = -1
+												break
+											}
+
+											num, n = binary.Uvarint(info)
+
+											indexes2[index] += n + int(value_size)
+
+											if indexes2[index] >= int(indexOffset) {
+												indexes2[index] = -1
+											}
+
+										} else {
+											// cita bajtove podatka DO key i value u info
+											// CRC (4B)   | Timestamp (8B) | Tombstone(1B) | Key Size (8B) | Value Size (8B)
+											info := make([]byte, SSTable.KEY_SIZE_START)
+											_, err = file.Read(info)
+											if err != nil { // pregledati
+												if err == io.EOF {
+													indexes2[index] = -1
+													break
+												}
+
+												panic(err)
+											}
+
+											tombstone := info[SSTable.TOMBSTONE_START] // jel ovo sad prepoznaje obrisane
+
+											//ako je tombstone 1 ne citaj dalje
+											if tombstone == 1 {
+												info3 := make([]byte, SSTable.KEY_SIZE_SIZE)
+												_, err = file.Read(info3)
+												if err != nil {
+													indexes2[index] = -1
+													break
+												}
+
+												key_size := binary.LittleEndian.Uint64(info3)
+
+												indexes2[index] += SSTable.VALUE_SIZE_START + int(key_size)
+
+												if indexes2[index] >= int(indexOffset) {
+													indexes2[index] = -1
+												}
+
+											} else {
+												info2 := make([]byte, SSTable.KEY_START-SSTable.KEY_SIZE_START)
+												_, err = file.Read(info2)
+												if err != nil {
+													if err == io.EOF {
+														indexes2[index] = -1
+														break
+													}
+
+													panic(err)
+												}
+
+												key_size := binary.LittleEndian.Uint64(info2[:SSTable.KEY_SIZE_SIZE])
+												value_size := binary.LittleEndian.Uint64(info2[SSTable.KEY_SIZE_SIZE:])
+
+												indexes2[index] += int(SSTable.KEY_START) + int(key_size) + int(value_size)
+
+												if indexes2[index] >= int(indexOffset) {
+													indexes2[index] = -1
+												}
 											}
 										}
 
