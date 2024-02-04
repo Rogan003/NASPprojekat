@@ -156,7 +156,7 @@ func main() {
 				fmt.Printf("GRESKA! Neuspesno dodavanje kljuca %s!\n", key)
 			}
 		}
-	*/
+
 
 	for i := 1; i < 105; i++ {
 		key := "test" + strconv.Itoa(i)
@@ -170,6 +170,45 @@ func main() {
 			fmt.Printf("GRESKA! Neuspesno dobavljanje kljuca %s!\n", key)
 		}
 	}
+	*/
+
+	/*
+
+	SKRIPTA 1:
+
+	for i := 1;i <= 100000;i++ {
+		key := "test" + strconv.Itoa(i % 100)
+		value := []byte(strconv.Itoa(i))
+
+		done := Put(wal, &mt, cache, key, value, &tb, true)
+
+		if done {
+			fmt.Printf("Uspesno dodat/azuriran kljuc %s!\n", key)
+		} else {
+			fmt.Printf("GRESKA! Neuspesno dodavanje kljuca %s!\n", key)
+		}
+	}
+
+	*/
+
+	/*
+
+	SKRIPTA 2:
+
+	for i := 1;i <= 100000;i++ {
+		key := "test" + strconv.Itoa(i % 50000)
+		value := []byte(strconv.Itoa(i))
+
+		done := Put(wal, &mt, cache, key, value, &tb, true)
+
+		if done {
+			fmt.Printf("Uspesno dodat/azuriran kljuc %s!\n", key)
+		} else {
+			fmt.Printf("GRESKA! Neuspesno dodavanje kljuca %s!\n", key)
+		}
+	}
+
+	*/
 
 	fmt.Println("==================DOBRODOSLI==================")
 	for {

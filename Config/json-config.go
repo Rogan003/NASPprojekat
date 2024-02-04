@@ -53,7 +53,7 @@ func ConfigInst() (Config, error) {
 	configData, err := os.ReadFile("config.json") // ako ne postoji popuniti config default vrednostima i vratiti ga
 	if err != nil {
 		// Tamara: return Config{5000, 1000, "skiplist", 10, 100, 5, 10, 10, 15, "1m", 5, 4, 10, false, false}, nil // iako mozda ne treba nil bas
-		return Config{5000, 1000, "skiplist", 10, 100, 5, 10, 10, 15, "1m", 5, 4, 10, true, true, false}, nil // iako mozda ne treba nil bas
+		return Config{5000, 1000, "skiplist", 10, 100, 5, 10, 10, 15, "1m", 5, 4, 10, false, true, false}, nil // iako mozda ne treba nil bas
 		log.Fatal(err)
 	}
 
