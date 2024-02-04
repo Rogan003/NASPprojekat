@@ -24,7 +24,7 @@ import (
 //
 //	                           jer nam treba nesto preko Get ili Put
 //		                = false -> radi se o pozivu koje je korisnik pozvao iz maina (skida se 1 tokenBucket)
-func Get(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *TokenBucket.TokenBucket, lsm *Config.LSMTree, comp bool, dict *map[int]string, oneFile bool, isItTokenBucket bool) ([]byte, bool) {
+func Get(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.LRUCache, key string, tb *TokenBucket.TokenBucket, lsm *Config.LSMTree, comp bool, dict *map[int]string, isItTokenBucket bool) ([]byte, bool) {
 
 	if isItTokenBucket == false {
 		ok := tb.ConsumeToken()
@@ -63,45 +63,45 @@ func Get(WAL *WriteAheadLog.WAL, memtable *Memtable.NMemtables, cache *Cache.LRU
 		return data, true
 	}
 
-	if oneFile {
-		foundBF, fileBF := SearchTroughBloomFiltersOneFile(key, lsm)
-		println("bf ", foundBF, " filename ", fileBF)
-		if foundBF {
+	foundBF, fileBFIn := SearchTroughBloomFilters(key, lsm) // trazi u disku
+	if foundBF {                                            // ovde nesto potencijalno ne valja, mozda treba dodati putanje u bloomFilterFilesNames?
+		fmt.Println("Mozda postoji na disku.")
+
+		for _, fileBF := range fileBFIn { // NIJE ISTO DA LI GA JE PRVO PRONASAO OBRISANOG ILI NE, jako vazno!
+			//ucitavamo summary i index fajlove za sstable u kojem je mozda element (saznali preko bloomfiltera)
+			summaryFileName := lsm.SummaryFilesNames[fileBF]
+			indexFileName := lsm.IndexFilesNames[fileBF]
+			foundValue, del := SSTable.Get(key, summaryFileName, indexFileName, lsm.DataFilesNames[fileBF], comp, dict)
+
+			if del {
+				return nil, false
+			}
+
+			if reflect.DeepEqual(foundValue, []byte{}) {
+				continue
+			}
+
+			cache.Insert(key, foundValue) // dodavanje u cache
+			return foundValue, true       // foundValue prazno nesto bukvalno nista sad prvi put kad sam gledao?
+		}
+	}
+
+	foundBF, fileBFIn = SearchTroughBloomFiltersOneFile(key, lsm)
+	if foundBF {
+		fmt.Println("Mozda postoji na disku.")
+
+		for _, fileBF := range fileBFIn { // NIJE ISTO DA LI GA JE PRVO PRONASAO OBRISANOG ILI NE, jako vazno!
 			foundValue, del := SSTable.GetFromOneFile(key, lsm.OneFilesNames[fileBF], comp, dict)
 			if del {
 				return nil, false
 			}
 
 			if reflect.DeepEqual(foundValue, []byte{}) {
-				return nil, false
+				continue
 			}
 
 			cache.Insert(key, foundValue) // dodavanje u cache
 			return foundValue, true       // foundValue prazno nesto bukvalno nista sad prvi put kad sam gledao?
-
-		}
-	} else {
-		foundBF, fileBFIn := SearchTroughBloomFilters(key, lsm) // trazi u disku
-		if foundBF {                                            // ovde nesto potencijalno ne valja, mozda treba dodati putanje u bloomFilterFilesNames?
-			fmt.Println("Mozda postoji na disku.")
-
-			for _, fileBF := range fileBFIn { // NIJE ISTO DA LI GA JE PRVO PRONASAO OBRISANOG ILI NE, jako vazno!
-				//ucitavamo summary i index fajlove za sstable u kojem je mozda element (saznali preko bloomfiltera)
-				summaryFileName := lsm.SummaryFilesNames[fileBF]
-				indexFileName := lsm.IndexFilesNames[fileBF]
-				foundValue, del := SSTable.Get(key, summaryFileName, indexFileName, lsm.DataFilesNames[fileBF], comp, dict)
-
-				if del {
-					return nil, false
-				}
-
-				if reflect.DeepEqual(foundValue, []byte{}) {
-					continue
-				}
-
-				cache.Insert(key, foundValue) // dodavanje u cache
-				return foundValue, true       // foundValue prazno nesto bukvalno nista sad prvi put kad sam gledao?
-			}
 		}
 	}
 
@@ -119,9 +119,9 @@ func convertToBytes(value interface{}) ([]byte, error) {
 }
 
 // trazenje elementa sa nekim kljucem u svim bloomfilterima
-func SearchTroughBloomFiltersOneFile(key string, lsm *Config.LSMTree) (bool, int) {
-
+func SearchTroughBloomFiltersOneFile(key string, lsm *Config.LSMTree) (bool, []int) {
 	bf := BloomFilter.BloomFilter{}
+	indexes := make([]int, 0)
 	// kada se ponovo pokrene ne prepoznaje da postoji bilo sta u nizu
 	for i := 0; i < len(lsm.OneFilesNames); i++ {
 		file, _ := os.OpenFile(lsm.OneFilesNames[i], os.O_RDWR, 0777)
@@ -138,14 +138,19 @@ func SearchTroughBloomFiltersOneFile(key string, lsm *Config.LSMTree) (bool, int
 		//trazenje u bf
 		found := bf.Check_elem([]byte(key))
 		if found {
-			return found, i
+			indexes = append(indexes, i)
 		}
 		if err != nil {
 			println("Nije moguce ucitati bf kod searchtroughbfonefile")
 		}
 
 	}
-	return false, -1
+
+	if len(indexes) > 0 {
+		return true, indexes
+	}
+
+	return false, []int{}
 }
 
 // trazenje elementa sa nekim kljucem u svim bloomfilterima

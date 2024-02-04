@@ -12,7 +12,7 @@
 	"degree_of_dilution_summary": 5,
 	"degree_of_dilution_index": 5,
 	"page_size" : 10,
-	"compression" : true,
+	"compression" : false,
 	"sized_compaction" : true,
-	"one_file" : false
+	"one_file" : true
 }

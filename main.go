@@ -108,7 +108,7 @@ func main() {
 	tb.Init(conf.TokenBucketSize, interval)
 	//u config.json "token_bucket_interval": "1m",
 
-	tbBytes, found := Get(wal, &mt, cache, "tb_token_bucket", &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
+	tbBytes, found := Get(wal, &mt, cache, "tb_token_bucket", &tb, lsm, conf.Compression, &dict1, true)
 	//fmt.Println("\n\n\n", tbBytes, "\n\n\n")
 	if found && len(tbBytes) != 0 {
 		//fmt.Println("\n\n\nTokeBucket ocitan!")
@@ -195,6 +195,8 @@ func main() {
 
 		SKRIPTA 2:
 
+	*/
+
 		for i := 1;i <= 100000;i++ {
 			key := "test" + strconv.Itoa(i % 50000)
 			value := []byte(strconv.Itoa(i))
@@ -208,7 +210,9 @@ func main() {
 			}
 		}
 
-	*/
+	
+
+	// TESTIRATI SA KOMPRESIJOM
 
 	fmt.Println("==================DOBRODOSLI==================")
 	for {
@@ -267,7 +271,7 @@ func main() {
 				continue
 			}
 
-			elem, done := Get(wal, &mt, cache, key, &tb, lsm, conf.Compression, &dict1, conf.OneFile, false)
+			elem, done := Get(wal, &mt, cache, key, &tb, lsm, conf.Compression, &dict1, false)
 
 			if done {
 				fmt.Printf("Vrednost pod kljucem %s: %s\n", key, elem)
@@ -317,7 +321,7 @@ func main() {
 					key := scanner.Text()
 					key_real := "bf_" + key
 
-					_, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
+					_, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, true)
 
 					if done {
 						fmt.Println("Greska! BF sa datim kljucem vec postoji!")
@@ -359,7 +363,7 @@ func main() {
 					scanner.Scan()
 					key := scanner.Text()
 					key_real := "bf_" + key
-					elem, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
+					elem, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, true)
 
 					if done {
 						bf, err := DecodeBF(elem)
@@ -399,7 +403,7 @@ func main() {
 					scanner.Scan()
 					key := scanner.Text()
 					key_real := "bf_" + key
-					elem, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, false)
+					elem, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, false)
 
 					if done {
 						bf, err := DecodeBF(elem)
@@ -465,7 +469,7 @@ func main() {
 					scanner.Scan()
 					key := scanner.Text()
 					key_real := "hll_" + key
-					_, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
+					_, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, true)
 
 					if done {
 						fmt.Println("Greska! HLL sa datim kljucem vec postoji! ")
@@ -499,7 +503,7 @@ func main() {
 					scanner.Scan()
 					key := scanner.Text()
 					key_real := "hll_" + key
-					elem, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
+					elem, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, true)
 
 					if done {
 						hll, err := DecodeHLL(elem)
@@ -539,7 +543,7 @@ func main() {
 					scanner.Scan()
 					key := scanner.Text()
 					key_real := "hll_" + key
-					elem, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, false)
+					elem, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, false)
 
 					if done {
 						hll, err := DecodeHLL(elem)
@@ -595,7 +599,7 @@ func main() {
 					scanner.Scan()
 					key := scanner.Text()
 					key_real := "cms_" + key
-					_, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
+					_, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, true)
 
 					if done {
 						fmt.Println("Greska! CMS sa datim kljucem vec postoji!")
@@ -633,7 +637,7 @@ func main() {
 					scanner.Scan()
 					key := scanner.Text()
 					key_real := "cms_" + key
-					elem, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
+					elem, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, true)
 
 					if done {
 						cms, err := DecodeCMS(elem)
@@ -671,7 +675,7 @@ func main() {
 					scanner.Scan()
 					key := scanner.Text()
 					key_real := "cms_" + key
-					elem, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, false)
+					elem, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, false)
 
 					if done {
 						cms, err := DecodeCMS(elem)
@@ -728,7 +732,7 @@ func main() {
 					scanner.Scan()
 					text := scanner.Text()
 					key_real := "sh_" + text
-					_, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
+					_, done := Get(wal, &mt, cache, key_real, &tb, lsm, conf.Compression, &dict1, true)
 					if done {
 						fmt.Println("Greska! Text vec postoji!")
 						continue
@@ -746,7 +750,7 @@ func main() {
 					scanner.Scan()
 					text1 := scanner.Text()
 					key_real1 := "sh_" + text1
-					elem1, done1 := Get(wal, &mt, cache, key_real1, &tb, lsm, conf.Compression, &dict1, conf.OneFile, true)
+					elem1, done1 := Get(wal, &mt, cache, key_real1, &tb, lsm, conf.Compression, &dict1, true)
 					var textBytes1 [16]byte
 					if done1 {
 						copy(textBytes1[:], elem1)
@@ -758,7 +762,7 @@ func main() {
 					scanner.Scan()
 					text2 := scanner.Text()
 					key_real2 := "sh_" + text2
-					elem2, done2 := Get(wal, &mt, cache, key_real2, &tb, lsm, conf.Compression, &dict1, conf.OneFile, false)
+					elem2, done2 := Get(wal, &mt, cache, key_real2, &tb, lsm, conf.Compression, &dict1, false)
 					var textBytes2 [16]byte
 					if done2 {
 						copy(textBytes2[:], elem2)
